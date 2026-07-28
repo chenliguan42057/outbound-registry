@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>配置云端令牌</title>
+<style>
+ body{font-family:-apple-system,system-ui,"Microsoft YaHei",sans-serif;background:#f5f6f8;color:#1f2733;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+ .box{background:#fff;border-radius:12px;padding:24px;max-width:320px;width:88%;box-shadow:0 4px 20px rgba(0,0,0,.08);text-align:center}
+ h1{font-size:18px;margin:0 0 10px}
+ p{font-size:14px;color:#667;line-height:1.6;margin:6px 0}
+ .ok{color:#2e9e5b;font-weight:600}
+</style>
+</head>
+<body>
+<div class="box">
+ <h1>云端令牌配置</h1>
+ <p id="msg">正在读取链接中的令牌…</p>
+</div>
+<script>
+(function(){
+  var hash = location.hash.replace(/^#/, '').trim();
+  var msg = document.getElementById('msg');
+  if(!hash){
+    msg.textContent = '链接里没有检测到令牌，请用完整带 # 的链接打开。';
+    return;
+  }
+  try{
+    localStorage.setItem('gh_token', hash);
+    msg.innerHTML = '<span class="ok">已保存令牌 ✓</span><br/>正在跳转到登记表…';
+    history.replaceState(null, '', './index.html');
+    setTimeout(function(){ location.href = './index.html'; }, 800);
+  }catch(e){
+    msg.textContent = '保存失败：' + e.message;
+  }
+})();
+</script>
+</body>
+</html>
