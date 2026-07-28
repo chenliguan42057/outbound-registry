@@ -117,6 +117,9 @@
   .mini-photo { width:34px; height:34px; border-radius:6px; object-fit:cover; cursor:pointer; border:1px solid var(--border); }
   .empty { text-align:center; color:var(--muted); padding:28px 0; font-size:14px; }
   .badge { display:inline-block; font-size:11px; color:var(--muted); background:var(--chip); border-radius:6px; padding:1px 6px; }
+  .sync { font-size:12px; font-weight:400; color:var(--ok); margin-left:8px; }
+  .sync.err { color:var(--danger); }
+  .sync.info { color:var(--muted); }
 
   /* modal */
   .modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
@@ -198,11 +201,28 @@
   </div>
 
   <div class="card">
-    <h2>记录列表 <span class="badge" id="count">0 条</span></h2>
+    <h2>记录列表 <span class="badge" id="count">0 条</span>
+      <span class="sync" id="syncStatus"></span>
+      <button class="btn ghost sm" id="syncBtn" style="margin-left:8px;">🔄 立即同步</button>
+      <button class="btn ghost sm" id="cfgBtn" style="margin-left:8px;">☁ 云端设置</button>
+    </h2>
     <div class="actions" style="margin-bottom:12px;">
       <button class="btn ghost sm" id="exportBtn">⬇ 导出 CSV</button>
       <button class="btn ghost sm" id="exportJsonBtn">⬇ 导出 JSON</button>
       <button class="btn danger sm" id="clearAll">清空全部记录</button>
+    </div>
+    <div class="hint" id="syncHint">数据已同步到 GitHub 云端：换设备（手机/电脑）打开同一网址即可看到相同记录。</div>
+    <div class="card" id="cfgPanel" style="display:none; margin-top:12px; border-style:dashed;">
+      <h2>云端写入设置</h2>
+      <div class="field">
+        <label>GitHub 令牌（精细令牌，仅限本仓库 Contents 读写）</label>
+        <input type="password" id="tokenInput" placeholder="在此粘贴你的 GitHub 令牌" />
+        <div class="hint">令牌只保存在本机浏览器（localStorage），用于把新登记写入云端实现跨设备同步。读取云端记录无需令牌。保存后请点"立即同步"。</div>
+      </div>
+      <div class="actions">
+        <button class="btn sm" id="saveToken">保存并同步</button>
+        <button class="btn danger sm" id="clearToken">清除令牌</button>
+      </div>
     </div>
     <div id="listBox"></div>
   </div>
@@ -218,6 +238,106 @@ const PRODUCTS = [
   "赋活精粹乳 80ml","赋活精粹乳 30ml","赋活精粹乳 1ml","舒缓精粹霜 50g","舒缓精粹霜 15g","舒缓精粹霜 5g","舒缓精粹霜 1g"
 ];
 const STORE_KEY = "outbound_records_v2";
+
+/* ===================== 云端同步（GitHub Contents API） ===================== */
+/* 数据存在仓库的 data/records/<id>.json，换设备打开同一网址即看到同一份记录。 */
+const GH = {
+  repo: "chenliguan42057/outbound-registry",
+  branch: "main",
+  dir: "data/records",
+  /* 云端写入令牌：默认留空（只能读取公开记录）。在页面"☁ 云端设置"中填入你的 fine-grained 令牌后，
+     即可把新登记写入云端、实现跨设备同步。令牌仅保存在本机浏览器，不会上传、不会写入代码。 */
+  token: localStorage.getItem("gh_token") || ""
+};
+let STATE = { list: [], lastSync: null };
+
+function ghHeaders() {
+  const h = { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  if (GH.token && GH.token.indexOf("__") !== 0) h["Authorization"] = "Bearer " + GH.token;
+  return h;
+}
+function b64enc(str) { return btoa(unescape(encodeURIComponent(str))); }
+function b64dec(b64) { return decodeURIComponent(escape(atob(String(b64).replace(/\s/g, "")))); }
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function setSync(text, isErr, info) {
+  const el = document.getElementById("syncStatus");
+  if (el) { el.textContent = text || ""; el.className = "sync" + (isErr ? " err" : (info ? " info" : "")); }
+}
+async function apiJson(url, opts) {
+  const res = await fetch(url, Object.assign({ headers: ghHeaders() }, opts || {}));
+  if (!res.ok) { const t = await res.text().catch(() => ""); throw new Error(res.status + " " + t.slice(0, 80)); }
+  return res.json();
+}
+async function cloudPull() {
+  const url = `https://api.github.com/repos/${GH.repo}/contents/${GH.dir}?ref=${GH.branch}`;
+  let arr;
+  try { arr = await apiJson(url); }
+  catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
+  if (!Array.isArray(arr)) return [];
+  const files = arr.filter(f => f.name.endsWith(".json") && f.size < 5 * 1024 * 1024);
+  const recs = [];
+  for (const f of files) {
+    try { const j = await apiJson(f.url); recs.push(JSON.parse(b64dec(j.content))); } catch (e) {}
+  }
+  return recs;
+}
+async function cloudPush(rec) {
+  const path = `${GH.dir}/${rec.id}.json`;
+  const content = b64enc(JSON.stringify(rec));
+  const getUrl = `https://api.github.com/repos/${GH.repo}/contents/${path}?ref=${GH.branch}`;
+  let sha;
+  try { const ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+  const body = sha
+    ? { message: "update " + rec.id, content, sha, branch: GH.branch }
+    : { message: "add " + rec.id, content, branch: GH.branch };
+  await apiJson(`https://api.github.com/repos/${GH.repo}/contents/${path}`, {
+    method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
+  });
+}
+async function cloudDelete(id) {
+  const path = `${GH.dir}/${id}.json`;
+  const getUrl = `https://api.github.com/repos/${GH.repo}/contents/${path}?ref=${GH.branch}`;
+  let sha;
+  try { const ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }
+  await apiJson(`https://api.github.com/repos/${GH.repo}/contents/${path}`, {
+    method: "DELETE", headers: ghHeaders(),
+    body: JSON.stringify({ message: "del " + id, sha, branch: GH.branch })
+  });
+}
+async function cloudClearAll() {
+  const url = `https://api.github.com/repos/${GH.repo}/contents/${GH.dir}?ref=${GH.branch}`;
+  let arr;
+  try { arr = await apiJson(url); } catch (e) { return; }
+  if (!Array.isArray(arr)) return;
+  for (const f of arr.filter(f => f.name.endsWith(".json"))) {
+    try {
+      const j = await apiJson(f.url);
+      await apiJson(`https://api.github.com/repos/${GH.repo}/contents/${f.path}`, {
+        method: "DELETE", headers: ghHeaders(),
+        body: JSON.stringify({ message: "del all", sha: j.sha, branch: GH.branch })
+      });
+    } catch (e) {}
+  }
+}
+async function syncPull() {
+  setSync("同步中…");
+  try {
+    const recs = await cloudPull();
+    const map = new Map();
+    STATE.list.forEach(r => map.set(r.id, r));
+    recs.forEach(r => map.set(r.id, r));
+    STATE.list = [...map.values()].sort((a, b) =>
+      (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0));
+    saveLocal(STATE.list);
+    STATE.lastSync = new Date();
+    setSync("已同步 " + STATE.lastSync.toLocaleString());
+  } catch (e) {
+    setSync("同步失败：" + e.message + "（显示本地缓存）", true);
+  }
+  renderList();
+}
+function loadLocal() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch { return []; } }
+function saveLocal(list) { try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); } catch (e) { console.warn(e); } }
 
 let selected = [];   // {name, qty}
 let photos = [];     // dataURL strings
@@ -235,18 +355,8 @@ function nowLocal() {
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
 }
-function load() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
-  catch { return []; }
-}
-function save(list) {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(list));
-  } catch (e) {
-    toast("保存失败：照片过大，本地存储空间不足，请减少照片或压缩后重试", true);
-    throw e;
-  }
-}
+function load() { return loadLocal(); }
+function save(list) { saveLocal(list); }
 
 /* ---------- time auto fill ---------- */
 $("fillNow").onclick = () => ($("time").value = nowLocal());
@@ -366,7 +476,7 @@ $("modalClose").onclick = () => modal.classList.remove("show");
 modal.onclick = (e) => { if (e.target === modal) modal.classList.remove("show"); };
 
 /* ---------- submit ---------- */
-$("submit").onclick = () => {
+$("submit").onclick = async () => {
   const time = $("time").value;
   const picker = $("picker").value.trim();
   if (!time) return toast("请填写领取时间", true);
@@ -376,18 +486,29 @@ $("submit").onclick = () => {
     .filter(s => s.name);
   if (!items.length) return toast("请至少选择一项货品", true);
 
-  const list = load();
-  list.unshift({
-    id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
-    time, picker,
+  const rec = {
+    id: genId(), time, picker,
     purpose: $("purpose").value.trim(),
     items,
-    photos: photos.map(p => p.src)
-  });
-  try { save(list); } catch { return; }
-  toast("登记成功");
-  resetForm();
+    photos: photos.map(p => p.src),
+    _ts: Date.now()
+  };
+  STATE.list.unshift(rec);
+  saveLocal(STATE.list);
   renderList();
+  resetForm();
+  if (!GH.token) {
+    toast("登记成功（已存本机）；填入云端令牌后可同步到其它设备");
+    return;
+  }
+  toast("登记成功，正在同步到云端…");
+  try {
+    await cloudPush(rec);
+    STATE.lastSync = new Date();
+    setSync("已同步 " + STATE.lastSync.toLocaleString());
+  } catch (e) {
+    setSync("云端同步失败：" + e.message + "（已存本地）", true);
+  }
 };
 $("reset").onclick = resetForm;
 function resetForm() {
@@ -399,7 +520,7 @@ function resetForm() {
 
 /* ---------- list ---------- */
 function renderList() {
-  const list = load();
+  const list = STATE.list;
   $("count").textContent = list.length + " 条";
   const box = $("listBox");
   if (!list.length) {
@@ -435,14 +556,16 @@ function renderList() {
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 window.openModal = openModal;
-window.del = (id) => {
+window.del = async (id) => {
   if (!confirm("确定删除该条记录？")) return;
-  const list = load().filter(r => r.id !== id);
-  save(list); renderList(); toast("已删除");
+  STATE.list = STATE.list.filter(r => r.id !== id);
+  saveLocal(STATE.list); renderList(); toast("已删除");
+  try { await cloudDelete(id); } catch (e) {}
 };
-$("clearAll").onclick = () => {
-  if (!confirm("将清空全部记录，且不可恢复。建议先导出备份。确定继续？")) return;
-  localStorage.removeItem(STORE_KEY); renderList(); toast("已清空全部记录");
+$("clearAll").onclick = async () => {
+  if (!confirm("将清空全部记录（含云端），且不可恢复。建议先导出备份。确定继续？")) return;
+  try { await cloudClearAll(); } catch (e) {}
+  STATE.list = []; saveLocal(STATE.list); renderList(); toast("已清空全部记录");
 };
 function toCsv(list) {
   const head = ["序号", "领取时间", "领取人", "用途/项目", "货物名称及数量", "照片数"];
@@ -457,7 +580,7 @@ function toCsv(list) {
   return [head, ...rows].map(row => row.map(escCsv).join(",")).join("\r\n");
 }
 $("exportBtn").onclick = () => {
-  const list = load();
+  const list = STATE.list;
   if (!list.length) return toast("没有可导出的记录", true);
   const blob = new Blob(["﻿" + toCsv(list)], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
@@ -468,7 +591,7 @@ $("exportBtn").onclick = () => {
   toast("已导出 CSV");
 };
 $("exportJsonBtn").onclick = () => {
-  const list = load();
+  const list = STATE.list;
   if (!list.length) return toast("没有可导出的记录", true);
   const blob = new Blob([JSON.stringify(list, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -479,7 +602,34 @@ $("exportJsonBtn").onclick = () => {
   toast("已导出 JSON");
 };
 
+STATE.list = loadLocal();
 renderList();
+syncPull();
+$("syncBtn").onclick = () => syncPull();
+
+/* ---- 云端令牌设置（仅存本机，不写入仓库） ---- */
+const cfgPanel = $("cfgPanel");
+$("cfgBtn").onclick = () => {
+  cfgPanel.style.display = cfgPanel.style.display === "none" ? "block" : "none";
+  if (cfgPanel.style.display === "block") $("tokenInput").value = GH.token;
+};
+$("saveToken").onclick = () => {
+  const v = $("tokenInput").value.trim();
+  if (!v) return toast("请输入令牌", true);
+  GH.token = v;
+  try { localStorage.setItem("gh_token", v); } catch (e) {}
+  cfgPanel.style.display = "none";
+  toast("已保存，正在同步…");
+  syncPull();
+};
+$("clearToken").onclick = () => {
+  GH.token = "";
+  try { localStorage.removeItem("gh_token"); } catch (e) {}
+  $("tokenInput").value = "";
+  toast("已清除云端令牌（后续仅存本机）");
+  setSync("未配置写入令牌：仅可读取云端记录", false, true);
+};
+if (!GH.token) setSync("未配置写入令牌：仅可读取云端记录", false, true);
 </script>
 <script src="qrcode.js"></script>
 <script>
