@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>出库现场登记表</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --primary: #2f6fed;
+    --primary-dark: #1f54c4;
+    --text: #1f2733;
+    --muted: #6b7785;
+    --border: #e3e8ef;
+    --danger: #e5484d;
+    --ok: #2ea043;
+    --chip: #eef3ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 2px rgba(16,24,40,.04);
+  }
+  .card h2 { font-size: 16px; margin: 0 0 16px; display:flex; align-items:center; gap:8px;}
+  .card h2 .tag { font-size:11px; font-weight:500; color:var(--primary); background:var(--chip); padding:2px 8px; border-radius:999px;}
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  label .req { color: var(--danger); margin-left:2px;}
+  input[type=text], input[type=datetime-local], input[type=number], textarea, .search {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text);
+    background: #fff;
+  }
+  input:focus, textarea:focus, .search:focus { outline: none; border-color: var(--primary); box-shadow:0 0 0 3px rgba(47,111,237,.12); }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .field { margin-bottom: 14px; }
+  .hint { font-size:12px; color:var(--muted); margin-top:4px; }
+  .auto { font-size:12px; color:var(--primary); cursor:pointer; user-select:none; }
+
+  /* product search */
+  .search-wrap { position: relative; }
+  .suggest {
+    position:absolute; top:100%; left:0; right:0; z-index:20;
+    background:#fff; border:1px solid var(--border); border-radius:8px;
+    max-height: 220px; overflow:auto; box-shadow:0 6px 18px rgba(16,24,40,.12);
+  }
+  .suggest div { padding:10px 12px; font-size:14px; cursor:pointer; }
+  .suggest div:hover { background:var(--chip); }
+  .selected { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+  .sel-item {
+    display:flex; align-items:center; gap:10px;
+    border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:#fafbfc;
+  }
+  .sel-item .name { flex:1; font-size:14px; }
+  .sel-item input { width:110px; }
+  .sel-item .x { cursor:pointer; color:var(--muted); font-size:18px; line-height:1; padding:0 4px;}
+  .sel-item .x:hover { color:var(--danger); }
+
+  /* photos */
+  .photo-drop {
+    border: 1.5px dashed var(--border);
+    border-radius:10px; padding:16px; text-align:center; color:var(--muted); cursor:pointer;
+    transition:.15s; background:#fafbfc;
+  }
+  .photo-drop:hover { border-color:var(--primary); color:var(--primary); background:var(--chip); }
+  .thumbs { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+  .thumb {
+    position:relative; width:84px; height:84px; border-radius:8px; overflow:hidden;
+    border:1px solid var(--border); background:#fff;
+  }
+  .thumb img { width:100%; height:100%; object-fit:cover; }
+  .thumb .del {
+    position:absolute; top:2px; right:2px; width:20px; height:20px; border-radius:50%;
+    background:rgba(0,0,0,.55); color:#fff; font-size:13px; line-height:20px; text-align:center; cursor:pointer;
+  }
+  .photo-meta { font-size:12px; color:var(--muted); margin-top:8px; }
+
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    padding:10px 18px; border-radius:8px; border:1px solid var(--primary);
+    background:var(--primary); color:#fff; font-size:14px; cursor:pointer; font-weight:500;
+  }
+  .btn:hover { background:var(--primary-dark); border-color:var(--primary-dark); }
+  .btn.ghost { background:#fff; color:var(--primary); }
+  .btn.ghost:hover { background:var(--chip); }
+  .btn.sm { padding:5px 10px; font-size:13px; }
+  .btn.danger { background:#fff; color:var(--danger); border-color:var(--border); }
+  .btn.danger:hover { background:#fff0f0; border-color:var(--danger); }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+
+  /* list */
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; background:#fafbfc; }
+  .items-cell { max-width:240px; }
+  .item-line { white-space:nowrap; }
+  .photos-cell { display:flex; gap:4px; flex-wrap:wrap; }
+  .mini-photo { width:34px; height:34px; border-radius:6px; object-fit:cover; cursor:pointer; border:1px solid var(--border); }
+  .empty { text-align:center; color:var(--muted); padding:28px 0; font-size:14px; }
+  .badge { display:inline-block; font-size:11px; color:var(--muted); background:var(--chip); border-radius:6px; padding:1px 6px; }
+
+  /* modal */
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal.show { display:flex; }
+  .modal img { max-width:92vw; max-height:88vh; border-radius:8px; background:#fff; }
+  .modal .close { position:absolute; top:18px; right:24px; color:#fff; font-size:30px; cursor:pointer; }
+
+  .toast {
+    position:fixed; left:50%; bottom:32px; transform:translateX(-50%) translateY(20px);
+    background:#1f2733; color:#fff; padding:10px 18px; border-radius:8px; font-size:14px;
+    opacity:0; pointer-events:none; transition:.2s; z-index:60;
+  }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.err { background:var(--danger); }
+  @media (max-width:560px){
+    .grid2{grid-template-columns:1fr;}
+    input[type=text], input[type=datetime-local], input[type=number], textarea, .search { font-size:16px; }
+    .btn{ width:100%; }
+    .actions .btn{ width:auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>出库现场登记表</h1>
+  <div class="sub">现场领取登记与记录留存</div>
+  <div class="card" style="padding:14px 18px;">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <img id="qrImg" src="data:image/png;base64,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" alt="扫码打开" style="width:110px;height:110px;border:1px solid var(--border);border-radius:8px;background:#fff;"/>
+      <div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px;">📱 手机扫码打开</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5;">用手机相机/微信扫一扫此二维码，即可在手机上打开本登记表并现场拍照上传。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>新增登记 <span class="tag">基础登记</span></h2>
+    <div class="grid2">
+      <div class="field">
+        <label>领取时间<span class="req">*</span></label>
+        <input type="datetime-local" id="time" />
+        <div class="hint"><span class="auto" id="fillNow">📎 自动填入当前时间</span></div>
+      </div>
+      <div class="field">
+        <label>领取人<span class="req">*</span></label>
+        <input type="text" id="picker" placeholder="请输入领取人姓名" />
+      </div>
+    </div>
+    <div class="field">
+      <label>用途 / 项目</label>
+      <input type="text" id="purpose" placeholder="请输入用途或项目" />
+    </div>
+
+    <div class="field">
+      <label>货物名称<span class="req">*</span></label>
+      <div class="search-wrap">
+        <input type="text" class="search" id="search" placeholder="搜索并选择货品（可多选，每个单独填数量）" autocomplete="off" />
+        <div class="suggest" id="suggest"></div>
+      </div>
+      <div class="selected" id="selected"></div>
+      <div class="hint" id="selHint">尚未选择货品，请在上方搜索并选择。</div>
+    </div>
+
+    <div class="field">
+      <label>现场照片（留存）</label>
+      <div class="photo-drop" id="photoDrop">
+        📷 点击或拖拽上传照片，作为现场留存凭证（可多张）
+      </div>
+      <input type="file" id="photoInput" accept="image/*" multiple hidden />
+      <div class="thumbs" id="thumbs"></div>
+      <div class="photo-meta" id="photoMeta"></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="submit">提交登记</button>
+      <button class="btn ghost" id="reset">清空</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>记录列表 <span class="badge" id="count">0 条</span></h2>
+    <div class="actions" style="margin-bottom:12px;">
+      <button class="btn ghost sm" id="exportBtn">⬇ 导出 CSV</button>
+      <button class="btn ghost sm" id="exportJsonBtn">⬇ 导出 JSON</button>
+      <button class="btn danger sm" id="clearAll">清空全部记录</button>
+    </div>
+    <div id="listBox"></div>
+  </div>
+</div>
+
+<div class="modal" id="modal"><span class="close" id="modalClose">&times;</span><img id="modalImg" alt="" /></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const PRODUCTS = [
+  "冻干精华液 20支装","冻干精华液 5支装","冻干精华液 单支装","面膜 5片装","面膜 1片装",
+  "冻干精华液 30支装","洁面慕斯 150ml","洁面慕斯 50ml","舒缓精粹水 120ml","舒缓精粹水 30ml",
+  "赋活精粹乳 80ml","赋活精粹乳 30ml","赋活精粹乳 1ml","舒缓精粹霜 50g","舒缓精粹霜 15g","舒缓精粹霜 5g","舒缓精粹霜 1g"
+];
+const STORE_KEY = "outbound_records_v2";
+
+let selected = [];   // {name, qty}
+let photos = [];     // dataURL strings
+
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+function toast(msg, isErr) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isErr ? " err" : "");
+  setTimeout(() => (t.className = "toast"), 2200);
+}
+function nowLocal() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+  catch { return []; }
+}
+function save(list) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(list));
+  } catch (e) {
+    toast("保存失败：照片过大，本地存储空间不足，请减少照片或压缩后重试", true);
+    throw e;
+  }
+}
+
+/* ---------- time auto fill ---------- */
+$("fillNow").onclick = () => ($("time").value = nowLocal());
+$("time").value = nowLocal();
+
+/* ---------- product search ---------- */
+const searchEl = $("search"), suggestEl = $("suggest");
+function renderSuggest() {
+  const q = searchEl.value.trim().toLowerCase();
+  const pool = PRODUCTS.filter(p => !selected.some(s => s.name === p) &&
+    (q === "" || p.toLowerCase().includes(q)));
+  suggestEl.innerHTML = "";
+  if (!pool.length) { suggestEl.style.display = "none"; return; }
+  pool.slice(0, 30).forEach(p => {
+    const d = document.createElement("div");
+    d.textContent = p;
+    d.onclick = () => addProduct(p);
+    suggestEl.appendChild(d);
+  });
+  suggestEl.style.display = "block";
+}
+function addProduct(name) {
+  if (selected.some(s => s.name === name)) return;
+  selected.push({ name, qty: 1 });
+  searchEl.value = "";
+  suggestEl.style.display = "none";
+  renderSelected();
+}
+function renderSelected() {
+  const box = $("selected");
+  box.innerHTML = "";
+  selected.forEach((it, i) => {
+    const row = document.createElement("div");
+    row.className = "sel-item";
+    row.innerHTML =
+      `<span class="name">${it.name}</span>` +
+      `<input type="number" min="0" step="any" value="${it.qty}" data-i="${i}" class="qty"/>` +
+      `<span class="x" data-i="${i}">&times;</span>`;
+    box.appendChild(row);
+  });
+  box.querySelectorAll(".qty").forEach(inp =>
+    (inp.oninput = (e) => (selected[+e.target.dataset.i].qty = e.target.value)));
+  box.querySelectorAll(".x").forEach(x =>
+    (x.onclick = (e) => { selected.splice(+e.target.dataset.i, 1); renderSelected(); }));
+  $("selHint").textContent = selected.length
+    ? `已选 ${selected.length} 项货品，请逐项确认数量。`
+    : "尚未选择货品，请在上方搜索并选择。";
+}
+searchEl.oninput = renderSuggest;
+searchEl.onfocus = renderSuggest;
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".search-wrap")) suggestEl.style.display = "none";
+});
+
+/* ---------- photo upload + compress ---------- */
+const photoInput = $("photoInput"), photoDrop = $("photoDrop"), thumbs = $("thumbs");
+photoDrop.onclick = () => photoInput.click();
+photoDrop.ondragover = (e) => { e.preventDefault(); photoDrop.style.borderColor = "var(--primary)"; };
+photoDrop.ondragleave = () => (photoDrop.style.borderColor = "var(--border)");
+photoDrop.ondrop = (e) => {
+  e.preventDefault(); photoDrop.style.borderColor = "var(--border)";
+  handleFiles(e.dataTransfer.files);
+};
+photoInput.onchange = () => handleFiles(photoInput.files);
+
+function handleFiles(fileList) {
+  const files = [...fileList].filter(f => f.type.startsWith("image/"));
+  if (!files.length) return;
+  let pending = files.length;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => compress(reader.result, file.name, () => {
+      if (--pending === 0) renderThumbs();
+    });
+    reader.readAsDataURL(file);
+  });
+  photoInput.value = "";
+}
+function compress(dataUrl, name, done) {
+  const img = new Image();
+  img.onload = () => {
+    const max = 1280;
+    let { width: w, height: h } = img;
+    if (w > max || h > max) {
+      const r = Math.min(max / w, max / h);
+      w = Math.round(w * r); h = Math.round(h * r);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    // 估算体积：jpg 比 png 小很多
+    const out = canvas.toDataURL("image/jpeg", 0.72);
+    photos.push({ src: out, name });
+    done();
+  };
+  img.onerror = () => done();
+  img.src = dataUrl;
+}
+function renderThumbs() {
+  thumbs.innerHTML = "";
+  photos.forEach((p, i) => {
+    const t = document.createElement("div");
+    t.className = "thumb";
+    t.innerHTML = `<img src="${p.src}" alt=""/><span class="del" data-i="${i}">&times;</span>`;
+    t.querySelector(".del").onclick = (e) => { e.stopPropagation(); photos.splice(i, 1); renderThumbs(); };
+    t.onclick = () => openModal(p.src);
+    thumbs.appendChild(t);
+  });
+  const kb = Math.round(photos.reduce((s, p) => s + p.src.length * 0.75 / 1024, 0));
+  $("photoMeta").textContent = photos.length ? `已选 ${photos.length} 张照片（约 ${kb} KB，已自动压缩）` : "";
+}
+
+/* ---------- modal ---------- */
+const modal = $("modal");
+function openModal(src) { $("modalImg").src = src; modal.classList.add("show"); }
+$("modalClose").onclick = () => modal.classList.remove("show");
+modal.onclick = (e) => { if (e.target === modal) modal.classList.remove("show"); };
+
+/* ---------- submit ---------- */
+$("submit").onclick = () => {
+  const time = $("time").value;
+  const picker = $("picker").value.trim();
+  if (!time) return toast("请填写领取时间", true);
+  if (!picker) return toast("请填写领取人", true);
+  const items = selected
+    .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
+    .filter(s => s.name);
+  if (!items.length) return toast("请至少选择一项货品", true);
+
+  const list = load();
+  list.unshift({
+    id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+    time, picker,
+    purpose: $("purpose").value.trim(),
+    items,
+    photos: photos.map(p => p.src)
+  });
+  try { save(list); } catch { return; }
+  toast("登记成功");
+  resetForm();
+  renderList();
+};
+$("reset").onclick = resetForm;
+function resetForm() {
+  $("picker").value = ""; $("purpose").value = "";
+  $("time").value = nowLocal();
+  selected = []; photos = [];
+  renderSelected(); renderThumbs();
+}
+
+/* ---------- list ---------- */
+function renderList() {
+  const list = load();
+  $("count").textContent = list.length + " 条";
+  const box = $("listBox");
+  if (!list.length) {
+    box.innerHTML = `<div class="empty">暂无记录，请先在上方登记。</div>`;
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th>序号</th><th>领取时间</th><th>领取人</th>
+    <th>用途/项目</th><th>货物名称</th><th>数量</th><th>照片</th><th>操作</th>
+  </tr></thead><tbody>`;
+  list.forEach((r, i) => {
+    const itemsHtml = r.items.map(it =>
+      `<div class="item-line">${it.name} × ${it.qty}</div>`).join("");
+    const qtySum = r.items.reduce((s, it) => s + (Number(it.qty) || 0), 0);
+    const photoHtml = (r.photos && r.photos.length)
+      ? r.photos.slice(0, 4).map(src =>
+          `<img class="mini-photo" src="${src}" onclick="openModal('${src}')"/>`).join("") +
+        (r.photos.length > 4 ? `<span class="badge">+${r.photos.length - 4}</span>` : "")
+      : `<span class="badge">无</span>`;
+    html += `<tr>
+      <td>${list.length - i}</td>
+      <td>${r.time || "-"}</td>
+      <td>${esc(r.picker)}</td>
+      <td>${esc(r.purpose || "-")}</td>
+      <td class="items-cell">${itemsHtml}</td>
+      <td>${qtySum}</td>
+      <td><div class="photos-cell">${photoHtml}</div></td>
+      <td><button class="btn danger sm" onclick="del('${r.id}')">删除</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  box.innerHTML = html;
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+window.openModal = openModal;
+window.del = (id) => {
+  if (!confirm("确定删除该条记录？")) return;
+  const list = load().filter(r => r.id !== id);
+  save(list); renderList(); toast("已删除");
+};
+$("clearAll").onclick = () => {
+  if (!confirm("将清空全部记录，且不可恢复。建议先导出备份。确定继续？")) return;
+  localStorage.removeItem(STORE_KEY); renderList(); toast("已清空全部记录");
+};
+function toCsv(list) {
+  const head = ["序号", "领取时间", "领取人", "用途/项目", "货物名称及数量", "照片数"];
+  const rows = list.map((r, i) => {
+    const items = r.items.map(it => `${it.name}×${it.qty}`).join("； ");
+    return [list.length - i, r.time || "", r.picker || "", r.purpose || "", items, (r.photos || []).length];
+  });
+  const escCsv = v => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return [head, ...rows].map(row => row.map(escCsv).join(",")).join("\r\n");
+}
+$("exportBtn").onclick = () => {
+  const list = load();
+  if (!list.length) return toast("没有可导出的记录", true);
+  const blob = new Blob(["﻿" + toCsv(list)], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "出库登记_" + new Date().toISOString().slice(0, 10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("已导出 CSV");
+};
+$("exportJsonBtn").onclick = () => {
+  const list = load();
+  if (!list.length) return toast("没有可导出的记录", true);
+  const blob = new Blob([JSON.stringify(list, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "出库登记备份_" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("已导出 JSON");
+};
+
+renderList();
+</script>
+<script src="qrcode.js"></script>
+<script>
+  (function () {
+    try {
+      var qr = qrcode(0, "M");
+      qr.addData(location.href);
+      qr.make();
+      var img = document.getElementById("qrImg");
+      if (img) img.src = qr.createDataURL(4, 8);
+    } catch (e) { /* 保留内嵌兜底二维码 */ }
+  })();
+</script>
+</body>
+</html>
