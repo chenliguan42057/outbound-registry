@@ -239,8 +239,8 @@ const GH = {
   repo: "chenliguan42057/outbound-registry",
   branch: "main",
   dir: "data/records",
-  /* 云端写入令牌：默认留空（只能读取公开记录）。在页面"☁ 云端设置"中填入你的 fine-grained 令牌后，
-     即可把新登记写入云端、实现跨设备同步。令牌仅保存在本机浏览器，不会上传、不会写入代码。 */
+  /* 云端写入令牌：由部署时从仓库密匙注入到页面（window.__GH_TOKEN__），任何设备打开即自带写入能力，
+     无需在页面手动配置。localStorage 中的 gh_token 仅作为兜底。 */
   token: (window.__GH_TOKEN__ && window.__GH_TOKEN__.indexOf("__") !== 0) ? window.__GH_TOKEN__ : (localStorage.getItem("gh_token") || "")
 };
 let STATE = { list: [], lastSync: null };
