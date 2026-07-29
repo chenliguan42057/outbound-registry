@@ -159,16 +159,8 @@
   <div class="card">
     <h2>新增登记 <span class="tag">基础登记</span></h2>
     <div class="field">
-      <label>部门 / 领取单位</label>
-      <input type="text" id="dept" list="deptList" placeholder="请选择或输入部门" />
-      <datalist id="deptList">
-        <option value="深圳细胞"></option>
-        <option value="互联网"></option>
-        <option value="杭州细胞"></option>
-        <option value="青岛细胞"></option>
-        <option value="华益传媒"></option>
-        <option value="奥途信息"></option>
-      </datalist>
+      <label>部门 / 领取单位<span class="req">*</span></label>
+      <input type="text" id="dept" placeholder="请输入部门 / 领取单位" />
     </div>
     <div class="grid2">
       <div class="field">
@@ -217,7 +209,6 @@
     <h2>记录列表 <span class="badge" id="count">0 条</span>
       <span class="sync" id="syncStatus"></span>
       <button class="btn ghost sm" id="syncBtn" style="margin-left:8px;">🔄 立即同步</button>
-      <button class="btn ghost sm" id="cfgBtn" style="margin-left:8px;">☁ 云端设置</button>
     </h2>
     <div class="actions" style="margin-bottom:12px;">
       <button class="btn ghost sm" id="exportBtn">⬇ 导出 CSV</button>
@@ -225,19 +216,7 @@
       <button class="btn danger sm" id="clearAll">清空全部记录</button>
       <button class="btn ghost sm" id="uploadLocal" style="margin-left:8px;">☁ 上传本机记录</button>
     </div>
-    <div class="hint" id="syncHint">数据已同步到 GitHub 云端：换设备（手机/电脑）打开同一网址即可看到相同记录。</div>
-    <div class="card" id="cfgPanel" style="display:none; margin-top:12px; border-style:dashed;">
-      <h2>云端写入设置</h2>
-      <div class="field">
-        <label>GitHub 令牌（精细令牌，仅限本仓库 Contents 读写）</label>
-        <input type="password" id="tokenInput" placeholder="在此粘贴你的 GitHub 令牌" />
-        <div class="hint">本页面已自动内置云端写入令牌（由部署时注入），任何设备打开即可直接同步，无需手动配置。如确需覆盖，可在此粘贴其它令牌后保存。</div>
-      </div>
-      <div class="actions">
-        <button class="btn sm" id="saveToken">保存并同步</button>
-        <button class="btn danger sm" id="clearToken">清除令牌</button>
-      </div>
-    </div>
+    <div class="hint" id="syncHint">数据已同步到云端：换设备（手机/电脑）打开同一网址即可看到相同记录。</div>
     <div id="listBox"></div>
   </div>
 </div>
@@ -498,6 +477,7 @@ $("submit").onclick = async () => {
   const purpose = $("purpose").value.trim();
   if (!time) return toast("请填写领取时间", true);
   if (!picker) return toast("请填写领取人", true);
+  if (!$("dept").value.trim()) return toast("请填写部门/领取单位（必填）", true);
   if (!purpose) return toast("请填写用途/项目（必填）", true);
   const items = selected
     .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
@@ -665,29 +645,7 @@ async function uploadLocal() {
   syncPull();
 }
 
-/* ---- 云端令牌设置（仅存本机，不写入仓库） ---- */
-const cfgPanel = $("cfgPanel");
-$("cfgBtn").onclick = () => {
-  cfgPanel.style.display = cfgPanel.style.display === "none" ? "block" : "none";
-  if (cfgPanel.style.display === "block") $("tokenInput").value = GH.token;
-};
-$("saveToken").onclick = () => {
-  const v = $("tokenInput").value.trim();
-  if (!v) return toast("请输入令牌", true);
-  GH.token = v;
-  try { localStorage.setItem("gh_token", v); } catch (e) {}
-  cfgPanel.style.display = "none";
-  toast("已保存，正在同步…");
-  syncPull();
-};
-$("clearToken").onclick = () => {
-  GH.token = "";
-  try { localStorage.removeItem("gh_token"); } catch (e) {}
-  $("tokenInput").value = "";
-  toast("已清除云端令牌（后续仅存本机）");
-  setSync("未配置写入令牌：仅可读取云端记录", false, true);
-};
-if (!GH.token) setSync("未配置写入令牌：仅可读取云端记录", false, true);
+/* ---- 云端令牌已随部署注入，前端自动同步，无需在页面配置 ---- */
 </script>
 <script src="qrcode.js"></script>
 <script>
