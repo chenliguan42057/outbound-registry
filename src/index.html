@@ -158,6 +158,18 @@
 
   <div class="card">
     <h2>新增登记 <span class="tag">基础登记</span></h2>
+    <div class="field">
+      <label>部门 / 领取单位</label>
+      <input type="text" id="dept" list="deptList" placeholder="请选择或输入部门" />
+      <datalist id="deptList">
+        <option value="深圳细胞"></option>
+        <option value="互联网"></option>
+        <option value="杭州细胞"></option>
+        <option value="青岛细胞"></option>
+        <option value="华益传媒"></option>
+        <option value="奥途信息"></option>
+      </datalist>
+    </div>
     <div class="grid2">
       <div class="field">
         <label>领取时间<span class="req">*</span></label>
@@ -170,8 +182,8 @@
       </div>
     </div>
     <div class="field">
-      <label>用途 / 项目</label>
-      <input type="text" id="purpose" placeholder="请输入用途或项目" />
+      <label>用途 / 项目<span class="req">*</span></label>
+      <input type="text" id="purpose" placeholder="请输入用途或项目（必填）" />
     </div>
 
     <div class="field">
@@ -197,6 +209,7 @@
     <div class="actions">
       <button class="btn" id="submit">提交登记</button>
       <button class="btn ghost" id="reset">清空</button>
+      <button class="btn ghost" id="cancelEdit" style="display:none;">取消编辑</button>
     </div>
   </div>
 
@@ -343,6 +356,7 @@ function saveLocal(list) { try { localStorage.setItem(STORE_KEY, JSON.stringify(
 
 let selected = [];   // {name, qty}
 let photos = [];     // dataURL strings
+let editingId = null; // 正在编辑的记录 id（null = 新增）
 
 /* ---------- helpers ---------- */
 const $ = (id) => document.getElementById(id);
@@ -481,29 +495,38 @@ modal.onclick = (e) => { if (e.target === modal) modal.classList.remove("show");
 $("submit").onclick = async () => {
   const time = $("time").value;
   const picker = $("picker").value.trim();
+  const purpose = $("purpose").value.trim();
   if (!time) return toast("请填写领取时间", true);
   if (!picker) return toast("请填写领取人", true);
+  if (!purpose) return toast("请填写用途/项目（必填）", true);
   const items = selected
     .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
     .filter(s => s.name);
   if (!items.length) return toast("请至少选择一项货品", true);
 
+  const wasEditing = !!editingId;
   const rec = {
-    id: genId(), time, picker,
-    purpose: $("purpose").value.trim(),
+    id: editingId || genId(), time, picker,
+    dept: $("dept").value.trim(),
+    purpose,
     items,
     photos: photos.map(p => p.src),
     _ts: Date.now()
   };
-  STATE.list.unshift(rec);
+  if (editingId) {
+    const idx = STATE.list.findIndex(r => r.id === editingId);
+    if (idx >= 0) STATE.list[idx] = rec; else STATE.list.unshift(rec);
+  } else {
+    STATE.list.unshift(rec);
+  }
   saveLocal(STATE.list);
   renderList();
   resetForm();
   if (!GH.token) {
-    toast("登记成功（已存本机）；填入云端令牌后可同步到其它设备");
+    toast(wasEditing ? "修改已保存（本机）；配置云端令牌后可同步" : "登记成功（已存本机）；填入云端令牌后可同步到其它设备");
     return;
   }
-  toast("登记成功，正在同步到云端…");
+  toast(wasEditing ? "修改已保存，正在同步到云端…" : "登记成功，正在同步到云端…");
   try {
     await cloudPush(rec);
     STATE.lastSync = new Date();
@@ -514,9 +537,11 @@ $("submit").onclick = async () => {
 };
 $("reset").onclick = resetForm;
 function resetForm() {
-  $("picker").value = ""; $("purpose").value = "";
+  $("picker").value = ""; $("purpose").value = ""; $("dept").value = "";
   $("time").value = nowLocal();
-  selected = []; photos = [];
+  selected = []; photos = []; editingId = null;
+  $("submit").textContent = "提交登记";
+  $("cancelEdit").style.display = "none";
   renderSelected(); renderThumbs();
 }
 
@@ -530,7 +555,7 @@ function renderList() {
     return;
   }
   let html = `<table><thead><tr>
-    <th>序号</th><th>领取时间</th><th>领取人</th>
+    <th>序号</th><th>领取时间</th><th>领取人</th><th>部门</th>
     <th>用途/项目</th><th>货物名称</th><th>数量</th><th>照片</th><th>操作</th>
   </tr></thead><tbody>`;
   list.forEach((r, i) => {
@@ -546,11 +571,12 @@ function renderList() {
       <td>${list.length - i}</td>
       <td>${r.time || "-"}</td>
       <td>${esc(r.picker)}</td>
+      <td>${esc(r.dept || "-")}</td>
       <td>${esc(r.purpose || "-")}</td>
       <td class="items-cell">${itemsHtml}</td>
       <td>${qtySum}</td>
       <td><div class="photos-cell">${photoHtml}</div></td>
-      <td><button class="btn danger sm" onclick="del('${r.id}')">删除</button></td>
+      <td><button class="btn ghost sm" onclick="editRecord('${r.id}')">编辑</button> <button class="btn danger sm" onclick="del('${r.id}')">删除</button></td>
     </tr>`;
   });
   html += `</tbody></table>`;
@@ -564,16 +590,33 @@ window.del = async (id) => {
   saveLocal(STATE.list); renderList(); toast("已删除");
   try { await cloudDelete(id); } catch (e) {}
 };
+window.editRecord = (id) => {
+  const r = STATE.list.find(x => x.id === id);
+  if (!r) return;
+  editingId = id;
+  $("time").value = r.time || nowLocal();
+  $("picker").value = r.picker || "";
+  $("dept").value = r.dept || "";
+  $("purpose").value = r.purpose || "";
+  selected = (r.items || []).map(it => ({ name: it.name, qty: it.qty }));
+  photos = (r.photos || []).map(src => ({ src, name: "" }));
+  renderSelected(); renderThumbs();
+  $("submit").textContent = "保存修改";
+  $("cancelEdit").style.display = "inline-flex";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  toast("正在编辑该记录，修改后点「保存修改」");
+};
+$("cancelEdit").onclick = () => { resetForm(); toast("已取消编辑"); };
 $("clearAll").onclick = async () => {
   if (!confirm("将清空全部记录（含云端），且不可恢复。建议先导出备份。确定继续？")) return;
   try { await cloudClearAll(); } catch (e) {}
   STATE.list = []; saveLocal(STATE.list); renderList(); toast("已清空全部记录");
 };
 function toCsv(list) {
-  const head = ["序号", "领取时间", "领取人", "用途/项目", "货物名称及数量", "照片数"];
+  const head = ["序号", "领取时间", "领取人", "部门", "用途/项目", "货物名称及数量", "照片数"];
   const rows = list.map((r, i) => {
     const items = r.items.map(it => `${it.name}×${it.qty}`).join("； ");
-    return [list.length - i, r.time || "", r.picker || "", r.purpose || "", items, (r.photos || []).length];
+    return [list.length - i, r.time || "", r.picker || "", r.dept || "", r.purpose || "", items, (r.photos || []).length];
   });
   const escCsv = v => {
     const s = String(v);
