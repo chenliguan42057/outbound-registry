@@ -69,9 +69,10 @@
   .sel-item {
     display:flex; align-items:center; gap:10px;
     border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:#fafbfc;
+    flex-wrap:nowrap;
   }
-  .sel-item .name { flex:1; font-size:14px; }
-  .sel-item input { width:110px; }
+  .sel-item .name { flex:1 1 auto; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sel-item input { width:110px; flex:0 0 auto; }
   .sel-item .x { cursor:pointer; color:var(--muted); font-size:18px; line-height:1; padding:0 4px;}
   .sel-item .x:hover { color:var(--danger); }
 
@@ -113,6 +114,8 @@
   th { color:var(--muted); font-weight:600; font-size:12px; background:#fafbfc; }
   .items-cell { max-width:240px; }
   .item-line { white-space:nowrap; }
+  .item-line.multi-line { border-bottom: 1px dashed var(--border); padding-bottom: 6px; margin-bottom: 6px; }
+  .item-line.multi-line:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
   .photos-cell { display:flex; gap:4px; flex-wrap:wrap; }
   .mini-photo { width:34px; height:34px; border-radius:6px; object-fit:cover; cursor:pointer; border:1px solid var(--border); }
   .empty { text-align:center; color:var(--muted); padding:28px 0; font-size:14px; }
@@ -240,7 +243,7 @@
 </div>
 
 <div class="modal" id="inModal">
-  <div class="pw-box" style="width:420px;max-width:92vw;">
+  <div class="pw-box" style="width:520px;max-width:96vw;">
     <div class="pw-title">入库登记</div>
     <div class="field">
       <label>货品名称<span class="req">*</span></label>
@@ -716,10 +719,10 @@ function renderList() {
     <th>用途/项目</th><th>货物名称</th><th>数量</th><th>库存</th><th>照片</th><th>操作</th>
   </tr></thead><tbody>`;
   list.forEach((r, i) => {
-    const itemsHtml = r.items.map(it =>
-      `<div class="item-line">${it.name} × ${it.qty}</div>`).join("");
-    const stockHtml = r.items.map(it =>
-      `<div class="item-line">${it.name}: ${getStock(it.name)}</div>`).join("");
+    const itemsHtml = r.items.map((it, idx, arr) =>
+      `<div class="item-line${arr.length > 1 ? ' multi-line' : ''}">${it.name} × ${it.qty}</div>`).join("");
+    const stockHtml = r.items.map((it, idx, arr) =>
+      `<div class="item-line${arr.length > 1 ? ' multi-line' : ''}">${getStock(it.name)}</div>`).join("");
     const qtySum = r.items.reduce((s, it) => s + (Number(it.qty) || 0), 0);
     const photoHtml = (r.photos && r.photos.length)
       ? r.photos.slice(0, 4).map(src =>
@@ -804,7 +807,7 @@ function toCsv(list) {
   const head = ["序号", "时间", "领取人", "部门", "用途/项目", "货物名称及数量", "库存", "照片数"];
   const rows = list.map((r, i) => {
     const items = r.items.map(it => `${it.name}×${it.qty}`).join("； ");
-    const stocks = r.items.map(it => `${it.name}:${getStock(it.name)}`).join("； ");
+    const stocks = r.items.map(it => String(getStock(it.name))).join("； ");
     return [list.length - i, r.time || "", r.picker || "", r.dept || "", r.purpose || "", items, stocks, (r.photos || []).length];
   });
   const escCsv = v => {
