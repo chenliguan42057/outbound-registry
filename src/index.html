@@ -129,10 +129,15 @@
   .sync.info { color:var(--muted); }
 
   /* modal */
-  .modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:flex-start; justify-content:center; z-index:50; padding:20px; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
   .modal.show { display:flex; }
+  body.modal-open { overflow:hidden; }
   .modal img { max-width:92vw; max-height:88vh; border-radius:8px; background:#fff; }
   .modal .close { position:absolute; top:18px; right:24px; color:#fff; font-size:30px; cursor:pointer; }
+
+  /* 入库弹窗：内容区独立滚动，标题和按钮始终可见 */
+  #inModal .pw-box { width:520px; max-width:96vw; margin-top:6vh; margin-bottom:6vh; }
+  #inModal .in-modal-body { max-height:58vh; overflow-y:auto; padding-right:6px; }
 
   /* password modal */
   .pw-box { background:#fff; border-radius:12px; padding:22px; width:300px; max-width:90vw; box-shadow:0 10px 40px rgba(0,0,0,.25); }
@@ -248,16 +253,18 @@
 </div>
 
 <div class="modal" id="inModal">
-  <div class="pw-box" style="width:520px;max-width:96vw;">
+  <div class="pw-box">
     <div class="pw-title">入库登记</div>
-    <div class="field">
-      <label>货品名称<span class="req">*</span></label>
-      <div class="search-wrap">
-        <input type="text" class="search" id="inSearch" placeholder="搜索并选择货品（可多选，每个单独填数量）" autocomplete="off" />
-        <div class="suggest" id="inSuggest"></div>
+    <div class="in-modal-body">
+      <div class="field">
+        <label>货品名称<span class="req">*</span></label>
+        <div class="search-wrap">
+          <input type="text" class="search" id="inSearch" placeholder="搜索并选择货品（可多选，每个单独填数量）" autocomplete="off" />
+          <div class="suggest" id="inSuggest"></div>
+        </div>
+        <div class="selected" id="inSelected"></div>
+        <div class="hint" id="inSelHint">尚未选择货品，请在上方搜索并选择。</div>
       </div>
-      <div class="selected" id="inSelected"></div>
-      <div class="hint" id="inSelHint">尚未选择货品，请在上方搜索并选择。</div>
     </div>
     <div class="actions">
       <button class="btn sm" id="inConfirm">确定入库</button>
@@ -540,12 +547,12 @@ function openInModal() {
   inSelected = [];
   renderInSelected();
   inSearchEl.value = "";
-  $("inModal").classList.add("show");
+  showModal($("inModal"));
   inSearchEl.focus();
 }
 $("inBtn").onclick = () => requirePw(() => openInModal(), "入库需要密码");
-$("inCancel").onclick = () => $("inModal").classList.remove("show");
-$("inModal").onclick = (e) => { if (e.target === $("inModal")) $("inModal").classList.remove("show"); };
+$("inCancel").onclick = () => hideModal($("inModal"));
+$("inModal").onclick = (e) => { if (e.target === $("inModal")) hideModal($("inModal")); };
 
 /* ---------- 查看库存弹窗 ---------- */
 function openStockModal() {
@@ -560,11 +567,11 @@ function openStockModal() {
   const box = $("stockList");
   box.innerHTML = "";
   box.appendChild(list);
-  $("stockModal").classList.add("show");
+  showModal($("stockModal"));
 }
 $("stockBtn").onclick = () => requirePw(() => openStockModal(), "查看库存需要密码");
-$("stockClose").onclick = () => $("stockModal").classList.remove("show");
-$("stockModal").onclick = (e) => { if (e.target === $("stockModal")) $("stockModal").classList.remove("show"); };
+$("stockClose").onclick = () => hideModal($("stockModal"));
+$("stockModal").onclick = (e) => { if (e.target === $("stockModal")) hideModal($("stockModal")); };
 $("inConfirm").onclick = async () => {
   const items = inSelected
     .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
@@ -574,7 +581,7 @@ $("inConfirm").onclick = async () => {
   STATE.list.unshift(rec);
   saveLocal(STATE.list);
   renderList();
-  $("inModal").classList.remove("show");
+  hideModal($("inModal"));
   inSelected = [];
   renderInSelected();
   if (!GH.token) { toast("入库成功（已存本机）"); return; }
@@ -681,9 +688,9 @@ function renderThumbs() {
 
 /* ---------- modal ---------- */
 const modal = $("modal");
-function openModal(src) { $("modalImg").src = src; modal.classList.add("show"); }
-$("modalClose").onclick = () => modal.classList.remove("show");
-modal.onclick = (e) => { if (e.target === modal) modal.classList.remove("show"); };
+function openModal(src) { $("modalImg").src = src; showModal(modal); }
+$("modalClose").onclick = () => hideModal(modal);
+modal.onclick = (e) => { if (e.target === modal) hideModal(modal); };
 
 /* ---------- submit ---------- */
 $("submit").onclick = async () => {
@@ -788,12 +795,16 @@ window.openModal = openModal;
 
 /* ---------- 密码保护：编辑 / 删除 / 清空全部 需密码 1111 ---------- */
 let pwCallback = null;
+/* 弹窗统一控制：显示时锁定 body 滚动，关闭时恢复 */
+function showModal(el) { el.classList.add("show"); document.body.classList.add("modal-open"); }
+function hideModal(el) { el.classList.remove("show"); document.body.classList.remove("modal-open"); }
+
 function requirePw(cb, title) {
   pwCallback = cb;
   $("pwTitle").textContent = title || "此操作需要密码";
   $("pwErr").textContent = "";
   $("pwInput").value = "";
-  $("pwModal").classList.add("show");
+  showModal($("pwModal"));
   setTimeout(() => $("pwInput").focus(), 50);
 }
 function doEdit(id) {
@@ -835,15 +846,15 @@ $("clearAll").onclick = () => requirePw(() => doClearAll(), "清空全部记录�
 /* 密码弹窗交互（仅点按钮时出现，无独立入口） */
 $("pwConfirm").onclick = () => {
   if ($("pwInput").value === "1111") {
-    $("pwModal").classList.remove("show");
+    hideModal($("pwModal"));
     const cb = pwCallback; pwCallback = null;
     if (cb) cb();
   } else {
     $("pwErr").textContent = "密码错误，请重试";
   }
 };
-$("pwCancel").onclick = () => { $("pwModal").classList.remove("show"); pwCallback = null; };
-$("pwModal").onclick = (e) => { if (e.target === $("pwModal")) { $("pwModal").classList.remove("show"); pwCallback = null; } };
+$("pwCancel").onclick = () => { hideModal($("pwModal")); pwCallback = null; };
+$("pwModal").onclick = (e) => { if (e.target === $("pwModal")) { hideModal($("pwModal")); pwCallback = null; } };
 $("pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pwConfirm").click(); });
 function toCsv(list) {
   const head = ["序号", "时间", "领取人", "部门", "用途/项目", "货物名称及数量", "库存", "照片数"];
