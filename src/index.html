@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>出库现场登记表</title>
+<title>出入库登记表</title>
 <style>
   :root {
     --bg: #f5f7fa;
@@ -152,8 +152,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>出库现场登记表</h1>
-  <div class="sub">现场领取登记与记录留存</div>
+  <h1>出入库登记表</h1>
+  <div class="sub">现场出库 / 入库登记与库存管理</div>
   
 <div class="card">
     <h2>新增登记 <span class="tag">基础登记</span></h2>
@@ -217,6 +217,7 @@
     </h2>
     <div class="actions" style="margin-bottom:12px;">
       <button class="btn ghost sm" id="exportBtn">⬇ 导出 CSV</button>
+      <button class="btn ghost sm" id="inBtn">⬆ 入库</button>
       <button class="btn danger sm" id="clearAll">清空全部记录</button>
     </div>
     <div class="hint" id="syncHint">数据已同步到云端：换设备（手机/电脑）打开同一网址即可看到相同记录。</div>
@@ -238,13 +239,43 @@
   </div>
 </div>
 
+<div class="modal" id="inModal">
+  <div class="pw-box" style="width:420px;max-width:92vw;">
+    <div class="pw-title">入库登记</div>
+    <div class="field">
+      <label>货品名称<span class="req">*</span></label>
+      <div class="search-wrap">
+        <input type="text" class="search" id="inSearch" placeholder="搜索并选择货品（可多选，每个单独填数量）" autocomplete="off" />
+        <div class="suggest" id="inSuggest"></div>
+      </div>
+      <div class="selected" id="inSelected"></div>
+      <div class="hint" id="inSelHint">尚未选择货品，请在上方搜索并选择。</div>
+    </div>
+    <div class="actions">
+      <button class="btn sm" id="inConfirm">确定入库</button>
+      <button class="btn ghost sm" id="inCancel">取消</button>
+    </div>
+  </div>
+</div>
+
 <script>
 window.__GH_TOKEN__ = "__GH_TOKEN__";
 const PRODUCTS = [
   "冻干精华液 20支装","冻干精华液 5支装","冻干精华液 单支装","面膜 5片装","面膜 1片装",
   "冻干精华液 30支装","洁面慕斯 150ml","洁面慕斯 50ml","舒缓精粹水 120ml","舒缓精粹水 30ml",
-  "赋活精粹乳 80ml","赋活精粹乳 30ml","赋活精粹乳 1ml","舒缓精粹霜 50g","舒缓精粹霜 15g","舒缓精粹霜 5g","舒缓精粹霜 1g"
+  "赋活精粹乳 80ml","赋活精粹乳 30ml","赋活精粹乳 1ml","舒缓精粹霜 50g","舒缓精粹霜 15g","舒缓精粹霜 5g","舒缓精粹霜 1g",
+  "华大鹿茸凝时系列礼盒装",
+  "小鹿牛皮纸袋（全系列护肤品手提袋）大",
+  "小鹿牛皮纸袋（精华+面膜手提袋）小"
 ];
+const INVENTORY = {
+  "冻干精华液 20支装":107,"冻干精华液 5支装":325,"冻干精华液 单支装":234,"面膜 5片装":140,"面膜 1片装":219,
+  "冻干精华液 30支装":43,"洁面慕斯 150ml":89,"洁面慕斯 50ml":78,"舒缓精粹水 120ml":62,"舒缓精粹水 30ml":53,
+  "赋活精粹乳 80ml":90,"赋活精粹乳 30ml":68,"赋活精粹乳 1ml":125,"舒缓精粹霜 50g":61,"舒缓精粹霜 15g":84,"舒缓精粹霜 5g":100,"舒缓精粹霜 1g":127,
+  "华大鹿茸凝时系列礼盒装":5,
+  "小鹿牛皮纸袋（全系列护肤品手提袋）大":199,
+  "小鹿牛皮纸袋（精华+面膜手提袋）小":147
+};
 const STORE_KEY = "outbound_records_v2";
 
 /* ===================== 云端同步（GitHub Contents API） ===================== */
@@ -258,6 +289,19 @@ const GH = {
   token: (window.__GH_TOKEN__ && window.__GH_TOKEN__.indexOf("__") !== 0) ? window.__GH_TOKEN__ : (localStorage.getItem("gh_token") || "")
 };
 let STATE = { list: [], lastSync: null };
+
+function getStock(name) {
+  const init = INVENTORY[name] || 0;
+  let inQty = 0, outQty = 0;
+  STATE.list.forEach(r => {
+    (r.items || []).forEach(it => {
+      if (it.name !== name) return;
+      const q = Number(it.qty) || 0;
+      if (r.type === "in") inQty += q; else outQty += q;
+    });
+  });
+  return init + inQty - outQty;
+}
 
 function ghHeaders() {
   const h = { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
@@ -350,6 +394,7 @@ function saveLocal(list) { try { localStorage.setItem(STORE_KEY, JSON.stringify(
 let selected = [];   // {name, qty}
 let photos = [];     // dataURL strings
 let editingId = null; // 正在编辑的记录 id（null = 新增）
+let inSelected = []; // 入库弹窗中已选产品 {name, qty}
 
 /* ---------- helpers ---------- */
 const $ = (id) => document.getElementById(id);
@@ -398,10 +443,12 @@ function renderSelected() {
   const box = $("selected");
   box.innerHTML = "";
   selected.forEach((it, i) => {
+    const stock = getStock(it.name);
     const row = document.createElement("div");
     row.className = "sel-item";
     row.innerHTML =
       `<span class="name">${it.name}</span>` +
+      `<span class="stock" style="font-size:12px;color:var(--muted);white-space:nowrap;">库存：${stock}</span>` +
       `<input type="number" min="0" step="any" value="${it.qty}" data-i="${i}" class="qty"/>` +
       `<span class="x" data-i="${i}">&times;</span>`;
     box.appendChild(row);
@@ -419,6 +466,87 @@ searchEl.onfocus = renderSuggest;
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".search-wrap")) suggestEl.style.display = "none";
 });
+
+/* ---------- 入库弹窗：产品选择 ---------- */
+const inSearchEl = $("inSearch"), inSuggestEl = $("inSuggest");
+function renderInSuggest() {
+  const q = inSearchEl.value.trim().toLowerCase();
+  const pool = PRODUCTS.filter(p => !inSelected.some(s => s.name === p) &&
+    (q === "" || p.toLowerCase().includes(q)));
+  inSuggestEl.innerHTML = "";
+  if (!pool.length) { inSuggestEl.style.display = "none"; return; }
+  pool.slice(0, 30).forEach(p => {
+    const d = document.createElement("div");
+    d.textContent = p;
+    d.onclick = () => addInProduct(p);
+    inSuggestEl.appendChild(d);
+  });
+  inSuggestEl.style.display = "block";
+}
+function addInProduct(name) {
+  if (inSelected.some(s => s.name === name)) return;
+  inSelected.push({ name, qty: 1 });
+  inSearchEl.value = "";
+  inSuggestEl.style.display = "none";
+  renderInSelected();
+}
+function renderInSelected() {
+  const box = $("inSelected");
+  box.innerHTML = "";
+  inSelected.forEach((it, i) => {
+    const row = document.createElement("div");
+    row.className = "sel-item";
+    row.innerHTML =
+      `<span class="name">${it.name}</span>` +
+      `<input type="number" min="0" step="any" value="${it.qty}" data-i="${i}" class="qty"/>` +
+      `<span class="x" data-i="${i}">&times;</span>`;
+    box.appendChild(row);
+  });
+  box.querySelectorAll(".qty").forEach(inp =>
+    (inp.oninput = (e) => (inSelected[+e.target.dataset.i].qty = e.target.value)));
+  box.querySelectorAll(".x").forEach(x =>
+    (x.onclick = (e) => { inSelected.splice(+e.target.dataset.i, 1); renderInSelected(); }));
+  $("inSelHint").textContent = inSelected.length
+    ? `已选 ${inSelected.length} 项货品，请逐项确认数量。`
+    : "尚未选择货品，请在上方搜索并选择。";
+}
+inSearchEl.oninput = renderInSuggest;
+inSearchEl.onfocus = renderInSuggest;
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#inModal .search-wrap")) inSuggestEl.style.display = "none";
+});
+function openInModal() {
+  inSelected = [];
+  renderInSelected();
+  inSearchEl.value = "";
+  $("inModal").classList.add("show");
+  inSearchEl.focus();
+}
+$("inBtn").onclick = () => requirePw(() => openInModal(), "入库需要密码");
+$("inCancel").onclick = () => $("inModal").classList.remove("show");
+$("inModal").onclick = (e) => { if (e.target === $("inModal")) $("inModal").classList.remove("show"); };
+$("inConfirm").onclick = async () => {
+  const items = inSelected
+    .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
+    .filter(s => s.name && s.qty > 0);
+  if (!items.length) return toast("请至少选择一项货品", true);
+  const rec = { id: genId(), time: nowLocal(), type: "in", items, _ts: Date.now() };
+  STATE.list.unshift(rec);
+  saveLocal(STATE.list);
+  renderList();
+  $("inModal").classList.remove("show");
+  inSelected = [];
+  renderInSelected();
+  if (!GH.token) { toast("入库成功（已存本机）"); return; }
+  toast("入库成功，正在同步到云端…");
+  try {
+    await pushAllLocal();
+    STATE.lastSync = new Date();
+    setSync("已同步 " + STATE.lastSync.toLocaleString());
+  } catch (e) {
+    setSync("云端同步失败：" + e.message + "（已存本地）", true);
+  }
+};
 
 /* ---------- 历史记录自动补全（部门 / 领取人） ---------- */
 function getHistory(key) { try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; } }
@@ -584,12 +712,14 @@ function renderList() {
     return;
   }
   let html = `<table><thead><tr>
-    <th>序号</th><th>领取时间</th><th>领取人</th><th>部门</th>
-    <th>用途/项目</th><th>货物名称</th><th>数量</th><th>照片</th><th>操作</th>
+    <th>序号</th><th>时间</th><th>领取人</th><th>部门</th>
+    <th>用途/项目</th><th>货物名称</th><th>数量</th><th>库存</th><th>照片</th><th>操作</th>
   </tr></thead><tbody>`;
   list.forEach((r, i) => {
     const itemsHtml = r.items.map(it =>
       `<div class="item-line">${it.name} × ${it.qty}</div>`).join("");
+    const stockHtml = r.items.map(it =>
+      `<div class="item-line">${it.name}: ${getStock(it.name)}</div>`).join("");
     const qtySum = r.items.reduce((s, it) => s + (Number(it.qty) || 0), 0);
     const photoHtml = (r.photos && r.photos.length)
       ? r.photos.slice(0, 4).map(src =>
@@ -599,11 +729,12 @@ function renderList() {
     html += `<tr>
       <td>${list.length - i}</td>
       <td>${r.time || "-"}</td>
-      <td>${esc(r.picker)}</td>
+      <td>${esc(r.picker || "-")}</td>
       <td>${esc(r.dept || "-")}</td>
       <td>${esc(r.purpose || "-")}</td>
       <td class="items-cell">${itemsHtml}</td>
       <td>${qtySum}</td>
+      <td class="items-cell">${stockHtml}</td>
       <td><div class="photos-cell">${photoHtml}</div></td>
       <td><button class="btn ghost sm" onclick="editRecord('${r.id}')">编辑</button> <button class="btn danger sm" onclick="del('${r.id}')">删除</button></td>
     </tr>`;
@@ -670,10 +801,11 @@ $("pwCancel").onclick = () => { $("pwModal").classList.remove("show"); pwCallbac
 $("pwModal").onclick = (e) => { if (e.target === $("pwModal")) { $("pwModal").classList.remove("show"); pwCallback = null; } };
 $("pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pwConfirm").click(); });
 function toCsv(list) {
-  const head = ["序号", "领取时间", "领取人", "部门", "用途/项目", "货物名称及数量", "照片数"];
+  const head = ["序号", "时间", "领取人", "部门", "用途/项目", "货物名称及数量", "库存", "照片数"];
   const rows = list.map((r, i) => {
     const items = r.items.map(it => `${it.name}×${it.qty}`).join("； ");
-    return [list.length - i, r.time || "", r.picker || "", r.dept || "", r.purpose || "", items, (r.photos || []).length];
+    const stocks = r.items.map(it => `${it.name}:${getStock(it.name)}`).join("； ");
+    return [list.length - i, r.time || "", r.picker || "", r.dept || "", r.purpose || "", items, stocks, (r.photos || []).length];
   });
   const escCsv = v => {
     const s = String(v);
