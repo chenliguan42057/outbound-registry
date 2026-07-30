@@ -127,6 +127,14 @@
   .modal img { max-width:92vw; max-height:88vh; border-radius:8px; background:#fff; }
   .modal .close { position:absolute; top:18px; right:24px; color:#fff; font-size:30px; cursor:pointer; }
 
+  /* password modal */
+  .pw-box { background:#fff; border-radius:12px; padding:22px; width:300px; max-width:90vw; box-shadow:0 10px 40px rgba(0,0,0,.25); }
+  .pw-title { font-size:15px; font-weight:600; margin-bottom:14px; }
+  .pw-box input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px; }
+  .pw-actions { display:flex; gap:10px; margin-top:16px; }
+  .pw-actions .btn { flex:1; justify-content:center; }
+  .pw-err { color:var(--danger); font-size:12px; margin-top:10px; min-height:14px; }
+
   .toast {
     position:fixed; left:50%; bottom:32px; transform:translateX(-50%) translateY(20px);
     background:#1f2733; color:#fff; padding:10px 18px; border-radius:8px; font-size:14px;
@@ -160,7 +168,10 @@
     <h2>新增登记 <span class="tag">基础登记</span></h2>
     <div class="field">
       <label>部门 / 领取单位<span class="req">*</span></label>
-      <input type="text" id="dept" placeholder="请输入部门 / 领取单位" />
+      <div class="search-wrap">
+        <input type="text" id="dept" placeholder="请输入部门 / 领取单位" autocomplete="off" />
+        <div class="suggest" id="deptSuggest"></div>
+      </div>
     </div>
     <div class="grid2">
       <div class="field">
@@ -170,7 +181,10 @@
       </div>
       <div class="field">
         <label>领取人<span class="req">*</span></label>
-        <input type="text" id="picker" placeholder="请输入领取人姓名" />
+        <div class="search-wrap">
+          <input type="text" id="picker" placeholder="请输入领取人姓名" autocomplete="off" />
+          <div class="suggest" id="pickerSuggest"></div>
+        </div>
       </div>
     </div>
     <div class="field">
@@ -212,9 +226,7 @@
     </h2>
     <div class="actions" style="margin-bottom:12px;">
       <button class="btn ghost sm" id="exportBtn">⬇ 导出 CSV</button>
-      <button class="btn ghost sm" id="exportJsonBtn">⬇ 导出 JSON</button>
       <button class="btn danger sm" id="clearAll">清空全部记录</button>
-      <button class="btn ghost sm" id="uploadLocal" style="margin-left:8px;">☁ 上传本机记录</button>
     </div>
     <div class="hint" id="syncHint">数据已同步到云端：换设备（手机/电脑）打开同一网址即可看到相同记录。</div>
     <div id="listBox"></div>
@@ -223,6 +235,17 @@
 
 <div class="modal" id="modal"><span class="close" id="modalClose">&times;</span><img id="modalImg" alt="" /></div>
 <div class="toast" id="toast"></div>
+<div class="modal" id="pwModal">
+  <div class="pw-box">
+    <div class="pw-title" id="pwTitle">此操作需要密码</div>
+    <input type="password" id="pwInput" placeholder="请输入密码" />
+    <div class="pw-actions">
+      <button class="btn sm" id="pwConfirm">确认</button>
+      <button class="btn ghost sm" id="pwCancel">取消</button>
+    </div>
+    <div class="pw-err" id="pwErr"></div>
+  </div>
+</div>
 
 <script>
 window.__GH_TOKEN__ = "__GH_TOKEN__";
@@ -406,6 +429,39 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest(".search-wrap")) suggestEl.style.display = "none";
 });
 
+/* ---------- 历史记录自动补全（部门 / 领取人） ---------- */
+function getHistory(key) { try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; } }
+function addHistory(key, val) {
+  val = String(val || "").trim();
+  if (!val) return;
+  let arr = getHistory(key).filter(x => x !== val);
+  arr.unshift(val);
+  if (arr.length > 30) arr = arr.slice(0, 30);
+  try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
+}
+function setupHistorySuggest(inputId, suggestId, historyKey) {
+  const inp = $(inputId), sug = $(suggestId);
+  function render() {
+    const q = inp.value.trim().toLowerCase();
+    if (!q) { sug.style.display = "none"; return; }
+    const matches = getHistory(historyKey).filter(v => v.toLowerCase().includes(q));
+    if (!matches.length) { sug.style.display = "none"; return; }
+    sug.innerHTML = "";
+    matches.slice(0, 30).forEach(v => {
+      const d = document.createElement("div");
+      d.textContent = v;
+      d.onmousedown = () => { inp.value = v; sug.style.display = "none"; };
+      sug.appendChild(d);
+    });
+    sug.style.display = "block";
+  }
+  inp.addEventListener("input", render);
+  inp.addEventListener("focus", () => { if (inp.value.trim()) render(); });
+  inp.addEventListener("blur", () => setTimeout(() => { sug.style.display = "none"; }, 120));
+}
+setupHistorySuggest("dept", "deptSuggest", "outbound_dept_history");
+setupHistorySuggest("picker", "pickerSuggest", "outbound_picker_history");
+
 /* ---------- photo upload + compress ---------- */
 const photoInput = $("photoInput"), photoDrop = $("photoDrop"), thumbs = $("thumbs");
 photoDrop.onclick = () => photoInput.click();
@@ -500,15 +556,17 @@ $("submit").onclick = async () => {
     STATE.list.unshift(rec);
   }
   saveLocal(STATE.list);
+  addHistory("outbound_dept_history", $("dept").value);
+  addHistory("outbound_picker_history", picker);
   renderList();
   resetForm();
   if (!GH.token) {
-    toast(wasEditing ? "修改已保存（本机）；配置云端令牌后可同步" : "登记成功（已存本机）；填入云端令牌后可同步到其它设备");
+    toast(wasEditing ? "修改已保存（本机）" : "登记成功（已存本机）");
     return;
   }
   toast(wasEditing ? "修改已保存，正在同步到云端…" : "登记成功，正在同步到云端…");
   try {
-    await cloudPush(rec);
+    await pushAllLocal();
     STATE.lastSync = new Date();
     setSync("已同步 " + STATE.lastSync.toLocaleString());
   } catch (e) {
@@ -564,13 +622,18 @@ function renderList() {
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 window.openModal = openModal;
-window.del = async (id) => {
-  if (!confirm("确定删除该条记录？")) return;
-  STATE.list = STATE.list.filter(r => r.id !== id);
-  saveLocal(STATE.list); renderList(); toast("已删除");
-  try { await cloudDelete(id); } catch (e) {}
-};
-window.editRecord = (id) => {
+
+/* ---------- 密码保护：编辑 / 删除 / 清空全部 需密码 1111 ---------- */
+let pwCallback = null;
+function requirePw(cb, title) {
+  pwCallback = cb;
+  $("pwTitle").textContent = title || "此操作需要密码";
+  $("pwErr").textContent = "";
+  $("pwInput").value = "";
+  $("pwModal").classList.add("show");
+  setTimeout(() => $("pwInput").focus(), 50);
+}
+function doEdit(id) {
   const r = STATE.list.find(x => x.id === id);
   if (!r) return;
   editingId = id;
@@ -585,13 +648,36 @@ window.editRecord = (id) => {
   $("cancelEdit").style.display = "inline-flex";
   window.scrollTo({ top: 0, behavior: "smooth" });
   toast("正在编辑该记录，修改后点「保存修改」");
-};
-$("cancelEdit").onclick = () => { resetForm(); toast("已取消编辑"); };
-$("clearAll").onclick = async () => {
-  if (!confirm("将清空全部记录（含云端），且不可恢复。建议先导出备份。确定继续？")) return;
+}
+async function doDelete(id) {
+  if (!confirm("确定删除该条记录？")) return;
+  STATE.list = STATE.list.filter(r => r.id !== id);
+  saveLocal(STATE.list); renderList(); toast("已删除");
+  try { await cloudDelete(id); } catch (e) {}
+}
+async function doClearAll() {
+  if (!confirm("将清空全部记录（含云端），且不可恢复。确定继续？")) return;
   try { await cloudClearAll(); } catch (e) {}
   STATE.list = []; saveLocal(STATE.list); renderList(); toast("已清空全部记录");
+}
+window.editRecord = (id) => requirePw(() => doEdit(id), "编辑需要密码");
+window.del = (id) => requirePw(() => doDelete(id), "删除需要密码");
+$("cancelEdit").onclick = () => { resetForm(); toast("已取消编辑"); };
+$("clearAll").onclick = () => requirePw(() => doClearAll(), "清空全部记录需要密码");
+
+/* 密码弹窗交互（仅点按钮时出现，无独立入口） */
+$("pwConfirm").onclick = () => {
+  if ($("pwInput").value === "1111") {
+    $("pwModal").classList.remove("show");
+    const cb = pwCallback; pwCallback = null;
+    if (cb) cb();
+  } else {
+    $("pwErr").textContent = "密码错误，请重试";
+  }
 };
+$("pwCancel").onclick = () => { $("pwModal").classList.remove("show"); pwCallback = null; };
+$("pwModal").onclick = (e) => { if (e.target === $("pwModal")) { $("pwModal").classList.remove("show"); pwCallback = null; } };
+$("pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pwConfirm").click(); });
 function toCsv(list) {
   const head = ["序号", "领取时间", "领取人", "部门", "用途/项目", "货物名称及数量", "照片数"];
   const rows = list.map((r, i) => {
@@ -615,34 +701,16 @@ $("exportBtn").onclick = () => {
   URL.revokeObjectURL(a.href);
   toast("已导出 CSV");
 };
-$("exportJsonBtn").onclick = () => {
-  const list = STATE.list;
-  if (!list.length) return toast("没有可导出的记录", true);
-  const blob = new Blob([JSON.stringify(list, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "出库登记备份_" + new Date().toISOString().slice(0, 10) + ".json";
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast("已导出 JSON");
-};
-
 STATE.list = loadLocal();
 renderList();
 syncPull();
 $("syncBtn").onclick = () => syncPull();
-$("uploadLocal").onclick = () => uploadLocal();
-async function uploadLocal() {
-  if (!GH.token) return toast("未配置云端令牌，无法上传", true);
-  const local = loadLocal();
-  if (!local.length) return toast("本机没有可上传的记录", true);
-  setSync("正在上传本机记录…");
+async function pushAllLocal() {
   let ok = 0, fail = 0;
-  for (const r of local) {
+  for (const r of STATE.list) {
     try { await cloudPush(r); ok++; } catch (e) { fail++; }
   }
-  toast(`已上传 ${ok} 条${fail ? "，" + fail + " 条失败" : ""}`);
-  syncPull();
+  return { ok, fail };
 }
 
 /* ---- 云端令牌已随部署注入，前端自动同步，无需在页面配置 ---- */
