@@ -286,11 +286,13 @@ const PRODUCTS = [
   "小鹿牛皮纸袋（全系列护肤品手提袋）大",
   "小鹿牛皮纸袋（精华+面膜手提袋）小"
 ];
+/* 当前库存快照：以你提供的剩余库存为准，已有的旧记录已包含在这些数字里。
+   新增记录会带 affectsStock=true 才参与库存计算，避免旧记录重复扣减。 */
 const INVENTORY = {
-  "冻干精华液 20支装":102,"冻干精华液 5支装":325,"冻干精华液 单支装":234,"面膜 5片装":140,"面膜 1片装":219,
-  "冻干精华液 30支装":43,"洁面慕斯 150ml":89,"洁面慕斯 50ml":78,"舒缓精粹水 120ml":62,"舒缓精粹水 30ml":53,
-  "赋活精粹乳 80ml":90,"赋活精粹乳 30ml":68,"赋活精粹乳 1ml":125,"舒缓精粹霜 50g":61,"舒缓精粹霜 15g":84,"舒缓精粹霜 5g":100,"舒缓精粹霜 1g":127,
-  "华大鹿茸凝时系列礼盒装":5,
+  "冻干精华液 20支装":95,"冻干精华液 5支装":320,"冻干精华液 单支装":222,"面膜 5片装":139,"面膜 1片装":218,
+  "冻干精华液 30支装":42,"洁面慕斯 150ml":85,"洁面慕斯 50ml":77,"舒缓精粹水 120ml":62,"舒缓精粹水 30ml":52,
+  "赋活精粹乳 80ml":88,"赋活精粹乳 30ml":66,"赋活精粹乳 1ml":124,"舒缓精粹霜 50g":60,"舒缓精粹霜 15g":82,"舒缓精粹霜 5g":99,"舒缓精粹霜 1g":127,
+  "华大鹿茸凝时系列礼盒装":4,
   "小鹿牛皮纸袋（全系列护肤品手提袋）大":199,
   "小鹿牛皮纸袋（精华+面膜手提袋）小":147
 };
@@ -312,6 +314,7 @@ function getStock(name) {
   const init = INVENTORY[name] || 0;
   let inQty = 0, outQty = 0;
   STATE.list.forEach(r => {
+    if (r.affectsStock !== true) return; // 旧记录已包含在 INVENTORY 快照里，不再重复计算
     (r.items || []).forEach(it => {
       if (it.name !== name) return;
       const q = Number(it.qty) || 0;
@@ -567,7 +570,7 @@ $("inConfirm").onclick = async () => {
     .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
     .filter(s => s.name && s.qty > 0);
   if (!items.length) return toast("请至少选择一项货品", true);
-  const rec = { id: genId(), time: nowLocal(), type: "in", items, _ts: Date.now() };
+  const rec = { id: genId(), time: nowLocal(), type: "in", items, _ts: Date.now(), affectsStock: true };
   STATE.list.unshift(rec);
   saveLocal(STATE.list);
   renderList();
@@ -703,7 +706,8 @@ $("submit").onclick = async () => {
     purpose,
     items,
     photos: photos.map(p => p.src),
-    _ts: Date.now()
+    _ts: Date.now(),
+    affectsStock: true  // 新记录才参与库存计算，旧记录已包含在 INVENTORY 快照里
   };
   if (editingId) {
     const idx = STATE.list.findIndex(r => r.id === editingId);
@@ -809,9 +813,13 @@ function doEdit(id) {
   toast("正在编辑该记录，修改后点「保存修改」");
 }
 async function doDelete(id) {
-  if (!confirm("确定删除该条记录？删除后库存会自动恢复。")) return;
-  STATE.list = STATE.list.filter(r => r.id !== id);
-  saveLocal(STATE.list); renderList(); toast("已删除，库存已自动恢复");
+  const r = STATE.list.find(x => x.id === id);
+  const affects = r && r.affectsStock === true;
+  const msg = affects ? "确定删除该条记录？删除后库存会自动恢复。" : "确定删除该条记录？";
+  if (!confirm(msg)) return;
+  STATE.list = STATE.list.filter(x => x.id !== id);
+  saveLocal(STATE.list); renderList();
+  toast(affects ? "已删除，库存已自动恢复" : "已删除");
   try { await cloudDelete(id); } catch (e) {}
 }
 async function doClearAll() {
