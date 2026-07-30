@@ -690,7 +690,7 @@ function toCsv(list) {
   };
   return [head, ...rows].map(row => row.map(escCsv).join(",")).join("\r\n");
 }
-$("exportBtn").onclick = () => {
+function doExportCsv() {
   const list = STATE.list;
   if (!list.length) return toast("没有可导出的记录", true);
   const blob = new Blob(["﻿" + toCsv(list)], { type: "text/csv;charset=utf-8" });
@@ -700,7 +700,8 @@ $("exportBtn").onclick = () => {
   a.click();
   URL.revokeObjectURL(a.href);
   toast("已导出 CSV");
-};
+}
+$("exportBtn").onclick = () => requirePw(() => doExportCsv(), "导出 CSV 需要密码");
 STATE.list = loadLocal();
 renderList();
 syncPull();
