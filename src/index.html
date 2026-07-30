@@ -75,6 +75,10 @@
   .sel-item input { width:110px; flex:0 0 auto; }
   .sel-item .x { cursor:pointer; color:var(--muted); font-size:18px; line-height:1; padding:0 4px;}
   .sel-item .x:hover { color:var(--danger); }
+  /* 入库弹窗内产品名独占一行，避免被压缩或截断 */
+  #inModal .sel-item { flex-wrap:wrap; align-items:flex-start; }
+  #inModal .sel-item .name { flex:1 1 100%; white-space:normal; margin-bottom:6px; }
+  #inModal .sel-item input { flex:1 1 auto; width:auto; min-width:80px; }
 
   /* photos */
   .photo-drop {
@@ -221,6 +225,7 @@
     <div class="actions" style="margin-bottom:12px;">
       <button class="btn ghost sm" id="exportBtn">⬇ 导出 CSV</button>
       <button class="btn ghost sm" id="inBtn">⬆ 入库</button>
+      <button class="btn ghost sm" id="stockBtn">📦 查看库存</button>
       <button class="btn danger sm" id="clearAll">清空全部记录</button>
     </div>
     <div class="hint" id="syncHint">数据已同步到云端：换设备（手机/电脑）打开同一网址即可看到相同记录。</div>
@@ -261,6 +266,16 @@
   </div>
 </div>
 
+<div class="modal" id="stockModal">
+  <div class="pw-box" style="width:520px;max-width:96vw;">
+    <div class="pw-title">当前库存详情</div>
+    <div id="stockList" style="max-height:60vh;overflow:auto;"></div>
+    <div class="actions" style="margin-top:14px;">
+      <button class="btn ghost sm" id="stockClose">关闭</button>
+    </div>
+  </div>
+</div>
+
 <script>
 window.__GH_TOKEN__ = "__GH_TOKEN__";
 const PRODUCTS = [
@@ -272,7 +287,7 @@ const PRODUCTS = [
   "小鹿牛皮纸袋（精华+面膜手提袋）小"
 ];
 const INVENTORY = {
-  "冻干精华液 20支装":107,"冻干精华液 5支装":325,"冻干精华液 单支装":234,"面膜 5片装":140,"面膜 1片装":219,
+  "冻干精华液 20支装":102,"冻干精华液 5支装":325,"冻干精华液 单支装":234,"面膜 5片装":140,"面膜 1片装":219,
   "冻干精华液 30支装":43,"洁面慕斯 150ml":89,"洁面慕斯 50ml":78,"舒缓精粹水 120ml":62,"舒缓精粹水 30ml":53,
   "赋活精粹乳 80ml":90,"赋活精粹乳 30ml":68,"赋活精粹乳 1ml":125,"舒缓精粹霜 50g":61,"舒缓精粹霜 15g":84,"舒缓精粹霜 5g":100,"舒缓精粹霜 1g":127,
   "华大鹿茸凝时系列礼盒装":5,
@@ -528,6 +543,25 @@ function openInModal() {
 $("inBtn").onclick = () => requirePw(() => openInModal(), "入库需要密码");
 $("inCancel").onclick = () => $("inModal").classList.remove("show");
 $("inModal").onclick = (e) => { if (e.target === $("inModal")) $("inModal").classList.remove("show"); };
+
+/* ---------- 查看库存弹窗 ---------- */
+function openStockModal() {
+  const list = document.createElement("div");
+  list.style.cssText = "display:flex;flex-direction:column;gap:8px;";
+  PRODUCTS.forEach(name => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#fafbfc;border-radius:8px;border:1px solid var(--border);";
+    row.innerHTML = `<span style="font-size:14px;">${esc(name)}</span><span style="font-size:14px;font-weight:600;color:var(--primary);">${getStock(name)}</span>`;
+    list.appendChild(row);
+  });
+  const box = $("stockList");
+  box.innerHTML = "";
+  box.appendChild(list);
+  $("stockModal").classList.add("show");
+}
+$("stockBtn").onclick = () => requirePw(() => openStockModal(), "查看库存需要密码");
+$("stockClose").onclick = () => $("stockModal").classList.remove("show");
+$("stockModal").onclick = (e) => { if (e.target === $("stockModal")) $("stockModal").classList.remove("show"); };
 $("inConfirm").onclick = async () => {
   const items = inSelected
     .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
@@ -775,9 +809,9 @@ function doEdit(id) {
   toast("正在编辑该记录，修改后点「保存修改」");
 }
 async function doDelete(id) {
-  if (!confirm("确定删除该条记录？")) return;
+  if (!confirm("确定删除该条记录？删除后库存会自动恢复。")) return;
   STATE.list = STATE.list.filter(r => r.id !== id);
-  saveLocal(STATE.list); renderList(); toast("已删除");
+  saveLocal(STATE.list); renderList(); toast("已删除，库存已自动恢复");
   try { await cloudDelete(id); } catch (e) {}
 }
 async function doClearAll() {
