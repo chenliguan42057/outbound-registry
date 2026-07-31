@@ -260,7 +260,7 @@
 
 <div class="modal" id="inModal">
   <div class="pw-box">
-    <div class="pw-title">入库登记</div>
+    <div class="pw-title" id="inTitle">入库登记</div>
     <div class="in-modal-body">
       <div class="field">
         <label>货品名称<span class="req">*</span></label>
@@ -270,6 +270,19 @@
         </div>
         <div class="selected" id="inSelected"></div>
         <div class="hint" id="inSelHint">尚未选择货品，请在上方搜索并选择。</div>
+      </div>
+      <div class="field">
+        <label>用途 / 来源</label>
+        <input type="text" id="inPurpose" placeholder="例如：采购入库、退货入库、盘点补录等" />
+      </div>
+      <div class="field">
+        <label>现场照片（留存）</label>
+        <div class="photo-drop" id="inPhotoDrop">
+          📷 点击或拖拽上传照片，作为现场留存凭证（可多张）
+        </div>
+        <input type="file" id="inPhotoInput" accept="image/*" multiple hidden />
+        <div class="thumbs" id="inThumbs"></div>
+        <div class="photo-meta" id="inPhotoMeta"></div>
       </div>
     </div>
     <div class="actions">
@@ -429,6 +442,8 @@ let selected = [];   // {name, qty}
 let photos = [];     // dataURL strings
 let editingId = null; // 正在编辑的记录 id（null = 新增）
 let inSelected = []; // 入库弹窗中已选产品 {name, qty}
+let inPhotos = [];   // 入库弹窗照片 dataURL strings
+let inEditingId = null; // 正在编辑的入库记录 id（null = 新增）
 
 /* ---------- helpers ---------- */
 const $ = (id) => document.getElementById(id);
@@ -549,16 +564,38 @@ inSearchEl.onfocus = renderInSuggest;
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#inModal .search-wrap")) inSuggestEl.style.display = "none";
 });
-function openInModal() {
-  inSelected = [];
+function openInModal(editRec) {
+  if (editRec) {
+    inEditingId = editRec.id;
+    inSelected = (editRec.items || []).map(it => ({ name: it.name, qty: it.qty }));
+    $("inPurpose").value = editRec.purpose || "";
+    inPhotos = (editRec.photos || []).map(src => ({ src, name: "" }));
+    $("inTitle").textContent = "编辑入库记录";
+    $("inConfirm").textContent = "保存修改";
+  } else {
+    inEditingId = null;
+    inSelected = [];
+    $("inPurpose").value = "";
+    inPhotos = [];
+    $("inTitle").textContent = "入库登记";
+    $("inConfirm").textContent = "确定入库";
+  }
   renderInSelected();
+  renderInThumbs();
   inSearchEl.value = "";
   showModal($("inModal"));
   inSearchEl.focus();
 }
+function resetInModal() {
+  inSelected = []; inPhotos = []; inEditingId = null;
+  $("inPurpose").value = "";
+  $("inTitle").textContent = "入库登记";
+  $("inConfirm").textContent = "确定入库";
+  renderInSelected(); renderInThumbs();
+}
 $("inBtn").onclick = () => requirePw(() => openInModal(), "入库需要密码");
-$("inCancel").onclick = () => hideModal($("inModal"));
-$("inModal").onclick = (e) => { if (e.target === $("inModal")) hideModal($("inModal")); };
+$("inCancel").onclick = () => { hideModal($("inModal")); resetInModal(); };
+$("inModal").onclick = (e) => { if (e.target === $("inModal")) { hideModal($("inModal")); resetInModal(); } };
 
 /* ---------- 查看库存弹窗 ---------- */
 function openStockModal() {
@@ -583,15 +620,28 @@ $("inConfirm").onclick = async () => {
     .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
     .filter(s => s.name && s.qty > 0);
   if (!items.length) return toast("请至少选择一项货品", true);
-  const rec = { id: genId(), time: nowLocal(), type: "in", items, _ts: Date.now(), affectsStock: true };
-  STATE.list.unshift(rec);
+  const purpose = $("inPurpose").value.trim();
+  const recPhotos = inPhotos.map(p => p.src);
+  const wasEditing = !!inEditingId;
+  let rec;
+  if (inEditingId) {
+    const idx = STATE.list.findIndex(r => r.id === inEditingId);
+    const old = STATE.list[idx] || {};
+    rec = Object.assign({}, old, {
+      items, purpose, photos: recPhotos,
+      _ts: Date.now(), affectsStock: true
+    });
+    STATE.list[idx] = rec;
+  } else {
+    rec = { id: genId(), time: nowLocal(), type: "in", items, purpose, photos: recPhotos, _ts: Date.now(), affectsStock: true };
+    STATE.list.unshift(rec);
+  }
   saveLocal(STATE.list);
   renderList();
   hideModal($("inModal"));
-  inSelected = [];
-  renderInSelected();
-  if (!GH.token) { toast("入库成功（已存本机）"); return; }
-  toast("入库成功，正在同步到云端…");
+  resetInModal();
+  if (!GH.token) { toast(wasEditing ? "修改已保存（本机）" : "入库成功（已存本机）"); return; }
+  toast(wasEditing ? "修改已保存，正在同步到云端…" : "入库成功，正在同步到云端…");
   try {
     await pushAllLocal();
     STATE.lastSync = new Date();
@@ -658,7 +708,7 @@ function handleFiles(fileList) {
   });
   photoInput.value = "";
 }
-function compress(dataUrl, name, done) {
+function compress(dataUrl, name, done, targetArray) {
   const img = new Image();
   img.onload = () => {
     const max = 1280;
@@ -672,7 +722,7 @@ function compress(dataUrl, name, done) {
     canvas.getContext("2d").drawImage(img, 0, 0, w, h);
     // 估算体积：jpg 比 png 小很多
     const out = canvas.toDataURL("image/jpeg", 0.72);
-    photos.push({ src: out, name });
+    (targetArray || photos).push({ src: out, name });
     done();
   };
   img.onerror = () => done();
@@ -690,6 +740,43 @@ function renderThumbs() {
   });
   const kb = Math.round(photos.reduce((s, p) => s + p.src.length * 0.75 / 1024, 0));
   $("photoMeta").textContent = photos.length ? `已选 ${photos.length} 张照片（约 ${kb} KB，已自动压缩）` : "";
+}
+
+/* ---------- 入库弹窗：照片上传 ---------- */
+const inPhotoInput = $("inPhotoInput"), inPhotoDrop = $("inPhotoDrop"), inThumbs = $("inThumbs");
+inPhotoDrop.onclick = () => inPhotoInput.click();
+inPhotoDrop.ondragover = (e) => { e.preventDefault(); inPhotoDrop.style.borderColor = "var(--primary)"; };
+inPhotoDrop.ondragleave = () => (inPhotoDrop.style.borderColor = "var(--border)");
+inPhotoDrop.ondrop = (e) => {
+  e.preventDefault(); inPhotoDrop.style.borderColor = "var(--border)";
+  handleFilesIn(e.dataTransfer.files);
+};
+inPhotoInput.onchange = () => handleFilesIn(inPhotoInput.files);
+function handleFilesIn(fileList) {
+  const files = [...fileList].filter(f => f.type.startsWith("image/"));
+  if (!files.length) return;
+  let pending = files.length;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => compress(reader.result, file.name, () => {
+      if (--pending === 0) renderInThumbs();
+    }, inPhotos);
+    reader.readAsDataURL(file);
+  });
+  inPhotoInput.value = "";
+}
+function renderInThumbs() {
+  inThumbs.innerHTML = "";
+  inPhotos.forEach((p, i) => {
+    const t = document.createElement("div");
+    t.className = "thumb";
+    t.innerHTML = `<img src="${p.src}" alt=""/><span class="del" data-i="${i}">&times;</span>`;
+    t.querySelector(".del").onclick = (e) => { e.stopPropagation(); inPhotos.splice(i, 1); renderInThumbs(); };
+    t.onclick = () => openModal(p.src);
+    inThumbs.appendChild(t);
+  });
+  const kb = Math.round(inPhotos.reduce((s, p) => s + p.src.length * 0.75 / 1024, 0));
+  $("inPhotoMeta").textContent = inPhotos.length ? `已选 ${inPhotos.length} 张照片（约 ${kb} KB，已自动压缩）` : "";
 }
 
 /* ---------- modal ---------- */
@@ -817,6 +904,10 @@ function requirePw(cb, title) {
 function doEdit(id) {
   const r = STATE.list.find(x => x.id === id);
   if (!r) return;
+  if (r.type === "in") {
+    openInModal(r);
+    return;
+  }
   editingId = id;
   $("time").value = r.time || nowLocal();
   $("picker").value = r.picker || "";
