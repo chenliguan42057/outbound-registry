@@ -116,12 +116,13 @@
   .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
 
   /* list */
-  .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--border); border-radius:10px; background:#fff; }
-  .table-wrap::-webkit-scrollbar { height: 10px; }
+  .table-wrap { overflow:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--border); border-radius:10px; background:#fff; max-height:60vh; position:relative; }
+  .table-wrap::-webkit-scrollbar { height: 10px; width: 10px; }
   .table-wrap::-webkit-scrollbar-thumb { background:#c1c7d0; border-radius:5px; }
   table { width:auto; min-width:920px; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align:top; white-space:nowrap; }
-  th { color:var(--muted); font-weight:600; font-size:12px; background:#fafbfc; }
+  th { color:var(--muted); font-weight:600; font-size:12px; background:#fafbfc; position:sticky; top:0; z-index:3; }
+  th:last-child { z-index:4; }
   .items-cell { min-width:200px; max-width:260px; white-space:normal; }
   .item-line { white-space:nowrap; }
   .item-line.multi-line { border-bottom: 1px dashed var(--border); padding-bottom: 6px; margin-bottom: 6px; }
