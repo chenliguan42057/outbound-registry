@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>出入库登记表</title>
 <style>
   :root {
@@ -114,6 +117,8 @@
 
   /* list */
   .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--border); border-radius:10px; background:#fff; }
+  .table-wrap::-webkit-scrollbar { height: 10px; }
+  .table-wrap::-webkit-scrollbar-thumb { background:#c1c7d0; border-radius:5px; }
   table { width:auto; min-width:920px; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align:top; white-space:nowrap; }
   th { color:var(--muted); font-weight:600; font-size:12px; background:#fafbfc; }
@@ -160,11 +165,22 @@
   }
   .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
   .toast.err { background:var(--danger); }
+  .detail-btn { padding:2px 7px; font-size:12px; margin-top:5px; }
+  .detail-row { display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); font-size:14px; }
+  .detail-row:last-child { border-bottom:none; }
+  .detail-row .k { color:var(--muted); flex:0 0 84px; }
+  .detail-row .v { flex:1; word-break:break-word; }
+  .detail-items { display:flex; flex-direction:column; gap:6px; }
+  .detail-item { display:flex; justify-content:space-between; padding:8px 10px; background:#fafbfc; border-radius:8px; border:1px solid var(--border); }
+  .detail-photos { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .detail-photos img { width:78px; height:78px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:pointer; }
   @media (max-width:560px){
     .grid2{grid-template-columns:1fr;}
     input[type=text], input[type=datetime-local], input[type=number], textarea, .search { font-size:16px; }
     .btn{ width:100%; }
     .actions .btn{ width:auto; }
+    .detail-row { flex-direction:column; gap:2px; }
+    .detail-row .k { flex:none; }
   }
 </style>
 </head>
@@ -298,6 +314,16 @@
     <div id="stockList" style="max-height:60vh;overflow:auto;"></div>
     <div class="actions" style="margin-top:14px;">
       <button class="btn ghost sm" id="stockClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="detailModal">
+  <div class="pw-box" style="width:560px;max-width:96vw;">
+    <div class="pw-title" id="detailTitle">记录详情</div>
+    <div id="detailBody" style="max-height:70vh;overflow:auto;"></div>
+    <div class="actions" style="margin-top:14px;">
+      <button class="btn ghost sm" id="detailClose">关闭</button>
     </div>
   </div>
 </div>
@@ -615,6 +641,36 @@ function openStockModal() {
 $("stockBtn").onclick = () => requirePw(() => openStockModal(), "查看库存需要密码");
 $("stockClose").onclick = () => hideModal($("stockModal"));
 $("stockModal").onclick = (e) => { if (e.target === $("stockModal")) hideModal($("stockModal")); };
+
+/* ---------- 记录详情弹窗 ---------- */
+function showDetail(id) {
+  const r = STATE.list.find(x => x.id === id);
+  if (!r) return;
+  const isIn = r.type === "in";
+  $("detailTitle").textContent = isIn ? "入库详情" : "出库详情";
+  const itemsHtml = (r.items || []).map(it =>
+    `<div class="detail-item"><span>${esc(it.name)} × ${it.qty}</span><span style="color:var(--muted);">库存 ${getStock(it.name)}</span></div>`
+  ).join("");
+  const photosHtml = (r.photos && r.photos.length)
+    ? `<div class="detail-photos">${r.photos.map(src => `<img src="${src}" onclick="openModal('${src}')"/>`).join("")}</div>`
+    : `<span style="color:var(--muted);">无照片</span>`;
+  let rows = "";
+  rows += `<div class="detail-row"><span class="k">类型</span><span class="v">${isIn ? '<span class="in-tag">入库</span>' : '出库'}</span></div>`;
+  rows += `<div class="detail-row"><span class="k">时间</span><span class="v">${esc(r.time || "-")}</span></div>`;
+  if (!isIn) {
+    rows += `<div class="detail-row"><span class="k">领取人</span><span class="v">${esc(r.picker || "-")}</span></div>`;
+    rows += `<div class="detail-row"><span class="k">部门</span><span class="v">${esc(r.dept || "-")}</span></div>`;
+  }
+  rows += `<div class="detail-row"><span class="k">${isIn ? "用途/来源" : "用途/项目"}</span><span class="v">${esc(r.purpose || "-")}</span></div>`;
+  rows += `<div class="detail-row"><span class="k">货品明细</span><span class="v detail-items">${itemsHtml || "-"}</span></div>`;
+  rows += `<div class="detail-row"><span class="k">照片</span><span class="v">${photosHtml}</span></div>`;
+  $("detailBody").innerHTML = rows;
+  showModal($("detailModal"));
+}
+$("detailClose").onclick = () => hideModal($("detailModal"));
+$("detailModal").onclick = (e) => { if (e.target === $("detailModal")) hideModal($("detailModal")); };
+window.showDetail = showDetail;
+
 $("inConfirm").onclick = async () => {
   const items = inSelected
     .map(s => ({ name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }))
@@ -629,7 +685,7 @@ $("inConfirm").onclick = async () => {
     const old = STATE.list[idx] || {};
     rec = Object.assign({}, old, {
       items, purpose, photos: recPhotos,
-      _ts: Date.now(), affectsStock: true
+      _ts: Date.now(), affectsStock: true, type: "in"
     });
     STATE.list[idx] = rec;
   } else {
@@ -869,7 +925,7 @@ function renderList() {
       : `<span class="badge">无</span>`;
     const inMark = r.type === "in" ? '<span class="in-tag">入库</span>' : '';
     html += `<tr>
-      <td>${list.length - i}${inMark}</td>
+      <td><div>${list.length - i}${inMark}</div><button class="btn ghost sm detail-btn" onclick="showDetail('${r.id}')">详细</button></td>
       <td>${r.time || "-"}</td>
       <td>${esc(r.picker || "-")}</td>
       <td>${esc(r.dept || "-")}</td>
@@ -983,6 +1039,8 @@ STATE.list = loadLocal();
 renderList();
 syncPull();
 $("syncBtn").onclick = () => syncPull();
+/* 回到页面时自动同步，缓解微信等内置浏览器缓存导致数据不同步 */
+document.addEventListener("visibilitychange", () => { if (!document.hidden) syncPull(); });
 async function pushAllLocal() {
   let ok = 0, fail = 0;
   for (const r of STATE.list) {
