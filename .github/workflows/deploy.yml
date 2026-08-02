@@ -20,9 +20,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           mkdir -p dist
-          perl -pi -e 's/__GH_TOKEN__/$ENV{GH_TOKEN}/g' src/index.html
-          cp src/index.html dist/index.html
-          cp src/qrcode.js dist/qrcode.js 2>/dev/null || true
+          perl -pi -e 's/__GH_TOKEN__/$ENV{GH_TOKEN}/g' src/index.html src/legacy.html
+          cp -r src/. dist/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

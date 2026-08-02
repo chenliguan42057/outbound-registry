@@ -1,0 +1,165 @@
+/* ============================================================
+   layout.css — 应用壳布局：侧栏 + 顶栏 + 内容区 + 抽屉式响应式 + 折叠窄栏
+   ============================================================ */
+
+:root {
+  --sidebar-w: 232px;
+  --sidebar-w-collapsed: 64px;
+}
+
+.app-shell { display: flex; min-height: 100vh; }
+
+/* ---------- 侧栏 ---------- */
+.app-sidebar {
+  width: var(--sidebar-w);
+  background: #fff;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  transition: width .2s, transform .25s ease;
+  z-index: 40;
+  flex-shrink: 0;
+}
+.app-sidebar .sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--primary);
+  font-weight: 600;
+}
+.sidebar-logo { display: inline-flex; flex: 0 0 auto; }
+.sidebar-brand { font-size: 15px; white-space: nowrap; overflow: hidden; }
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-m);
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.sidebar-item:hover { background: var(--chip); }
+.sidebar-item.active { background: var(--primary); color: #fff; }
+.sidebar-item-icon { flex: 0 0 auto; display: inline-flex; }
+.sidebar-foot {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+.sidebar-collapse-btn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-m);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar-collapse-btn:hover { background: var(--chip); color: var(--primary); }
+
+/* 折叠窄栏（桌面） */
+.app-shell.sidebar-collapsed .app-sidebar { width: var(--sidebar-w-collapsed); }
+.app-shell.sidebar-collapsed .sidebar-brand,
+.app-shell.sidebar-collapsed .sidebar-item-label { display: none; }
+.app-shell.sidebar-collapsed .sidebar-head { justify-content: center; padding: 16px 0; }
+.app-shell.sidebar-collapsed .sidebar-item { justify-content: center; padding: 12px 0; }
+
+/* ---------- 主区 ---------- */
+.app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.app-topbar {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.topbar-btn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-m);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.topbar-btn:hover { background: var(--chip); color: var(--primary); }
+.topbar-title { font-size: 16px; font-weight: 600; margin: 0; flex: 1; }
+.topbar-sync {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ok);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+.topbar-sync.err { color: var(--danger); }
+
+.app-content {
+  padding: 20px;
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+}
+.module-view { width: 100%; }
+
+/* ---------- 抽屉遮罩 ---------- */
+.app-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .45);
+  z-index: 35;
+  display: none;
+}
+
+/* ---------- ≤768px：侧栏变抽屉式 ---------- */
+@media (max-width: 768px) {
+  .app-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    width: var(--sidebar-w);
+    box-shadow: var(--shadow-l);
+  }
+  .app-shell.drawer-open .app-sidebar { transform: translateX(0); }
+  .app-shell.drawer-open .app-overlay { display: block; }
+  /* 移动端忽略折叠窄栏，始终保持完整侧栏 */
+  .app-shell.sidebar-collapsed .app-sidebar { width: var(--sidebar-w); }
+  .app-shell.sidebar-collapsed .sidebar-brand,
+  .app-shell.sidebar-collapsed .sidebar-item-label { display: inline; }
+  .app-shell.sidebar-collapsed .sidebar-head { justify-content: flex-start; padding: 16px 18px; }
+  .app-shell.sidebar-collapsed .sidebar-item { justify-content: flex-start; padding: 10px 12px; }
+  .app-content { padding: 14px; }
+  .topbar-sync { max-width: 30vw; }
+}

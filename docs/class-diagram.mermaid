@@ -1,0 +1,139 @@
+```mermaid
+classDiagram
+    class Config {
+        <<module>>
+        +PRODUCTS: string[]
+        +INVENTORY: Object~string, number~
+        +GH: {repo, branch, dir, token}
+        +STORE_KEY: string = "outbound_records_v2"
+        +PASSWORD: string = "1111"
+        +AUTH_KEY: string = "outbound_auth"
+        +NAV_KEY: string = "outbound_nav"
+        +AUTH_TTL_MS: number = 7*24*3600*1000
+        +MAX_PW_FAILS: number = 5
+        +PW_LOCK_MS: number = 60*1000
+    }
+    class Store {
+        <<module>>
+        +get(key): any
+        +set(key, val): void
+        +loadRecords(): Record[]
+        +saveRecords(list): void
+        +loadAuth(): AuthState|null
+        +saveAuth(auth): void
+        +loadNav(): NavState
+        +saveNav(nav): void
+        +loadDraft(name): Draft|null
+        +saveDraft(name, draft): void
+        +loadSearch(): SearchState
+        +saveSearch(s): void
+    }
+    class AppState {
+        +list: Record[]
+        +lastSync: Date|null
+        +nav: NavState
+        +activeModule: string
+    }
+    class Stock {
+        <<module>>
+        +getStock(name, list): number
+        +summarize(list): {name, stock, inQty, outQty}[]
+        +trend(list, days): {date, outQty, inQty}[]
+    }
+    class Cloud {
+        <<module>>
+        +token: string
+        +pull(): Promise~Record[]~
+        +push(rec): Promise~void~
+        +delete(id): Promise~void~
+        +clearAll(): Promise~void~
+        +syncPull(): Promise~void~
+        +pushAllLocal(): Promise~{ok, fail}~
+    }
+    class Records {
+        <<module>>
+        +create(rec): Record
+        +update(id, patch): Record
+        +remove(id): void
+        +clear(): void
+        +mergeAndSort(local, remote): Record[]
+        +exportCsv(): void
+    }
+    class Auth {
+        <<module>>
+        +isAuthed(): boolean
+        +login(pw, remember): {ok, err?}
+        +logout(): void
+        +lockUntil: number
+        +remainingLock(): number
+    }
+    class Router {
+        <<module>>
+        +routes: Object
+        +current: string
+        +navigate(hash): void
+        +start(): void
+        +guard(): boolean
+    }
+    class AppShell {
+        +navItems: NavItem[]
+        +render(): void
+        +mount(moduleName): void
+        +toggleSidebar(): void
+        +restoreNav(): void
+    }
+    class ProductPicker {
+        +selected: {name, qty}[]
+        +attach(container): void
+        +render(): void
+    }
+    class PhotoUpload {
+        +photos: {src, name}[]
+        +attach(container): void
+        +compress(dataUrl): void
+        +render(): void
+    }
+    class Modal { +show(title, body): void; +hide(): void }
+    class Toast { +show(msg, isErr): void }
+    class LandingView { +render(): void }
+    class VerifyView { +render(): void; +onSubmit(): void }
+    class OutView { +render(): void; +submit(): void; +reset(): void }
+    class InView { +render(): void; +submit(): void; +reset(): void }
+    class StockView { +render(): void }
+    class RecordsView { +render(): void; +filter(list): Record[]; +detail(id): void }
+    class ReportView { +render(): void }
+    class SyncView { +render(): void; +doSync(): void }
+
+    Store --> Config : keys from
+    AppState --> Store : hydrated from
+    Stock --> Config : INVENTORY
+    Stock --> AppState : reads list
+    Cloud --> Config : GH
+    Records --> Store
+    Records --> Cloud
+    Records --> AppState
+    Auth --> Store
+    Router --> Auth : guard #/app
+    AppShell --> Router
+    AppShell --> OutView
+    AppShell --> InView
+    AppShell --> StockView
+    AppShell --> RecordsView
+    AppShell --> ReportView
+    AppShell --> SyncView
+    OutView --> ProductPicker
+    OutView --> PhotoUpload
+    OutView --> Records
+    InView --> ProductPicker
+    InView --> PhotoUpload
+    InView --> Records
+    RecordsView --> Records
+    RecordsView --> Modal
+    RecordsView --> Toast
+    StockView --> Stock
+    ReportView --> Stock
+    SyncView --> Cloud
+    LandingView --> Router
+    VerifyView --> Auth
+    VerifyView --> Router
+```

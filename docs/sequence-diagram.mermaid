@@ -1,0 +1,70 @@
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant R as Router
+    participant L as LandingView
+    participant V as VerifyView
+    participant A as Auth
+    participant S as AppShell
+    participant C as Cloud
+
+    U->>R: 打开站点（#/）
+    R->>L: render()
+    U->>L: 点击「设置」
+    L->>R: navigate('#/verify')
+    R->>V: render()
+    U->>V: 输入密码 1111（勾选记住登录）
+    V->>A: login(pw, remember)
+    A-->>V: { ok: true }
+    alt remember 勾选
+        V->>A: remember() → store.saveAuth({expires: now+7d})
+    end
+    V->>R: navigate('#/app')
+    R->>A: guard() → isAuthed() true
+    R->>S: mount('#/app')
+    S->>S: restoreNav()（恢复 lastActive / 折叠状态）
+    S->>C: syncPull()（首次进入拉取云端）
+    C-->>S: records[]
+    S->>S: render(activeModule)
+```
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant O as OutView
+    participant P as ProductPicker
+    participant Ph as PhotoUpload
+    participant Rec as Records
+    participant St as Store
+    participant C as Cloud
+
+    U->>O: 填写 部门/时间/领取人/用途
+    U->>P: 搜索选择货品 + 逐项填数量
+    U->>Ph: 上传照片（自动压缩为 JPEG dataURL）
+    U->>O: 点击「提交登记」
+    O->>O: 校验必填（time/picker/dept/purpose/items）
+    O->>Rec: create({time, picker, dept, purpose, items, photos, affectsStock:true})
+    Rec->>Rec: rec = { id: genId(), _ts: Date.now(), ...payload }
+    Rec->>St: saveRecords(list)（本地先行，立即可见）
+    Rec->>C: pushAllLocal() → 逐条 cloudPush(rec)
+    C->>C: PUT contents data/records/<id>.json（get sha → update）
+    C-->>Rec: ok
+    Rec-->>O: toast('登记成功，已同步到云端')
+    O->>O: resetForm() + 保存草稿清空
+```
+
+```mermaid
+sequenceDiagram
+    participant E as 事件（syncBtn / visibilitychange）
+    participant C as Cloud
+    participant Rec as Records
+    participant St as Store
+    participant V as RecordsView
+
+    E->>C: syncPull()
+    C->>C: cloudPull()（list data/records 目录 → 逐个 GET json → b64 解码）
+    C-->>Rec: remote[]
+    Rec->>Rec: mergeAndSort(local, remote)（同 id 云端覆盖；time 降序、_ts 降序）
+    Rec->>St: saveRecords(merged)
+    Rec->>V: renderList() + setSync(已同步 HH:MM)
+```
