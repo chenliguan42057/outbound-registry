@@ -1,5 +1,6 @@
 /**
- * llm.js — AI 助手 B 部分：DeepSeek / OpenAI 兼容对话接口对接
+ * llm.js — AI 助手 B 部分：多服务商（DeepSeek / 智谱 AI，OpenAI 兼容格式）对话接口对接
+ * 服务商/模型按 settings.provider 从 Config.AI_PROVIDERS 解析；旧 settings 无 provider 视为 deepseek（向后兼容）。
  * 仅原生 fetch；配置经 Store.loadAiKey()/loadAiSettings() 读取（Key 仅存本机 localStorage）。
  * 错误归一化 Promise<{ok, text?, err?}>：401/403→invalid-key；429→rate-limit；≥500→server；
  * AbortError→timeout；fetch reject→network。
@@ -74,9 +75,22 @@
   }
 
   /**
+   * 按 id 查找服务商配置（Config.AI_PROVIDERS）；未命中返回 null。
+   * @param {string} id
+   * @returns {?{id: string, label: string, baseUrl: string, models: string[]}}
+   */
+  function getProvider(id) {
+    id = String(id || "");
+    for (var i = 0; i < Config.AI_PROVIDERS.length; i++) {
+      if (Config.AI_PROVIDERS[i].id === id) return Config.AI_PROVIDERS[i];
+    }
+    return null;
+  }
+
+  /**
    * 对话请求（OpenAI Chat Completions 兼容）。
    * @param {Array<{role: string, content: string}>} messages
-   * @param {{key?: string, baseUrl?: string, model?: string, timeout?: number}} [opts]
+   * @param {{key?: string, provider?: string, baseUrl?: string, model?: string, timeout?: number}} [opts]
    * @returns {Promise<{ok: boolean, text?: string, err?: string}>}
    */
   function chat(messages, opts) {
@@ -86,9 +100,20 @@
       return Promise.resolve({ ok: false, err: "invalid-key", text: errText("invalid-key") });
     }
     var settings = Store.loadAiSettings();
-    var baseUrl = String(opts.baseUrl || settings.baseUrl || Config.AI_BASE_URL || "").replace(/\/+$/, "");
+    // 服务商解析：显式 opts.provider > settings.provider > 默认 deepseek；旧 settings 无 provider 视为 deepseek
+    var provider = getProvider(opts.provider || settings.provider || Config.AI_DEFAULT_PROVIDER);
+    if (!provider) {
+      provider = getProvider(Config.AI_DEFAULT_PROVIDER) ||
+        { id: Config.AI_DEFAULT_PROVIDER, label: "DeepSeek", baseUrl: Config.AI_BASE_URL, models: Config.AI_MODELS || [] };
+    }
+    // baseUrl 优先级：显式 opts.baseUrl > 服务商 baseUrl > 旧 settings.baseUrl > 全局兜底
+    var baseUrl = String(opts.baseUrl || provider.baseUrl || settings.baseUrl || Config.AI_BASE_URL || "").replace(/\/+$/, "");
     if (!baseUrl) baseUrl = Config.AI_BASE_URL;
-    var model = opts.model || settings.model || Config.AI_DEFAULT_MODEL;
+    // 模型优先级：显式 opts.model > settings.model（须属于该服务商，否则回退服务商首模型）> 服务商首模型 > 全局默认
+    var model = opts.model || settings.model;
+    if (!model || (provider.models && provider.models.length && provider.models.indexOf(model) === -1)) {
+      model = (provider.models && provider.models[0]) || Config.AI_DEFAULT_MODEL;
+    }
     var timeout = opts.timeout || Config.AI_TIMEOUT_MS;
 
     var controller = new AbortController();

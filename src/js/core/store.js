@@ -81,7 +81,7 @@
     },
     loadAiSettings: function () {
       return Object.assign(
-        { model: Config.AI_DEFAULT_MODEL, baseUrl: Config.AI_BASE_URL },
+        { provider: Config.AI_DEFAULT_PROVIDER, model: Config.AI_DEFAULT_MODEL, baseUrl: Config.AI_BASE_URL },
         Store.get(Config.AI_SETTINGS_KEY, {})
       );
     },

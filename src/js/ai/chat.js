@@ -3,6 +3,7 @@
  * A 部分：本地引擎直接回答（type !== "fallback" 一律本地，有 Key 也不走 LLM）；
  * B 部分：fallback 且有 Key → LLM 真对话（带系统数据上下文），失败回退本地 + hint。
  * 会话历史：内存数组 + P1 持久化 outbound_ai_chat（上限 50 条，设置开关默认开）。
+ * 设置弹窗：服务商下拉（DeepSeek / 智谱 AI，Config.AI_PROVIDERS）+ 模型联动；Key 沿用 outbound_ai_key。
  * 挂载到 window.App.AI.Chat。
  */
 (function () {
@@ -317,9 +318,19 @@
 
   /* ================= 设置弹窗 ================= */
 
+  /** 按 id 查找服务商配置（Config.AI_PROVIDERS）；未命中返回 null */
+  function getProvider(id) {
+    id = String(id || "");
+    for (var i = 0; i < Config.AI_PROVIDERS.length; i++) {
+      if (Config.AI_PROVIDERS[i].id === id) return Config.AI_PROVIDERS[i];
+    }
+    return null;
+  }
+
   function openSettings() {
     var key = Store.loadAiKey();
     var settings = Store.loadAiSettings();
+    var provider = getProvider(settings.provider) || getProvider(Config.AI_DEFAULT_PROVIDER) || Config.AI_PROVIDERS[0];
     var body = document.createElement("div");
     body.innerHTML =
       '<div class="ai-settings">' +
@@ -334,21 +345,25 @@
             '" autocomplete="off" />' +
         '</div>' +
         '<div class="field">' +
-          '<label>模型</label>' +
-          '<select id="aiModelSelect">' +
-            Config.AI_MODELS.map(function (m) {
-              return '<option value="' + Util.esc(m) + '"' + (settings.model === m ? " selected" : "") + ">" +
-                Util.esc(m) + "</option>";
+          '<label>服务商</label>' +
+          '<select id="aiProviderSelect">' +
+            Config.AI_PROVIDERS.map(function (p) {
+              return '<option value="' + Util.esc(p.id) + '"' + (provider.id === p.id ? " selected" : "") + ">" +
+                Util.esc(p.label) + "</option>";
             }).join("") +
           '</select>' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>模型</label>' +
+          '<select id="aiModelSelect"></select>' +
         '</div>' +
         '<div class="field">' +
           '<label class="ai-check"><input type="checkbox" id="aiPersistChat"' +
             (settings.persistChat === false ? "" : " checked") + ' /> 保存会话历史（最多 50 条）</label>' +
         '</div>' +
-        '<div class="hint">服务商：DeepSeek（浏览器直连，支持 CORS）；默认模型 deepseek-chat。</div>' +
+        '<div class="hint" id="aiProviderHint"></div>' +
         '<div class="ai-sec-note">🔒 API Key 仅保存在本机浏览器（localStorage），不会上传到服务器，也不会写入代码或仓库；' +
-          'AI 数据查询仅在提问时发送给所选服务商。</div>' +
+          'AI 数据查询仅在提问时发送给所选服务商；不同服务商需填写对应服务商的 API Key（DeepSeek 为 sk-…，智谱 AI 为 {id}.{secret}）。</div>' +
         '<div class="ai-settings-actions">' +
           '<button type="button" class="btn ghost sm" id="aiTestBtn">测试连接</button>' +
           '<button type="button" class="btn ghost sm" id="aiClearKeyBtn">清除 Key</button>' +
@@ -361,16 +376,37 @@
 
     var mBody = UI.Modal.body();
     var keyInput = mBody.querySelector("#aiKeyInput");
+    var providerSelect = mBody.querySelector("#aiProviderSelect");
     var modelSelect = mBody.querySelector("#aiModelSelect");
     var persistBox = mBody.querySelector("#aiPersistChat");
+    var hintEl = mBody.querySelector("#aiProviderHint");
     var testResult = mBody.querySelector("#aiTestResult");
+
+    /** 根据当前服务商渲染模型下拉 + 提示文案；服务商切换时模型自动切到该服务商首模型 */
+    function renderModels() {
+      var p = getProvider(providerSelect.value) || Config.AI_PROVIDERS[0];
+      var current = settings.model;
+      var selected = (p.models && p.models.indexOf(current) !== -1) ? current : (p.models && p.models[0]);
+      modelSelect.innerHTML = (p.models || []).map(function (m) {
+        return '<option value="' + Util.esc(m) + '"' + (selected === m ? " selected" : "") + ">" +
+          Util.esc(m) + "</option>";
+      }).join("");
+      hintEl.textContent = "服务商：" + p.label + "（浏览器直连，支持 CORS）；默认模型 " +
+        ((p.models && p.models[0]) || "-") + "；切换服务商后请确认 Key 为对应服务商的 Key。";
+    }
+    renderModels();
+
+    providerSelect.onchange = function () { renderModels(); };
 
     mBody.querySelector('[data-act="cancel"]').onclick = function () { UI.Modal.hide(); };
     mBody.querySelector("#aiSaveBtn").onclick = function () {
       var val = (keyInput.value || "").trim();
       if (val) Store.saveAiKey(val);
+      var p = getProvider(providerSelect.value) || Config.AI_PROVIDERS[0];
       var settings2 = Store.loadAiSettings();
+      settings2.provider = p.id;
       settings2.model = modelSelect.value;
+      settings2.baseUrl = p.baseUrl;   // 与服务商保持一致，避免旧 baseUrl 残留串服务商
       settings2.persistChat = persistBox.checked;
       Store.saveAiSettings(settings2);
       UI.Modal.hide();
@@ -388,7 +424,7 @@
       var val = (keyInput.value || "").trim() || Store.loadAiKey();
       if (!val) { testResult.textContent = "请先填写 API Key"; return; }
       testResult.textContent = "测试中…";
-      LLM.testConnection({ key: val, model: modelSelect.value }).then(function (res) {
+      LLM.testConnection({ key: val, provider: providerSelect.value, model: modelSelect.value }).then(function (res) {
         testResult.textContent = res.ok ? "✅ 连接成功" : "❌ " + LLM.errText(res.err);
       });
     };

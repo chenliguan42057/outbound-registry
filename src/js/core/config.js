@@ -59,9 +59,16 @@
     AI_KEY_KEY: "outbound_ai_key",
     AI_SETTINGS_KEY: "outbound_ai_settings",
     AI_CHAT_KEY: "outbound_ai_chat",
+    /* 服务商列表（OpenAI 兼容接口；baseUrl 为厂商根地址，请求时拼接 /chat/completions）。
+       默认服务商保持 DeepSeek，旧 settings 无 provider 字段时按 deepseek 处理（向后兼容）。 */
+    AI_DEFAULT_PROVIDER: "deepseek",
+    AI_PROVIDERS: [
+      { id: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com", models: ["deepseek-chat", "deepseek-reasoner"] },
+      { id: "zhipu", label: "智谱 AI", baseUrl: "https://open.bigmodel.cn/api/paas/v4", models: ["glm-4-flash", "glm-4-plus"] }
+    ],
     AI_DEFAULT_MODEL: "deepseek-chat",
-    AI_MODELS: ["deepseek-chat", "deepseek-reasoner"],
-    AI_BASE_URL: "https://api.deepseek.com",
+    AI_MODELS: ["deepseek-chat", "deepseek-reasoner"],  // 兼容旧引用（模型现由 AI_PROVIDERS 提供）
+    AI_BASE_URL: "https://api.deepseek.com",            // 兼容旧引用（baseUrl 现由 AI_PROVIDERS 提供）
     AI_TIMEOUT_MS: 30000,
     AI_CHAT_HISTORY_LIMIT: 50,
     AI_CONTEXT_TOP_N: 15,
