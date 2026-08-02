@@ -30,7 +30,7 @@
     /* ---- 导航状态（最后停留目录项 / 折叠状态） ---- */
     loadNav: function () {
       return Object.assign(
-        { active: "out", sidebarCollapsed: false, moduleCollapse: {} },
+        { active: "out-records", sidebarCollapsed: false, moduleCollapse: {} },
         Store.get(Config.NAV_KEY, {})
       );
     },

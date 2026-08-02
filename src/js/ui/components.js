@@ -1,6 +1,6 @@
 /**
  * components.js — 可复用 UI 组件
- * SVG 图标 / Modal / Confirm 弹窗 / 密码弹窗 / 登录弹窗 / CollapseSection / ProductPicker / PhotoUpload
+ * SVG 图标 / Modal / Confirm 弹窗 / 登录弹窗 / CollapseSection / ProductPicker / PhotoUpload
  */
 (function () {
   'use strict';
@@ -113,31 +113,6 @@
       var mBody = Modal.body();
       mBody.querySelector('[data-act="ok"]').onclick = function () { Modal.hide(); resolve(true); };
       mBody.querySelector('[data-act="cancel"]').onclick = function () { Modal.hide(); resolve(false); };
-    });
-  }
-
-  /** 密码弹窗（管理操作需密码）：Promise<boolean> */
-  function pwDialog(title) {
-    return new Promise(function (resolve) {
-      var body =
-        '<input type="password" class="pw-input" placeholder="请输入密码" autocomplete="off" />' +
-        '<div class="pw-err"></div>' +
-        '<div class="modal-actions">' +
-          '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
-          '<button type="button" class="btn sm" data-act="ok">确认</button>' +
-        '</div>';
-      Modal.show(title || "此操作需要密码", body, { width: "320px" });
-      var mBody = Modal.body();
-      var input = mBody.querySelector(".pw-input");
-      var errEl = mBody.querySelector(".pw-err");
-      function ok() {
-        if (window.App.Auth.checkPw(input.value)) { Modal.hide(); resolve(true); }
-        else { errEl.textContent = "密码错误，请重试"; input.select(); }
-      }
-      mBody.querySelector('[data-act="ok"]').onclick = ok;
-      mBody.querySelector('[data-act="cancel"]').onclick = function () { Modal.hide(); resolve(false); };
-      input.addEventListener("keydown", function (e) { if (e.key === "Enter") ok(); });
-      setTimeout(function () { input.focus(); }, 50);
     });
   }
 
@@ -453,7 +428,6 @@
     icon: icon,
     Modal: Modal,
     confirmDialog: confirmDialog,
-    pwDialog: pwDialog,
     showLoginDialog: showLoginDialog,
     collapseSection: collapseSection,
     bindCollapse: bindCollapse,

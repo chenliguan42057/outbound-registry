@@ -48,17 +48,11 @@
     sessionAuthed = false;
   }
 
-  /** 单次敏感操作密码比对（直接比对，不计入锁定） */
-  function checkPw(pw) {
-    return pw === Config.PASSWORD;
-  }
-
   window.App = window.App || {};
   window.App.Auth = {
     login: login,
     isAuthed: isAuthed,
     logout: logout,
-    checkPw: checkPw,
     remainingLock: remainingLock
   };
 })();

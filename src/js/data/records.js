@@ -1,6 +1,7 @@
 /**
  * records.js — 记录 CRUD + 云端合并排序 + CSV 导出
- * 记录 schema 冻结：{id, time, picker?, dept?, purpose, items:[{name,qty}], photos:[dataURL], _ts, affectsStock, type?}
+ * 记录 schema 冻结：{id, time, picker?, dept?, purpose, items:[{name,qty}], photos:[dataURL], _ts, affectsStock, type?, status?}
+ * status?: "pending" | "submitted" —— 仅出库记录（type 非 "in"）使用的可选字段；入库不写。
  */
 (function () {
   'use strict';
@@ -8,6 +9,16 @@
   var Util = window.App.Util;
   var Store = window.App.Store;
   var State = window.App.State;
+
+  /**
+   * 出库记录状态读取：入库记录 → null；缺省/未知 → "submitted"（已提单）；显式 pending → "pending"
+   * @param {{type?: string, status?: string}} rec
+   * @returns {("pending"|"submitted"|null)}
+   */
+  function getStatus(rec) {
+    if (!rec || (rec.type || "") === "in") return null;
+    return rec.status === "pending" ? "pending" : "submitted";
+  }
 
   /** 新增记录（默认出库；payload.type='in' 为入库） */
   function create(payload) {
@@ -55,14 +66,18 @@
     });
   }
 
-  /** CSV 序列化（与现网一致，含 BOM 由导出时添加） */
+  /** CSV 序列化（与现网一致，含 BOM 由导出时添加）；出库记录列表含「状态」列，入库列表无 */
   function toCsv(list) {
     var Stock = window.App.Stock;
+    var hasOut = (list || []).some(function (r) { return (r.type || "out") !== "in"; });
     var head = ["序号", "时间", "领取人", "部门", "用途/项目", "货物名称及数量", "库存", "照片数"];
+    if (hasOut) head.splice(3, 0, "状态");   // 状态列插在「领取人」「部门」之间
     var rows = list.map(function (r, i) {
       var items = (r.items || []).map(function (it) { return it.name + "×" + it.qty; }).join("； ");
       var stocks = (r.items || []).map(function (it) { return String(Stock.getStock(it.name)); }).join("； ");
-      return [list.length - i, r.time || "", r.picker || "", r.dept || "", r.purpose || "", items, stocks, (r.photos || []).length];
+      var row = [list.length - i, r.time || "", r.picker || "", r.dept || "", r.purpose || "", items, stocks, (r.photos || []).length];
+      if (hasOut) row.splice(3, 0, getStatus(r) === "pending" ? "未提单" : "已提单");
+      return row;
     });
     var escCsv = function (v) {
       var s = String(v);
@@ -87,6 +102,7 @@
     remove: remove,
     clear: clear,
     mergeAndSort: mergeAndSort,
+    getStatus: getStatus,
     toCsv: toCsv,
     exportCsv: exportCsv
   };

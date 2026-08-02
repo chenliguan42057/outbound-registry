@@ -32,9 +32,7 @@
     dir: "data/records",
     /* 云端写入令牌：由部署时从仓库密匙注入到页面（window.__GH_TOKEN__），任何设备打开即自带写入能力，
        无需在页面手动配置。localStorage 中的 gh_token 仅作为兜底。 */
-    token: (window.__GH_TOKEN__ && window.__GH_TOKEN__.indexOf("__") !== 0)
-      ? window.__GH_TOKEN__
-      : (localStorage.getItem("gh_token") || "")
+    token: ""
   };
 
   var Config = {
@@ -69,8 +67,27 @@
     /* 业务常量 */
     LOW_STOCK_THRESHOLD: 30,
     PHOTO_MAX_EDGE: 1280,
-    PHOTO_QUALITY: 0.72
+    PHOTO_QUALITY: 0.72,
+
+    /* 令牌解析与刷新（运行时从注入/本地读取，代码中绝不出现令牌明文） */
+    refreshToken: function () {
+      GH.token = resolveToken();
+      return GH.token;
+    }
   };
+
+  /**
+   * 解析云端令牌：优先部署注入的 window.__GH_TOKEN__（占位 __GH_TOKEN__ 视为未注入），
+   * 其次 localStorage gh_token 兜底；两者皆无 → 空串（本机模式）。
+   * @returns {string}
+   */
+  function resolveToken() {
+    return (window.__GH_TOKEN__ && window.__GH_TOKEN__.indexOf("__") !== 0)
+      ? window.__GH_TOKEN__
+      : (localStorage.getItem(Config.GH_TOKEN_KEY) || "");
+  }
+
+  GH.token = resolveToken();
 
   window.App = window.App || {};
   window.App.Config = Config;

@@ -1,7 +1,7 @@
 /**
  * records.js — 出入库记录模块工厂：createRecordsModule(type) 生成「入库记录」/「出库记录」
  * 搜索筛选 + 表格 + 详情/编辑/删除 + 导出 CSV + 清空全部 + 立即同步。
- * 管理操作（编辑/删除/导出/清空）均需密码（1111）。
+ * 出库记录带「状态」列（未提单/已提单，点击切换 + 同步云端）。
  * 出库记录编辑 → LandingView.pendingEditId + 跳落地页（保留照片等全字段编辑）；
  * 入库记录编辑 → 入库模块内编辑。
  */
@@ -68,15 +68,11 @@
         input.addEventListener("change", save);
       });
 
-      Util.$("recExport").addEventListener("click", async function () {
-        var ok = await UI.pwDialog("导出 CSV 需要密码");
-        if (!ok) return;
+      Util.$("recExport").addEventListener("click", function () {
         Records.exportCsv(filter());
       });
       Util.$("recSync").addEventListener("click", function () { doSync(); });
       Util.$("recClearAll").addEventListener("click", async function () {
-        var ok = await UI.pwDialog("清空全部记录需要密码");
-        if (!ok) return;
         var sure = await UI.confirmDialog("将清空全部记录（含云端），且不可恢复。确定继续？", "清空全部记录");
         if (!sure) return;
         try { await Cloud.clearAll(); } catch (e) {}
@@ -95,6 +91,7 @@
         if (act === "detail") showDetail(id);
         else if (act === "edit") doEdit(id);
         else if (act === "del") doDel(id);
+        else if (act === "status") toggleStatus(id);
         else if (act === "photo") showPhoto(btn.getAttribute("data-src"));
       });
       renderList();
@@ -132,6 +129,43 @@
       if (listBox) renderList();
     }
 
+    /** 出库状态徽标（可点击切换）：红点=未提单，绿点=已提单 */
+    function statusPill(r) {
+      var st = Records.getStatus(r);   // "pending" | "submitted"
+      var label = st === "pending" ? "未提单" : "已提单";
+      return '<button type="button" class="status-pill ' + st + '" data-act="status" data-id="' + r.id + '">' +
+        '<span class="dot"></span>' + label + '</button>';
+    }
+
+    /** 出库状态徽标（详情弹窗展示用，不可点击） */
+    function statusBadge(r) {
+      var st = Records.getStatus(r);
+      var label = st === "pending" ? "未提单" : "已提单";
+      return '<span class="status-pill static ' + st + '"><span class="dot"></span>' + label + '</span>';
+    }
+
+    /** 点击状态徽标：确认后切换 pending↔submitted，本地保存 + 推送云端 */
+    async function toggleStatus(id) {
+      var r = State.list.find(function (x) { return x.id === id; });
+      if (!r) return;
+      var cur = Records.getStatus(r);
+      var next = cur === "pending" ? "submitted" : "pending";
+      var label = next === "pending" ? "未提单" : "已提单";
+      var ok = await UI.confirmDialog("标记为" + label + "？", "更新状态");
+      if (!ok) return;
+      var rec = Records.update(id, { status: next });
+      if (!rec) { Util.toast("记录不存在", true); return; }
+      renderList();
+      Util.toast("已标记为" + label);
+      if (Cloud.hasToken()) {
+        Cloud.push(rec).then(function () {
+          window.App.Views.app.setSyncStatus("已同步", false);
+        }).catch(function () {
+          window.App.Views.app.setSyncStatus("云端同步失败", true);
+        });
+      }
+    }
+
     function renderList() {
       var list = filter();
       Util.$("recCount").textContent = list.length + " 条";
@@ -140,7 +174,9 @@
         return;
       }
       var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
-        '<th>序号</th><th>时间</th><th>' + (isIn ? "经办人" : "领取人") + '</th><th>' + (isIn ? "来源" : "部门") + '</th><th>用途/项目</th><th>货物名称</th><th>数量</th><th>库存</th><th>照片</th><th>操作</th>' +
+        '<th>序号</th><th>时间</th><th>' + (isIn ? "经办人" : "领取人") + '</th>' +
+        (!isIn ? '<th>状态</th>' : '') +
+        '<th>' + (isIn ? "来源" : "部门") + '</th><th>用途/项目</th><th>货物名称</th><th>数量</th><th>库存</th><th>照片</th><th>操作</th>' +
         '</tr></thead><tbody>';
       list.forEach(function (r, i) {
         var items = (r.items || []).map(function (it, idx, arr) {
@@ -162,6 +198,7 @@
             '<button type="button" class="btn ghost sm detail-btn" data-act="detail" data-id="' + r.id + '">详细</button></td>' +
           '<td>' + Util.esc(r.time || "-") + '</td>' +
           '<td>' + Util.esc(r.picker || "-") + '</td>' +
+          (!isIn ? '<td>' + statusPill(r) + '</td>' : '') +
           '<td>' + Util.esc(r.dept || "-") + '</td>' +
           '<td>' + Util.esc(r.purpose || "-") + '</td>' +
           '<td class="items-cell">' + items + '</td>' +
@@ -195,6 +232,7 @@
       rows += '<div class="detail-row"><span class="k">类型</span><span class="v">' + (isRecIn ? '<span class="in-tag">入库</span>' : "出库") + '</span></div>';
       rows += '<div class="detail-row"><span class="k">时间</span><span class="v">' + Util.esc(r.time || "-") + '</span></div>';
       if (!isRecIn) {
+        rows += '<div class="detail-row"><span class="k">状态</span><span class="v">' + statusBadge(r) + '</span></div>';
         rows += '<div class="detail-row"><span class="k">领取人</span><span class="v">' + Util.esc(r.picker || "-") + '</span></div>';
         rows += '<div class="detail-row"><span class="k">部门</span><span class="v">' + Util.esc(r.dept || "-") + '</span></div>';
       }
@@ -208,12 +246,10 @@
       UI.Modal.show("照片预览", '<img class="preview-img" src="' + src + '" alt="" />', { width: "fit-content" });
     }
 
-    /** 编辑：密码校验后，出库→落地页编辑（保留照片等全字段），入库→入库模块内编辑 */
-    async function doEdit(id) {
+    /** 编辑：出库→落地页编辑（保留照片等全字段），入库→入库模块内编辑 */
+    function doEdit(id) {
       var r = State.list.find(function (x) { return x.id === id; });
       if (!r) return;
-      var ok = await UI.pwDialog("编辑需要密码");
-      if (!ok) return;
       if (r.type === "in") {
         window.App.Views.app.mount("in");
         window.App.Views.in.edit(id);
@@ -223,12 +259,10 @@
       }
     }
 
-    /** 删除：密码校验 + 确认，本地删除后同步云端 */
+    /** 删除：确认（库存恢复提示），本地删除后同步云端 */
     async function doDel(id) {
       var r = State.list.find(function (x) { return x.id === id; });
       if (!r) return;
-      var ok = await UI.pwDialog("删除需要密码");
-      if (!ok) return;
       var affects = r.affectsStock === true;
       var sure = await UI.confirmDialog(
         affects ? "确定删除该条记录？删除后库存会自动恢复。" : "确定删除该条记录？",

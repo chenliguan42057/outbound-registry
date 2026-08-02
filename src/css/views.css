@@ -1,27 +1,32 @@
 /* ============================================================
-   views.css — 落地页 + POS 出库管理 + 仪表盘 + 记录模块 + 库存/报表/入库 页面级样式
-   扁平直角风格：无渐变、无阴影；圆角唯一例外 .pos-hint / .btn-clear（--radius-sm）
+   views.css — 落地页 + 仪表盘 + 记录模块 + 库存/报表/入库 页面级样式
+   现代 SaaS 多彩质感：柔和渐变背景、彩虹顶栏、渐变统计卡、多彩趋势图
    ============================================================ */
 
 .view-page { min-height: 100vh; }
 
 /* ============================================================
-   落地页：顶栏（品牌 + 管理）+ 免密出库表单（移动优先单列）
+   落地页：彩虹顶栏（品牌渐变文字 + 卡通管理按钮）+ 免密出库表单（移动优先单列）
    ============================================================ */
 .landing {
   min-height: 100vh;
   background: var(--bg);
+  background-attachment: fixed;
   display: flex;
   flex-direction: column;
 }
 .landing-topbar {
-  height: 52px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  background: #fff;
-  border-bottom: 1px solid var(--border);
+  /* 顶部 4px 彩虹细条（渐变叠加） */
+  background-image: var(--grad-rainbow), linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, .74));
+  background-size: 100% 4px, 100% 100%;
+  background-repeat: no-repeat, no-repeat;
+  background-position: top, center;
+  border-bottom: 1px solid rgba(99, 102, 241, .08);
   position: sticky;
   top: 0;
   z-index: 30;
@@ -29,7 +34,34 @@
 .landing-brand {
   font-size: 16px;
   font-weight: 700;
-  color: var(--text);
+  background: linear-gradient(135deg, #6366F1, #EC4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* 卡通管理按钮：圆角胶囊 + 暖色渐变 + emoji + 悬停放大/晃动 */
+.landing-admin {
+  border-radius: 999px;
+  background: linear-gradient(135deg, #EC4899, #F97316);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(236, 72, 153, .35);
+  padding: 8px 18px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  cursor: pointer;
+  transition: transform .15s;
+  font-size: 14px;
+}
+.landing-admin:hover { transform: scale(1.06); }
+.landing-admin:hover .landing-admin-emoji { animation: wiggle .5s ease-in-out; }
+.landing-admin:active { transform: scale(.96); }
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-12deg); }
+  75% { transform: rotate(12deg); }
 }
 .landing-body {
   flex: 1;
@@ -41,112 +73,27 @@
   width: 100%;
   max-width: 760px;
 }
+/* 登记表单卡片：白卡 + 柔和阴影 + 顶部主渐变 accent bar */
+.landing-form .card {
+  position: relative;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: var(--shadow);
+  padding-top: 26px;
+}
+.landing-form .card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: var(--grad-main);
+  border-radius: 16px 16px 0 0;
+}
 .landing-form .card h2 { font-size: 18px; }
 @media (max-width: 560px) {
   .landing-body { padding: 12px 10px; }
-}
-
-/* ============================================================
-   POS 出库管理
-   ============================================================ */
-.pos-page { width: 100%; }
-
-.pos-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-.pos-title {
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--text);
-}
-/* 浅绿提示框：圆角唯一例外 */
-.pos-hint {
-  background: var(--hint-bg);
-  color: #0a6b46;
-  font-size: 12px;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  max-width: 420px;
-  line-height: 1.5;
-}
-
-.pos-scan-row {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.pos-scan-input { flex: 1; }
-.pos-add-btn { flex: 0 0 auto; padding: 10px 28px; }
-
-.pos-body {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr;
-  gap: 16px;
-  align-items: start;
-  margin-bottom: 16px;
-}
-@media (max-width: 900px) {
-  .pos-body { grid-template-columns: 1fr; }
-}
-
-.pos-card {
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-.pos-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.pos-card-title { font-size: 15px; font-weight: 600; }
-
-.pos-badge {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  background: #eef4fc;
-  padding: 3px 10px;
-  border-radius: 999px;
-}
-.pos-badge.ok { color: #fff; background: var(--green); }
-
-.pos-table-wrap { position: relative; }
-.pos-table { min-width: 680px; }
-.pos-table th:nth-child(1) { width: 60px; }
-.pos-table th:nth-child(3) { width: 60px; }
-.pos-table th:nth-child(4) { width: 70px; }
-.pos-table th:nth-child(5) { width: 90px; }
-.pos-table th:nth-child(6) { width: 100px; }
-.pos-table th:nth-child(7) { width: 90px; }
-.pos-table td { white-space: nowrap; }
-.pos-qty, .pos-price {
-  width: 78px !important;
-  padding: 6px 8px !important;
-  font-size: 13px !important;
-  text-align: right;
-}
-.pos-subtotal { font-weight: 600; color: var(--primary); }
-
-.pos-card-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 12px;
-}
-
-.pos-submit {
-  width: 100%;
-  padding: 14px;
-  font-size: 16px;
-  font-weight: 600;
 }
 
 /* ============================================================
@@ -161,21 +108,26 @@
 @media (max-width: 900px) { .dash-cards { grid-template-columns: repeat(2, 1fr); } }
 .dash-card {
   background: #fff;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(99, 102, 241, .08);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 18px;
   text-align: center;
 }
 .dash-card-icon {
   width: 44px;
   height: 44px;
-  background: #eef4fc;
-  color: var(--primary);
+  border-radius: 12px;
+  background: var(--grad-main);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 10px;
 }
+.dash-card:nth-child(2) .dash-card-icon { background: var(--grad-sunset); }
+.dash-card:nth-child(3) .dash-card-icon { background: var(--grad-ocean); }
+.dash-card:nth-child(4) .dash-card-icon { background: var(--grad-pink); }
 .dash-card-value { font-size: 28px; font-weight: 700; }
 .dash-card-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
@@ -214,7 +166,7 @@
 .stock-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .stock-table th:nth-child(1) { min-width: 260px; }
 .stock-num { font-weight: 600; color: var(--primary); font-size: 15px; }
-.badge.low { color: var(--danger); background: #fff0f0; }
+.badge.low { color: var(--danger); background: #FFF0F0; }
 
 /* ============================================================
    入库库存变化预览
@@ -223,7 +175,7 @@
   display: none;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: #f8fbff;
+  background: #F8FBFF;
   padding: 12px 14px;
   margin-bottom: 14px;
 }
@@ -259,21 +211,26 @@
 @media (max-width: 768px) { .report-cards { grid-template-columns: repeat(2, 1fr); } }
 .report-card {
   background: #fff;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(99, 102, 241, .08);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 18px;
   text-align: center;
 }
 .report-card-icon {
   width: 44px;
   height: 44px;
-  background: #eef4fc;
-  color: var(--primary);
+  border-radius: 12px;
+  background: var(--grad-main);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 10px;
 }
+.report-card:nth-child(2) .report-card-icon { background: var(--grad-sunset); }
+.report-card:nth-child(3) .report-card-icon { background: var(--grad-ocean); }
+.report-card:nth-child(4) .report-card-icon { background: var(--grad-pink); }
 .report-card-value { font-size: 28px; font-weight: 700; }
 .report-card-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
@@ -288,7 +245,7 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #eef4fc;
+  background: #EEF2FF;
   color: var(--primary);
   font-size: 12px;
   font-weight: 600;
@@ -298,12 +255,12 @@
   flex: 0 0 auto;
 }
 .rank-name { flex: 0 0 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rank-bar { flex: 1; height: 10px; background: #eef1f6; overflow: hidden; }
-.rank-bar-fill { height: 100%; background: var(--primary); }
+.rank-bar { flex: 1; height: 10px; background: #EEF1F6; overflow: hidden; border-radius: 5px; }
+.rank-bar-fill { height: 100%; background: var(--grad-main); border-radius: 5px; }
 .rank-val { font-weight: 600; min-width: 34px; text-align: right; }
 
 .trend-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
-.trend-tabs .btn.active { background: var(--primary); color: #fff; }
+.trend-tabs .btn.active { background: var(--grad-main); color: #fff; }
 .trend-chart {
   display: flex;
   align-items: flex-end;
@@ -328,9 +285,9 @@
   width: 100%;
   justify-content: center;
 }
-.trend-bar { width: 10px; min-height: 1px; }
-.trend-bar.out { background: var(--primary); }
-.trend-bar.in { background: var(--green); }
+.trend-bar { width: 10px; min-height: 1px; border-radius: 4px 4px 0 0; }
+.trend-bar.out { background: #6366F1; }
+.trend-bar.in { background: #10B981; }
 .trend-label { font-size: 10px; color: var(--muted); margin-top: 6px; white-space: nowrap; }
 .trend-total { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .trend-legend {
@@ -341,9 +298,33 @@
   color: var(--muted);
   margin-top: 10px;
 }
-.legend-dot { width: 10px; height: 10px; display: inline-block; }
-.legend-dot.out { background: var(--primary); }
-.legend-dot.in { background: var(--green); }
+.legend-dot { width: 10px; height: 10px; display: inline-block; border-radius: 3px; }
+.legend-dot.out { background: #6366F1; }
+.legend-dot.in { background: #10B981; }
+
+/* ============================================================
+   云端同步模块
+   ============================================================ */
+.sync-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #FAFBFF;
+  padding: 4px 14px;
+  margin-bottom: 14px;
+}
+.sync-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+}
+.sync-row:last-child { border-bottom: none; }
+.sync-k { color: var(--muted); flex: 0 0 auto; }
+.sync-v { text-align: right; word-break: break-all; }
+.sync-err { color: var(--danger); font-size: 12px; margin-top: 10px; min-height: 14px; }
 
 /* ============================================================
    折叠区块
@@ -359,12 +340,12 @@
   align-items: center;
   justify-content: space-between;
   padding: 11px 14px;
-  background: #fafbfc;
+  background: #FAFBFF;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
 }
-.collapse-head:hover { background: #eef4fc; }
+.collapse-head:hover { background: #EEF2FF; }
 .collapse-arrow { transition: transform .2s; color: var(--muted); display: inline-flex; }
 .collapse-head.open .collapse-arrow { transform: rotate(180deg); }
 .collapse-body { padding: 12px 14px; }

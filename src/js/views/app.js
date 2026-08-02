@@ -1,7 +1,7 @@
 /**
- * app.js — Windows 桌面管理壳：窗口标题栏 + 深蓝顶栏 + 深色侧栏（7 菜单）+ 内容区
+ * app.js — Windows 桌面管理壳：窗口标题栏 + 渐变顶栏 + 深色侧栏（6 菜单）+ 内容区
  * 底部状态栏「就绪｜本地N条｜已同步HH:MM」+ 导入数据（JSON 数组或 {records:[]}）。
- * 模块 id 与子路由映射：#/app/<id>；「出库管理」→ Views.outpos。
+ * 模块 id 与子路由映射：#/app/<id>；「出库记录」为默认模块；顶栏☁️直达云端同步。
  */
 (function () {
   'use strict';
@@ -19,9 +19,8 @@
     { id: "dashboard", icon: "report", label: "仪表盘" },
     { id: "stock", icon: "stock", label: "库存查询" },
     { id: "in", icon: "in", label: "入库管理" },
-    { id: "out", icon: "out", label: "出库管理" },
-    { id: "in-records", icon: "records", label: "入库记录" },
     { id: "out-records", icon: "records", label: "出库记录" },
+    { id: "in-records", icon: "records", label: "入库记录" },
     { id: "report", icon: "report", label: "报表统计" }
   ];
 
@@ -30,14 +29,14 @@
     dashboard: "dashboard",
     stock: "stock",
     in: "in",
-    out: "outpos",
+    sync: "sync",
     "in-records": "inRecords",
     "out-records": "outRecords",
     report: "report"
   };
 
   var MODULE_TITLES = {
-    dashboard: "仪表盘", stock: "库存查询", in: "入库管理", out: "出库管理",
+    dashboard: "仪表盘", stock: "库存查询", in: "入库管理", sync: "云端同步",
     "in-records": "入库记录", "out-records": "出库记录", report: "报表统计"
   };
 
@@ -53,7 +52,7 @@
     if (!el) return;
     if (State.appMounted && shellEl && document.body.contains(shellEl)) {
       el.style.display = "";
-      mount(module || State.nav.active || "out");
+      mount(module || State.nav.active || "out-records");
       return;
     }
     State.appMounted = true;
@@ -71,6 +70,9 @@
         '<div class="win-topbar">' +
           '<button type="button" class="win-topbar-menu" id="winMenu" title="菜单">' + UI.icon("menu", 20) + '</button>' +
           '<span class="win-topbar-title">' + Util.esc(Config.BRAND_TITLE) + '</span>' +
+          '<div class="win-topbar-right">' +
+            '<button type="button" class="win-topbar-sync" id="winSync" title="云端同步">' + UI.icon("sync", 18) + '</button>' +
+          '</div>' +
         '</div>' +
         '<div class="win-main">' +
           '<aside class="win-sidebar" id="winSidebar">' +
@@ -87,7 +89,7 @@
     shellEl = Util.$("winShell");
     renderNav();
     wireShell();
-    mount(module || State.nav.active || "out");
+    mount(module || State.nav.active || "out-records");
     autoSync();
   }
 
@@ -120,6 +122,7 @@
     });
     Util.$("winMenu").addEventListener("click", toggleDrawer);
     Util.$("winOverlay").addEventListener("click", closeDrawer);
+    Util.$("winSync").addEventListener("click", function () { mount("sync"); });
     Util.$("winImport").addEventListener("click", function () {
       Util.$("winImportFile").click();
     });
@@ -128,7 +131,7 @@
 
   /** 挂载模块：切换内容区 + 高亮导航 + 记忆最后停留项 */
   function mount(moduleName) {
-    var viewName = VIEW_MAP[moduleName] || "outpos";
+    var viewName = VIEW_MAP[moduleName] || "out-records";
     var view = window.App.Views[viewName];
     if (!view) return;
     State.nav.active = moduleName;
@@ -158,7 +161,7 @@
     el.className = "win-status" + (statusIsErr ? " err" : "");
   }
 
-  /** 同步状态（out/in/outpos/records 调用）：更新底部状态栏 */
+  /** 同步状态（out/in/records 调用）：更新底部状态栏 */
   function setSyncStatus(text, isErr) {
     statusText = text || "就绪";
     statusIsErr = !!isErr;

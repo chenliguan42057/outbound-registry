@@ -1,7 +1,7 @@
 /* ============================================================
    layout.css — Windows 桌面管理壳布局
-   .win-shell（窗口框）→ 标题栏 / 深蓝顶栏 / 主区（深色侧栏 + 内容区）
-   侧栏激活态：左 3px 蓝色竖线 + 文字 #0b60c4 + 浅蓝底 #e8f1fb
+   .win-shell（窗口框）→ 标题栏 / 渐变顶栏 / 主区（深色侧栏 + 内容区）
+   侧栏激活态：主渐变底 + 白字（多彩感）；顶栏右侧☁️云端同步按钮
    ≤768px：侧栏抽屉式
    ============================================================ */
 
@@ -19,7 +19,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #f0f2f7;
+  background: #F0F2F7;
   border-bottom: 1px solid var(--border);
   padding: 0 6px 0 14px;
   user-select: none;
@@ -42,10 +42,10 @@
 .win-titlebar-btn:hover { background: rgba(0, 0, 0, .06); color: var(--text); }
 .win-titlebar-btn.close:hover { background: var(--danger); color: #fff; }
 
-/* ---------- 深蓝顶栏 ---------- */
+/* ---------- 渐变顶栏 ---------- */
 .win-topbar {
   height: 50px;
-  background: var(--primary);   /* #0b60c4 */
+  background: var(--grad-main);   /* 靛蓝→紫罗兰渐变 */
   color: #fff;
   display: flex;
   align-items: center;
@@ -67,12 +67,35 @@
 }
 .win-topbar-menu:hover { background: rgba(255, 255, 255, .14); }
 
+/* 顶栏右侧：☁️云端同步入口 */
+.win-topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.win-topbar-sync {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: rgba(255, 255, 255, .16);
+  color: #fff;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .15s, transform .15s;
+}
+.win-topbar-sync:hover { background: rgba(255, 255, 255, .30); transform: scale(1.06); }
+.win-topbar-sync:active { transform: scale(.96); }
+
 /* ---------- 主区 ---------- */
 .win-main { flex: 1; display: flex; min-height: 0; }
 
 .win-sidebar {
   width: 232px;
-  background: var(--sidebar-bg);   /* #202733 */
+  background: var(--sidebar-bg);   /* #202733 深色保留，对比强 */
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -88,7 +111,7 @@
   align-items: center;
   gap: 12px;
   padding: 11px 16px 11px 13px;
-  color: #aab4c2;
+  color: #AAB4C2;
   font-size: 14px;
   border-left: 3px solid transparent;
   cursor: pointer;
@@ -96,11 +119,11 @@
   transition: background .15s, color .15s;
 }
 .win-sidebar-item:hover { color: #fff; background: rgba(255, 255, 255, .06); }
-/* 激活态：左蓝色竖线 + 文字 #0b60c4 + 浅蓝底 #e8f1fb */
+/* 激活态：主渐变底 + 白字（多彩感） */
 .win-sidebar-item.active {
-  color: var(--primary);
-  background: #e8f1fb;
-  border-left-color: var(--primary);
+  background: var(--grad-main);
+  color: #fff;
+  border-left-color: transparent;
   font-weight: 500;
 }
 .win-sidebar-item-icon { flex: 0 0 auto; display: inline-flex; }
@@ -113,16 +136,16 @@
   gap: 8px;
 }
 .win-status {
-  color: #8b95a5;
+  color: #8B95A5;
   font-size: 12px;
   line-height: 1.4;
   word-break: break-all;
 }
-.win-status.err { color: #ff9a90; }
+.win-status.err { color: #FF9A90; }
 .win-import-btn {
   background: rgba(255, 255, 255, .08);
   border: 1px solid rgba(255, 255, 255, .16);
-  color: #cfd6e0;
+  color: #CFD6E0;
   padding: 7px 10px;
   font-size: 13px;
   cursor: pointer;
@@ -134,7 +157,7 @@
 /* 内容区 */
 .win-content {
   flex: 1;
-  background: var(--bg);   /* #f4f7fc */
+  background: var(--bg);   /* 柔和多彩渐变 */
   overflow-y: auto;
   padding: 20px;
   min-width: 0;

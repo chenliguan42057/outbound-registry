@@ -171,6 +171,7 @@
       photos: photos.getPhotos(),
       affectsStock: true  // 新记录才参与库存计算
     };
+    if (!wasEditing) payload.status = "pending";   // 新建出库记录默认「未提单」；编辑不携带 → 合并保留原值
     var rec;
     if (editingId) {
       rec = Records.update(editingId, payload);

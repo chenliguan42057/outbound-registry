@@ -1,24 +1,31 @@
 /* ============================================================
-   base.css — 设计令牌（扁平化）+ reset + 基础组件（按钮/输入/卡片/表格/Toast/Modal）
-   直角矩形风格：无渐变、无阴影；圆角唯一例外 .pos-hint / .btn-clear（--radius-sm）
+   base.css — 设计令牌（多彩渐变）+ reset + 基础组件（按钮/输入/卡片/表格/Toast/Modal）
+   现代 SaaS 多彩质感：主渐变按钮、柔和阴影卡片、聚焦彩色 glow、红绿状态胶囊
    ============================================================ */
 
 /* ---------- 设计令牌 ---------- */
 :root {
-  --primary: #0b60c4;
-  --primary-dark: #0950a5;
+  --primary: #6366F1;
+  --primary-2: #8B5CF6;
+  --primary-dark: #4F46E5;
+  --grad-main: linear-gradient(135deg, #6366F1, #8B5CF6);
+  --grad-sunset: linear-gradient(135deg, #F97316, #F59E0B);
+  --grad-ocean: linear-gradient(135deg, #14B8A6, #38BDF8);
+  --grad-pink: linear-gradient(135deg, #EC4899, #F472B6);
+  --grad-rainbow: linear-gradient(90deg, #F97316, #F59E0B, #10B981, #38BDF8, #6366F1, #A855F7, #EC4899);
+  --bg: linear-gradient(160deg, #EEF2FF, #FDF2F8, #F0FDF4);
   --sidebar-bg: #202733;
-  --bg: #f4f7fc;
-  --green: #08b870;
-  --green-dark: #079e61;
-  --danger: #f04438;
-  --danger-dark: #d63b30;
-  --hint-bg: #d6f8e3;
-  --text: #1f2733;
-  --muted: #6b7785;
-  --border: #dfe4ee;
-  --radius: 0;        /* 默认直角 */
-  --radius-sm: 4px;   /* 唯一圆角例外 */
+  --green: #10B981;
+  --green-dark: #0EA271;
+  --danger: #F04438;
+  --danger-dark: #D92D20;
+  --hint-bg: #E8F7EE;
+  --text: #1E293B;
+  --muted: #64748B;
+  --border: #E5E9F2;
+  --radius: 12px;
+  --radius-sm: 6px;
+  --shadow: 0 8px 24px rgba(99, 102, 241, .10);
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 }
@@ -48,8 +55,9 @@ a { color: var(--primary); text-decoration: none; }
 /* ---------- 卡片 ---------- */
 .card {
   background: #fff;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(99, 102, 241, .08);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 20px;
   margin-bottom: 20px;
 }
@@ -65,7 +73,7 @@ a { color: var(--primary); text-decoration: none; }
   font-size: 11px;
   font-weight: 500;
   color: var(--primary);
-  background: #eef4fc;
+  background: #EEF2FF;
   padding: 2px 8px;
   border-radius: 999px;
 }
@@ -87,7 +95,7 @@ input[type=password], input[type=date], input[type=search], select, textarea, .s
 input:focus, textarea:focus, select:focus, .search:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary);   /* 仅 focus 边框例外 */
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, .18);   /* 聚焦彩色 glow */
 }
 .field { margin-bottom: 14px; }
 .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -102,11 +110,12 @@ input:focus, textarea:focus, select:focus, .search:focus {
   background: #fff;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
   max-height: 220px;
   overflow: auto;
 }
 .suggest div { padding: 10px 12px; font-size: 14px; cursor: pointer; }
-.suggest div:hover { background: #eef4fc; }
+.suggest div:hover { background: #EEF2FF; }
 
 /* 已选货品 */
 .selected { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
@@ -117,7 +126,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 12px;
-  background: #fafbfc;
+  background: #FAFBFF;
   flex-wrap: nowrap;
 }
 .sel-item .name {
@@ -141,9 +150,9 @@ input:focus, textarea:focus, select:focus, .search:focus {
   color: var(--muted);
   cursor: pointer;
   transition: .15s;
-  background: #fafbfc;
+  background: #FAFBFF;
 }
-.photo-drop:hover { border-color: var(--primary); color: var(--primary); background: #eef4fc; }
+.photo-drop:hover { border-color: var(--primary); color: var(--primary); background: #EEF2FF; }
 .thumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .thumb {
   position: relative;
@@ -170,7 +179,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
 }
 .photo-meta { font-size: 12px; color: var(--muted); margin-top: 8px; }
 
-/* ---------- 按钮（实心直角矩形） ---------- */
+/* ---------- 按钮（主渐变胶囊，无边框） ---------- */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -178,37 +187,40 @@ input:focus, textarea:focus, select:focus, .search:focus {
   gap: 6px;
   padding: 10px 18px;
   border-radius: var(--radius);
-  border: 1px solid var(--primary);
-  background: var(--primary);
+  border: none;
+  background: var(--grad-main);
   color: #fff;
   font-size: 14px;
   cursor: pointer;
   font-weight: 500;
-  transition: background .15s, border-color .15s, transform .1s;
+  box-shadow: var(--shadow);
+  transition: filter .15s, transform .1s, background .15s, border-color .15s;
 }
-.btn:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+.btn:hover { filter: brightness(1.06); }
 .btn:active { transform: translateY(1px); }
-.btn.ghost { background: #fff; color: var(--primary); }
-.btn.ghost:hover { background: #eef4fc; }
+.btn.ghost { background: #fff; color: var(--primary); border: 1px solid var(--primary); box-shadow: none; }
+.btn.ghost:hover { background: #EEF2FF; filter: none; }
 .btn.sm { padding: 5px 10px; font-size: 13px; }
 
-/* 绿色主操作（确认提单） */
+/* 绿色主操作（成功/确认提单） */
 .btn.green, .btn-green {
   background: var(--green);
-  border-color: var(--green);
+  border: none;
   color: #fff;
+  box-shadow: var(--shadow);
 }
-.btn.green:hover, .btn-green:hover { background: var(--green-dark); border-color: var(--green-dark); }
+.btn.green:hover, .btn-green:hover { background: var(--green-dark); filter: none; }
 
 /* 红色操作（实心红） */
 .btn.danger, .btn-danger {
   background: var(--danger);
-  border-color: var(--danger);
+  border: none;
   color: #fff;
+  box-shadow: var(--shadow);
 }
-.btn.danger:hover, .btn-danger:hover { background: var(--danger-dark); border-color: var(--danger-dark); }
+.btn.danger:hover, .btn-danger:hover { background: var(--danger-dark); filter: none; }
 
-/* 清空按钮：圆角唯一例外（4px） */
+/* 清空按钮 */
 .btn-clear {
   background: var(--danger);
   border: 1px solid var(--danger);
@@ -231,11 +243,12 @@ input:focus, textarea:focus, select:focus, .search:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: #fff;
+  box-shadow: var(--shadow);
   max-height: 60vh;
   position: relative;
 }
 .table-wrap::-webkit-scrollbar { height: 10px; width: 10px; }
-.table-wrap::-webkit-scrollbar-thumb { background: #c1c7d0; border-radius: 5px; }
+.table-wrap::-webkit-scrollbar-thumb { background: #C7CDDC; border-radius: 5px; }
 .table { width: auto; min-width: 920px; border-collapse: collapse; font-size: 13px; }
 .table th, .table td {
   text-align: left;
@@ -248,7 +261,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
   color: var(--muted);
   font-weight: 600;
   font-size: 12px;
-  background: #fafbfc;
+  background: #FAFBFF;
   position: sticky;
   top: 0;
   z-index: 3;
@@ -260,7 +273,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
   background: #fff;
   z-index: 2;
 }
-.table th:last-child { background: #fafbfc; }
+.table th:last-child { background: #FAFBFF; }
 .items-cell { min-width: 200px; max-width: 260px; white-space: normal; }
 .item-line { white-space: nowrap; }
 .item-line.multi-line {
@@ -285,7 +298,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
   display: inline-block;
   font-size: 11px;
   color: var(--muted);
-  background: #eef4fc;
+  background: #EEF2FF;
   border-radius: var(--radius-sm);
   padding: 1px 6px;
 }
@@ -295,16 +308,49 @@ input:focus, textarea:focus, select:focus, .search:focus {
   font-weight: 500;
   color: #fff;
   background: var(--green);
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 1px 5px;
   margin-left: 4px;
   vertical-align: middle;
 }
-.tag.ok-tag { color: var(--green); background: #e8f7ee; }
-.tag.danger-tag { color: var(--danger); background: #fff0f0; }
+.tag.ok-tag { color: var(--green); background: #E8F7EE; }
+.tag.danger-tag { color: var(--danger); background: #FFF0F0; }
+
+/* 出库状态徽标：圆点胶囊，红=未提单 / 绿=已提单 */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.5;
+  transition: filter .15s, transform .1s;
+}
+.status-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.status-pill.pending { color: var(--danger); background: #FFF0F0; }
+.status-pill.pending .dot { background: var(--danger); }
+.status-pill.submitted { color: var(--green); background: #E8F7EE; }
+.status-pill.submitted .dot { background: var(--green); }
+.status-pill:hover { filter: brightness(.97); }
+.status-pill:active { transform: scale(.96); }
+.status-pill.static { cursor: default; }
+.status-pill.static:hover { filter: none; }
+.status-pill.static:active { transform: none; }
+
 .empty { text-align: center; color: var(--muted); padding: 28px 0; font-size: 14px; }
-.low-stock td { background: #fff7ed; }
-.low-stock td:last-child { background: #fff7ed; }
+.low-stock td { background: #FFF7ED; }
+.low-stock td:last-child { background: #FFF7ED; }
 
 /* ---------- 详情弹窗 ---------- */
 .detail-row { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
@@ -316,7 +362,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
   display: flex;
   justify-content: space-between;
   padding: 8px 10px;
-  background: #fafbfc;
+  background: #FAFBFF;
   border-radius: var(--radius);
   border: 1px solid var(--border);
 }
@@ -336,7 +382,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
   left: 50%;
   bottom: 32px;
   transform: translateX(-50%) translateY(20px);
-  background: #1f2733;
+  background: #1E293B;
   color: #fff;
   padding: 10px 18px;
   border-radius: var(--radius);
@@ -354,7 +400,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, .7);
+  background: rgba(30, 41, 59, .6);
   display: none;
   align-items: flex-start;
   justify-content: center;
@@ -369,7 +415,8 @@ body.modal-open { overflow: hidden; }
 .modal-card {
   position: relative;
   background: #fff;
-  border-radius: var(--radius);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(30, 41, 59, .25);
   padding: 22px;
   width: 520px;
   max-width: 92vw;
@@ -402,9 +449,9 @@ body.modal-open { overflow: hidden; }
 .login-lock {
   width: 52px;
   height: 52px;
-  border-radius: var(--radius);
-  background: #eef4fc;
-  color: var(--primary);
+  border-radius: 14px;
+  background: var(--grad-main);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
