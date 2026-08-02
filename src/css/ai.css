@@ -243,3 +243,161 @@
   .ai-chip { flex: 0 0 auto; }
   .ai-fab { right: 14px; bottom: 14px; }
 }
+
+/* ============================================================
+   ai.css — 第五轮增量（全部追加，不改动既有样式）
+   工具结果卡 / 二维码卡 / 天气卡 / 百科卡 / 新闻列表 / 次级 chips / 复制按钮 / 设置联网区块
+   ============================================================ */
+
+/* ---------- 工具结果卡（常识/计算/换算/日期/模板/快递/金额） ---------- */
+.ai-type-tool .ai-title { color: var(--primary); }
+.ai-type-tool .ai-text { white-space: pre-wrap; }
+
+/* ---------- 二维码卡 ---------- */
+.ai-qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  padding: 10px;
+  background: #FAFBFF;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+.ai-qr-img {
+  width: 140px;
+  height: 140px;
+  image-rendering: pixelated;
+  background: #fff;
+  border-radius: 6px;
+}
+.ai-qr-content {
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+  max-width: 100%;
+  text-align: center;
+}
+
+/* ---------- 天气卡 ---------- */
+.ai-type-weather { background: linear-gradient(135deg, #F0F7FF, #E8F1FE) !important; }
+.ai-weather-card .ai-title { color: #1E6FD9; }
+.ai-weather-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 4px 0;
+}
+.ai-weather-temp { font-size: 30px; font-weight: 700; color: #1E6FD9; line-height: 1; }
+.ai-weather-desc { font-size: 14px; color: #334155; }
+.ai-weather-meta { font-size: 12px; color: var(--muted); }
+
+/* ---------- 百科卡 ---------- */
+.ai-type-wiki { background: #FFFBEB !important; }
+.ai-wiki-card .ai-title { color: #B45309; }
+.ai-wiki-thumb {
+  float: right;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin: 0 0 6px 10px;
+  border: 1px solid var(--border);
+}
+.ai-wiki-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ai-wiki-link:hover { text-decoration: underline; }
+
+/* ---------- 新闻列表 ---------- */
+.ai-type-news { background: #F8FAFC !important; }
+.ai-news-card .ai-title { color: #0F766E; }
+.ai-news-list { margin: 4px 0 0; padding: 0; list-style: none; }
+.ai-news-item { padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.ai-news-item:last-child { border-bottom: none; }
+.ai-news-item a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+  display: block;
+}
+.ai-news-item a:hover { color: var(--primary); text-decoration: underline; }
+.ai-news-snippet {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ---------- 次级 chips（intro 第二组） ---------- */
+.ai-chips-sub { margin-top: -4px; }
+.ai-chips-sub .ai-chip {
+  background: #F0FDF4;
+  border-color: rgba(16, 185, 129, .45);
+  color: #047857;
+}
+.ai-chips-sub .ai-chip:hover { background: #DCFCE7; }
+
+/* ---------- 复制按钮 ---------- */
+.ai-copy {
+  display: inline-block;
+  margin-top: 6px;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  background: #fff;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.ai-copy:hover { background: #EEF2FF; }
+
+/* ---------- 设置弹窗：联网搜索区块 ---------- */
+.ai-sec-title {
+  margin: 14px 0 10px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ai-sec-note-search {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  background: #F0F7FF;
+  border: 1px solid rgba(30, 111, 217, .2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  line-height: 1.6;
+}
+.ai-sec-note-search.lock {
+  background: #F0FDF4;
+  border-color: rgba(16, 185, 129, .25);
+}
+.ai-context-hint {
+  font-size: 13px;
+  color: var(--muted);
+  background: #FAFBFF;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: inline-block;
+}
+
+/* ---------- 移动端 375px 适配 ---------- */
+@media (max-width: 375px) {
+  .ai-qr-img { width: 116px; height: 116px; }
+  .ai-weather-temp { font-size: 24px; }
+  .ai-wiki-thumb { width: 56px; height: 56px; }
+  .ai-bubble { max-width: 92%; }
+  .ai-header-btns .ai-hbtn { width: 28px; height: 28px; }
+}

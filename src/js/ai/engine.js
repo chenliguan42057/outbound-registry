@@ -11,8 +11,33 @@
   var State = window.App.State;
   var Stock = window.App.Stock;
 
+  /* 第五轮增量：工具层 / 知识库（脚本顺序 knowledge → tools → engine，保证已加载） */
+  var Tools = window.App.AI && window.App.AI.Tools ? window.App.AI.Tools : null;
+  var Knowledge = window.App.AI && window.App.AI.Knowledge ? window.App.AI.Knowledge : null;
+
   /* 记录意图关键词（命中产品名后判断是查库存还是查记录） */
   var RECORD_KW = /领过|领了|记录|领用/;
+
+  /* 百科引导的数据词守卫（命中即跳过 wiki，保证数据意图优先级） */
+  var WIKI_DATA_WORDS = /库存|出库|入库|记录|领取|领用|报表|趋势|排行|低库存|最多|最少|补货|缺货/;
+
+  /* 城市白名单兜底（京沪广深等约 40 个；主正则未命中时尝试） */
+  var CITY_WHITELIST = [
+    "北京", "上海", "广州", "深圳", "天津", "重庆", "成都", "杭州", "南京", "苏州",
+    "武汉", "西安", "长沙", "郑州", "济南", "青岛", "大连", "沈阳", "哈尔滨", "长春",
+    "石家庄", "太原", "合肥", "福州", "厦门", "南昌", "昆明", "贵阳", "南宁", "海口",
+    "兰州", "西宁", "银川", "乌鲁木齐", "呼和浩特", "拉萨", "香港", "澳门", "台北",
+    "珠海", "佛山", "东莞", "温州", "宁波", "无锡", "常州", "南通", "徐州", "泉州"
+  ];
+
+  /* 天气触发正则（中文 / 英文） */
+  var WEATHER_RE_CN = /^(?:今天|明天|后天|现在|当前|请问)?\s*([\u4e00-\u9fa5]{2,6}?)(?:市|省)?(?:的)?(?:今天|明天|后天)?(?:会不会|会|要)?(?:天气|气温|温度|下雨|下雪|冷不冷|热不热|几度)/;
+  var WEATHER_RE_EN = /^([a-zA-Z]{2,20})\s*(?:weather|天气)/i;
+  var WEATHER_KW = /天气|气温|温度|下雨|下雪|冷不冷|热不热|几度/;
+
+  /* 新闻触发词 */
+  var NEWS_TRIGGER = /(新闻|资讯|热搜|最新消息|搜一下|搜索)/;
+  var NEWS_FILLER = /给我|帮我|一下|什么|的|有哪些|看看|查|推荐|最近|最新|今天|今日|明天|科技/;
 
   /* 意图关键词表（优先级从高到低，见 detectIntent） */
   var KW = {
@@ -470,22 +495,146 @@
     };
   }
 
+  /* ================= 第五轮：百科引导 / 联网意图 ================= */
+
+  /**
+   * 百科/知识引导：以「什么是/是什么/介绍一下/介绍下/百科」触发，且不含数据词。
+   * @param {string} input 已归一化输入
+   * @returns {?{type:string, pending:boolean, topic:string, title:string, chips:string[]}}
+   */
+  function detectWiki(input) {
+    if (!input || WIKI_DATA_WORDS.test(input)) return null;
+    // 两种句式：触发词在前（什么是X / 介绍一下X / X百科）与词条在前（X是什么）
+    var m = input.match(/(?:什么是|介绍一下|介绍下)\s*([\u4e00-\u9fa5a-zA-Z0-9]{1,20})/) ||
+            input.match(/([\u4e00-\u9fa5a-zA-Z0-9]{1,20})是什么/) ||
+            input.match(/([\u4e00-\u9fa5a-zA-Z0-9]{1,20})百科$/);
+    if (!m) return null;
+    var topic = (m[1] || "").replace(/(?:呢|吗|怎么样|啥|呀|啊)$/g, "").trim();
+    if (!topic) return null;
+    // 帮助/自我介绍类问法（v4 help 意图）不得误吞为百科词条
+    if (/你|我|自己|功能|做什么|帮助/.test(topic)) return null;
+    // 单字代词（这/那/你/我/他/它/啥/谁）不是有效词条
+    if (topic.length === 1 && /[这那你我他它啥谁]/.test(topic)) return null;
+    return {
+      type: "wiki",
+      pending: true,
+      topic: topic,
+      title: "🔍 " + topic + "（维基百科）",
+      chips: ["什么是云计算", "介绍一下大熊猫", "北京天气怎么样"]
+    };
+  }
+
+  /**
+   * 天气意图（中文正则 / 英文正则 / 城市白名单兜底）。
+   * @param {string} input 已归一化输入
+   * @returns {?{type:string, pending:boolean, city:string, title:string, chips:string[]}}
+   */
+  function detectWeather(input) {
+    if (!input) return null;
+    var m = input.match(WEATHER_RE_CN) || input.match(WEATHER_RE_EN);
+    if (m && m[1] && m[1].length >= 2) {
+      return weatherPending(m[1]);
+    }
+    // 白名单兜底：命中天气关键词且包含已知城市
+    if (WEATHER_KW.test(input)) {
+      for (var i = 0; i < CITY_WHITELIST.length; i++) {
+        if (input.indexOf(CITY_WHITELIST[i]) !== -1) {
+          return weatherPending(CITY_WHITELIST[i]);
+        }
+      }
+    }
+    return null;
+  }
+
+  /** 构造天气 pending 回复 */
+  function weatherPending(city) {
+    return {
+      type: "weather",
+      pending: true,
+      city: city,
+      title: "🌤 " + city + " 天气",
+      chips: ["北京天气怎么样", "今天几号", "什么是云计算"]
+    };
+  }
+
+  /**
+   * 新闻意图（P1，需 Key）。
+   * @param {string} input 已归一化输入
+   * @returns {?{type:string, pending:boolean, query:string, title:string, chips:string[]}}
+   */
+  function detectNews(input) {
+    if (!input || !NEWS_TRIGGER.test(input)) return null;
+    var q = input
+      .replace(NEWS_TRIGGER, "")
+      .replace(NEWS_FILLER, "")
+      .trim();
+    if (!q) q = "科技";
+    return {
+      type: "news",
+      pending: true,
+      query: q,
+      title: "📰 新闻搜索",
+      chips: ["最新科技新闻", "搜一下 AI 新闻", "北京天气怎么样"]
+    };
+  }
+
+  /**
+   * 联网意图入口：weather → news。
+   * @param {string} input 已归一化输入
+   * @returns {?Object}
+   */
+  function detectWeb(input) {
+    var w = detectWeather(input);
+    if (w) return w;
+    var n = detectNews(input);
+    if (n) return n;
+    return null;
+  }
+
   /* ================= 对外入口 ================= */
 
   /**
-   * 主入口：回答问题。
+   * 主入口：回答问题（第五轮路由链，命中即返回，自上而下）：
+   *   0. normalize（v4 原样）
+   *   1. Tools.answer(question)        工具类（原始问句）
+   *   2. Knowledge.answer(input)       常识/节气/节日
+   *   3. detectWiki(input)             百科引导（pending）
+   *   4. v4 产品匹配 → stock / records
+   *   5. v4 数据意图链 detectIntent
+   *   6. detectWeb(input)              天气/新闻（pending）
+   *   7. fallbackAnswer（仅 type==="fallback" 才可能走 LLM）
    * @param {string} question 原始用户输入
    * @returns {{type: string, title: string, text?: string, table?: {head: string[], rows: Array}, chips: string[]}}
    */
   function answer(question) {
     var input = normalize(question);
     if (!input) return fallbackAnswer(question);
+
+    // 1. 工具类（高精度正则，先判，防与产品名冲突；传原始问句）
+    if (Tools && Tools.answer) {
+      var toolAns = Tools.answer(question);
+      if (toolAns) return toolAns;
+    }
+
+    // 2. 常识/节气/节日（无数据限制，但 KB 条目关键词已避开产品名与数据词）
+    if (Knowledge && Knowledge.answer) {
+      var kbAns = Knowledge.answer(input);
+      if (kbAns) return kbAns;
+    }
+
+    // 3. 百科引导（含数据词则跳过，保证数据意图优先级）
+    var wiki = detectWiki(input);
+    if (wiki) return wiki;
+
+    // 4. 产品匹配（v4 原样）
     var prods = matchProducts(input);
     if (prods.exact.length || prods.fuzzy.length) {
       var names = unique(prods.exact.concat(prods.fuzzy));
       if (RECORD_KW.test(input)) return recordsAnswer(question, input, names);
       return stockAnswer(names);
     }
+
+    // 5. 数据意图链（v4 原样）
     var intent = detectIntent(input);
     switch (intent.intent) {
       case "help": return helpAnswer();
@@ -496,7 +645,12 @@
       case "in_out_days": return daysAnswer(intent);
       case "records": return recordsAnswer(question, input, null);
       case "stock": return stockAnswer(null);
-      default: return fallbackAnswer(question);
+      default:
+        // 6. 联网意图（weather → news，返回 pending）
+        var web = detectWeb(input);
+        if (web) return web;
+        // 7. fallback（chat.js 据此决定是否走 LLM）
+        return fallbackAnswer(question);
     }
   }
 
@@ -506,6 +660,8 @@
     normalize: normalize,
     matchProducts: matchProducts,
     detectIntent: detectIntent,
+    detectWiki: detectWiki,
+    detectWeb: detectWeb,
     answer: answer
   };
 })();

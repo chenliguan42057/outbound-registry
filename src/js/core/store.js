@@ -90,7 +90,27 @@
     saveAiChat: function (msgs) {
       Store.set(Config.AI_CHAT_KEY, (msgs || []).slice(-Config.AI_CHAT_HISTORY_LIMIT));
     },
-    clearAiChat: function () { Store.remove(Config.AI_CHAT_KEY); }
+    clearAiChat: function () { Store.remove(Config.AI_CHAT_KEY); },
+
+    /* ---- AI 联网搜索存取（第五轮增量；搜索 Key 为原始字符串不 JSON 包裹，仅存本机） ---- */
+    loadSearchKey: function () {
+      try { return localStorage.getItem(Config.SEARCH_KEY_KEY) || ""; }
+      catch (e) { return ""; }
+    },
+    saveSearchKey: function (k) {
+      try { localStorage.setItem(Config.SEARCH_KEY_KEY, String(k || "")); }
+      catch (e) { console.warn("localStorage set search key failed:", e); }
+    },
+    clearSearchKey: function () {
+      try { localStorage.removeItem(Config.SEARCH_KEY_KEY); } catch (e) {}
+    },
+    loadSearchSettings: function () {
+      return Object.assign(
+        { provider: "tavily", enabledWeather: true, enabledWiki: true, enabledNews: false },
+        Store.get(Config.SEARCH_SETTINGS_KEY, {})
+      );
+    },
+    saveSearchSettings: function (s) { Store.set(Config.SEARCH_SETTINGS_KEY, s); }
   };
 
   /* ---- 应用级状态（内存） ---- */

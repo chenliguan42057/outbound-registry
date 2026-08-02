@@ -1,9 +1,14 @@
 /**
  * chat.js — AI 助手聊天面板（单例，落地页浮动 / 管理后台 #/app/ai 内嵌双入口复用）
  * A 部分：本地引擎直接回答（type !== "fallback" 一律本地，有 Key 也不走 LLM）；
- * B 部分：fallback 且有 Key → LLM 真对话（带系统数据上下文），失败回退本地 + hint。
+ * B 部分：fallback 且有 Key → LLM 多轮真对话（带系统数据上下文 + 最近 N 轮历史），失败回退本地 + hint。
+ * 第五轮增量：
+ *   - pending 异步（weather/wiki/news）由 chat.js 调 Web.* 完成，失败只渲染错误文案，绝不送 LLM
+ *   - 新卡片：tool / qr（二维码图 + 复制）/ weather / wiki / news
+ *   - 头部 🧹 清空上下文（保留界面消息）；🗑 清空对话（全部清 + 重开 intro）
+ *   - intro 次级 chips（Config.AI_EXTRA_CHIPS）
+ *   - 设置弹窗新增「🔍 联网搜索」区块（天气/百科/新闻开关 + 服务商 + 搜索 Key）
  * 会话历史：内存数组 + P1 持久化 outbound_ai_chat（上限 50 条，设置开关默认开）。
- * 设置弹窗：服务商下拉（DeepSeek / 智谱 AI，Config.AI_PROVIDERS）+ 模型联动；Key 沿用 outbound_ai_key。
  * 挂载到 window.App.AI.Chat。
  */
 (function () {
@@ -16,6 +21,7 @@
 
   var Engine = null;   // 延迟获取，避免脚本顺序强依赖
   var LLM = null;
+  var Web = null;
 
   var panel = null;      // 面板根节点（单例，懒创建）
   var msgsEl = null;
@@ -49,12 +55,20 @@
     return lines.join("\n");
   }
 
+  /** pending 类型 → 思考中状态文案 */
+  function pendingLabel(type) {
+    if (type === "weather") return "正在查询天气…";
+    if (type === "news") return "正在联网搜索…";
+    return "正在联网查询…";
+  }
+
   /* ================= 面板构建 ================= */
 
   function ensurePanel() {
     if (panel) return panel;
     Engine = window.App.AI.Engine;
     LLM = window.App.AI.LLM;
+    Web = window.App.AI.Web || null;
     panel = document.createElement("div");
     panel.className = "ai-panel";
     panel.innerHTML =
@@ -62,6 +76,7 @@
         '<span class="ai-header-title">🤖 AI 助手</span>' +
         '<div class="ai-header-btns">' +
           '<button type="button" class="ai-hbtn" data-act="settings" title="AI 设置">⚙</button>' +
+          '<button type="button" class="ai-hbtn" data-act="clearctx" title="清空上下文（保留消息）">🧹</button>' +
           '<button type="button" class="ai-hbtn" data-act="clear" title="清空对话">🗑</button>' +
           '<button type="button" class="ai-hbtn" data-act="close" title="关闭">✕</button>' +
         '</div>' +
@@ -79,11 +94,16 @@
     panel.addEventListener("click", function (e) {
       var chip = e.target.closest(".ai-chip");
       if (chip) { send(chip.textContent); return; }
+      var copy = e.target.closest(".ai-copy");
+      if (copy) { copyToClipboard(copy.getAttribute("data-copy")); return; }
+      var link = e.target.closest(".ai-wiki-link, .ai-news-item a");
+      if (link) { e.preventDefault(); window.open(link.getAttribute("href"), "_blank", "noopener"); return; }
       var btn = e.target.closest(".ai-hbtn");
       if (!btn) return;
       var act = btn.getAttribute("data-act");
       if (act === "close") close();
       else if (act === "clear") doClear();
+      else if (act === "clearctx") doClearCtx();
       else if (act === "settings") openSettings();
     });
     sendBtn.addEventListener("click", function () { send(inputEl.value); });
@@ -113,17 +133,27 @@
     Store.saveAiChat(history);
   }
 
-  /** 渲染首条介绍消息（能力介绍 + 快捷 chips） */
+  /** 渲染首条介绍消息（能力介绍 + 主 chips + 次级 chips） */
   function renderIntro() {
     var intro = {
       type: "help",
       title: "🤖 你好！我是你的进销存助手",
       text:
         "我可以帮你查库存、看低库存预警、统计今日/近 N 天出入库、检索出库记录、库存排行与趋势。\n" +
+        "还能做本地小工具（计算/换算/日期/二维码/快递/文案），以及联网查天气、百科。\n" +
         "无需任何配置即可使用；点击下方快捷问题，或直接输入你的问题。",
       chips: Config.AI_QUICK_CHIPS.slice()
     };
     appendAnswer(intro, null, true);
+    // 次级 chips（第五轮增量）
+    var extra = Config.AI_EXTRA_CHIPS || [];
+    if (extra.length && msgsEl) {
+      msgsEl.insertAdjacentHTML("beforeend",
+        '<div class="ai-chips ai-chips-sub">' + extra.map(function (c) {
+          return '<button type="button" class="ai-chip">' + Util.esc(c) + '</button>';
+        }).join("") + '</div>');
+      scrollBottom();
+    }
   }
 
   /** 渲染恢复的历史消息（纯文本气泡） */
@@ -161,15 +191,32 @@
     return html;
   }
 
-  /** 渲染一条 AI 回复（本地 Answer）；noPersist=true 时不写入历史（如首条介绍） */
+  /** 复制按钮 HTML（data-copy 属性，esc 转义） */
+  function copyBtnHTML(copyText) {
+    return '<button type="button" class="ai-copy" data-copy="' + Util.esc(copyText) + '">复制</button>';
+  }
+
+  /** 渲染一条 AI 回复（本地 Answer，支持 tool/qr/copyText）；noPersist=true 时不写入历史（如首条介绍） */
   function appendAnswer(answer, hint, noPersist) {
     if (!msgsEl) return;
+    var qrHtml = "";
+    if (answer.type === "qr" && answer.dataUrl) {
+      qrHtml =
+        '<div class="ai-qr-card">' +
+          '<img src="' + Util.esc(answer.dataUrl) + '" alt="二维码" class="ai-qr-img" />' +
+          '<div class="ai-qr-content">' + Util.esc(answer.content || "") + '</div>' +
+          (answer.copyText ? copyBtnHTML(answer.copyText) : "") +
+        '</div>';
+    }
+    var copyHtml = (!qrHtml && answer.copyText) ? copyBtnHTML(answer.copyText) : "";
     var bubble =
       '<div class="ai-msg ai-msg-ai">' +
         '<div class="ai-bubble ai-type-' + Util.esc(answer.type || "text") + '">' +
           '<div class="ai-title">' + Util.esc(answer.title || "") + '</div>' +
+          qrHtml +
           (answer.text ? '<div class="ai-text">' + nl2br(Util.esc(answer.text)) + '</div>' : "") +
           (answer.table ? renderTable(answer.table) : "") +
+          copyHtml +
           (hint ? '<div class="ai-hint">' + Util.esc(hint) + '</div>' : "") +
         '</div>' +
       '</div>';
@@ -199,13 +246,105 @@
     scrollBottom();
   }
 
-  /** 渲染 LLM 错误文案（不写入历史） */
+  /** 渲染 LLM/联网错误文案（不写入历史） */
   function appendLlmError(errText) {
     if (!msgsEl) return;
     msgsEl.insertAdjacentHTML("beforeend",
       '<div class="ai-msg ai-msg-ai"><div class="ai-bubble ai-type-error">' +
         '<div class="ai-text">' + Util.esc(errText) + '</div>' +
       '</div></div>');
+    scrollBottom();
+  }
+
+  /** 仅渲染 chips（pending 失败后的本地引导，不产生气泡） */
+  function appendChipsOnly(chips) {
+    if (!msgsEl || !chips || !chips.length) return;
+    msgsEl.insertAdjacentHTML("beforeend",
+      '<div class="ai-chips">' + chips.map(function (c) {
+        return '<button type="button" class="ai-chip">' + Util.esc(c) + '</button>';
+      }).join("") + '</div>');
+    scrollBottom();
+  }
+
+  /** 渲染天气卡（pending 异步结果） */
+  function appendWeather(data) {
+    if (!msgsEl) return;
+    var d = data || {};
+    var tempStr = d.temp != null ? Math.round(d.temp) + "°C" : "-";
+    var maxStr = d.max != null ? Math.round(d.max) + "°" : "-";
+    var minStr = d.min != null ? Math.round(d.min) + "°" : "-";
+    var windStr = d.wind != null ? d.wind + " m/s" : "-";
+    var humStr = d.humidity != null ? d.humidity + "%" : "-";
+    var html =
+      '<div class="ai-msg ai-msg-ai"><div class="ai-bubble ai-type-weather ai-weather-card">' +
+        '<div class="ai-title">' + Util.esc(d.emoji || "🌤") + ' ' + Util.esc(d.city || "") + ' 天气</div>' +
+        '<div class="ai-weather-main">' +
+          '<span class="ai-weather-temp">' + Util.esc(tempStr) + '</span>' +
+          '<span class="ai-weather-desc">' + Util.esc(d.desc || "") + '</span>' +
+        '</div>' +
+        '<div class="ai-weather-meta">最高 ' + Util.esc(maxStr) + ' / 最低 ' + Util.esc(minStr) +
+          ' ｜ 风速 ' + Util.esc(windStr) + ' ｜ 湿度 ' + Util.esc(humStr) + '</div>' +
+      '</div></div>';
+    msgsEl.insertAdjacentHTML("beforeend", html);
+    history.push({
+      role: "ai",
+      text: (d.city || "") + "天气：" + (d.desc || "") + "，当前 " + tempStr +
+        "，最高 " + maxStr + "，最低 " + minStr + "，风速 " + windStr + "，湿度 " + humStr
+    });
+    saveHistory();
+    scrollBottom();
+  }
+
+  /** 渲染百科卡（pending 异步结果） */
+  function appendWiki(data) {
+    if (!msgsEl) return;
+    var d = data || {};
+    var extract = String(d.extract || "").slice(0, 300);
+    var thumb = d.thumb
+      ? '<img class="ai-wiki-thumb" src="' + Util.esc(d.thumb) + '" alt="' + Util.esc(d.title || "词条") + '" />'
+      : "";
+    var link = d.url
+      ? '<a class="ai-wiki-link" href="' + Util.esc(d.url) + '" target="_blank" rel="noopener">查看完整词条 ↗</a>'
+      : "";
+    var html =
+      '<div class="ai-msg ai-msg-ai"><div class="ai-bubble ai-type-wiki ai-wiki-card">' +
+        '<div class="ai-title">🔍 ' + Util.esc(d.title || "") + '（维基百科）</div>' +
+        thumb +
+        '<div class="ai-text">' + nl2br(Util.esc(extract)) + '</div>' +
+        link +
+      '</div></div>';
+    msgsEl.insertAdjacentHTML("beforeend", html);
+    history.push({ role: "ai", text: (d.title || "") + "：" + extract });
+    saveHistory();
+    scrollBottom();
+  }
+
+  /** 渲染新闻列表（pending 异步结果） */
+  function appendNews(data) {
+    if (!msgsEl) return;
+    var items = (data && data.items) || [];
+    if (!items.length) {
+      appendLlmError("没有找到相关新闻。");
+      return;
+    }
+    var list = items.map(function (it, i) {
+      var title = it.title || "（无标题）";
+      var snippet = it.snippet ? '<div class="ai-news-snippet">' + Util.esc(it.snippet) + '</div>' : "";
+      var url = it.url ? it.url : "#";
+      return '<li class="ai-news-item">' +
+        '<a href="' + Util.esc(url) + '" target="_blank" rel="noopener">' + (i + 1) + '. ' + Util.esc(title) + '</a>' +
+        snippet +
+      '</li>';
+    }).join("");
+    var html =
+      '<div class="ai-msg ai-msg-ai"><div class="ai-bubble ai-type-news ai-news-card">' +
+        '<div class="ai-title">📰 新闻搜索 TOP' + items.length + '</div>' +
+        '<ul class="ai-news-list">' + list + '</ul>' +
+      '</div></div>';
+    msgsEl.insertAdjacentHTML("beforeend", html);
+    history.push({ role: "ai", text: "新闻搜索 TOP" + items.length + "：" +
+      items.map(function (it, i) { return (i + 1) + "." + (it.title || ""); }).join("；") });
+    saveHistory();
     scrollBottom();
   }
 
@@ -219,11 +358,12 @@
     scrollBottom();
   }
 
-  /** 正在思考… */
-  function appendThinking() {
+  /** 正在思考…（pending 可细分文案） */
+  function appendThinking(label) {
     if (!msgsEl) return;
     msgsEl.insertAdjacentHTML("beforeend",
-      '<div class="ai-msg ai-msg-ai ai-thinking"><div class="ai-bubble">正在思考…</div></div>');
+      '<div class="ai-msg ai-msg-ai ai-thinking"><div class="ai-bubble">' +
+        Util.esc(label || "正在思考…") + '</div></div>');
     scrollBottom();
   }
 
@@ -241,12 +381,102 @@
     if (panel) panel.classList.toggle("ai-busy", busy);
   }
 
+  /* ================= 复制 ================= */
+
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      Util.toast("已复制");
+    } catch (e) {
+      Util.toast("复制失败", true);
+    }
+    document.body.removeChild(ta);
+  }
+
+  /** 复制到剪贴板（file:// 下回退 textarea + execCommand） */
+  function copyToClipboard(text) {
+    text = String(text == null ? "" : text);
+    if (!text) { Util.toast("没有可复制的内容"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        Util.toast("已复制");
+      }).catch(function () {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
   /* ================= 消息流 ================= */
 
   /**
+   * pending 异步处理：weather/wiki/news → 查开关 → 调 Web.* → 成功渲染卡片 / 失败错误文案 + 本地 chips。
+   * @param {{type:string, pending:boolean, city?:string, topic?:string, query?:string, chips?:string[]}} answer
+   */
+  function handlePending(answer) {
+    var settings = Store.loadSearchSettings();
+    var fail = function (res) {
+      removeThinking();
+      var text = (Web && Web.errText) ? Web.errText(res.err) : "请求失败，请稍后再试";
+      appendLlmError(text);
+      appendChipsOnly(answer.chips);
+      setBusy(false);
+    };
+
+    if (answer.type === "weather") {
+      if (!settings.enabledWeather) { fail({ err: "disabled" }); return; }
+      if (!Web) { fail({ err: "network" }); return; }
+      Web.weather(answer.city).then(function (res) {
+        removeThinking();
+        if (res.ok) appendWeather(res.data);
+        else { appendLlmError(Web.errText(res.err)); appendChipsOnly(answer.chips); }
+        setBusy(false);
+      }).catch(function () { fail({ err: "network" }); });
+      return;
+    }
+
+    if (answer.type === "wiki") {
+      if (!settings.enabledWiki) { fail({ err: "disabled" }); return; }
+      if (!Web) { fail({ err: "network" }); return; }
+      Web.wiki(answer.topic).then(function (res) {
+        removeThinking();
+        if (res.ok) appendWiki(res.data);
+        else { appendLlmError(Web.errText(res.err)); appendChipsOnly(answer.chips); }
+        setBusy(false);
+      }).catch(function () { fail({ err: "network" }); });
+      return;
+    }
+
+    if (answer.type === "news") {
+      if (!settings.enabledNews) { fail({ err: "disabled" }); return; }
+      if (!Web) { fail({ err: "network" }); return; }
+      Web.news(answer.query).then(function (res) {
+        removeThinking();
+        if (res.ok) appendNews(res.data);
+        else { appendLlmError(Web.errText(res.err)); appendChipsOnly(answer.chips); }
+        setBusy(false);
+      }).catch(function () { fail({ err: "network" }); });
+      return;
+    }
+
+    // 未知 pending 类型 → 兜底本地
+    removeThinking();
+    appendAnswer({ type: "tool", title: answer.title || "🤔", text: "该功能暂不可用，请稍后再试。", chips: answer.chips });
+    setBusy(false);
+  }
+
+  /**
    * 发送问题：用户气泡 → 正在思考… → Engine.answer(q)：
-   *  - 非 fallback：直接渲染本地结果（有 Key 也不走 LLM）
-   *  - fallback：无 Key → 渲染帮助文案；有 Key → LLM 真对话，失败回退本地 + hint
+   *  - answer.pending → handlePending（异步联网，仅失败渲染错误，绝不送 LLM）
+   *  - 非 fallback → 本地渲染（appendAnswer，支持 tool/qr/copyText）
+   *  - fallback → 无 Key 本地帮助；有 Key → LLM.chatWithHistory 多轮真对话
    * @param {string} q
    */
   function send(q) {
@@ -254,13 +484,19 @@
     if (!q || busy) return;
     if (inputEl) inputEl.value = "";
     appendUser(q);
-    appendThinking();
     setBusy(true);
 
     var answer = Engine.answer(q);
 
+    if (answer.pending) {
+      appendThinking(pendingLabel(answer.type));
+      handlePending(answer);
+      return;
+    }
+
     if (answer.type !== "fallback") {
-      // 数据类意图：本地直答（准确 + 免费）
+      // 数据/工具类意图：本地直答（准确 + 免费）
+      appendThinking();
       window.setTimeout(function () {
         removeThinking();
         appendAnswer(answer);
@@ -272,6 +508,7 @@
     var key = Store.loadAiKey();
     if (!key) {
       // 无 Key：A 模式，本地兜底帮助文案
+      appendThinking();
       window.setTimeout(function () {
         removeThinking();
         appendAnswer(answer);
@@ -280,12 +517,9 @@
       return;
     }
 
-    // 有 Key：B 模式，携带系统数据上下文走 LLM 真对话
-    var sysCtx = LLM.buildSystemContext();
-    LLM.chat([
-      { role: "system", content: sysCtx },
-      { role: "user", content: q }
-    ]).then(function (res) {
+    // 有 Key：B 模式，携带系统数据上下文 + 最近多轮历史走 LLM 真对话
+    appendThinking();
+    LLM.chatWithHistory(history, q).then(function (res) {
       removeThinking();
       if (res.ok) {
         appendLlmText(res.text);
@@ -304,7 +538,14 @@
 
   /* ================= 头部操作 ================= */
 
-  /** 清空对话（二次确认，复用 UI.confirmDialog） */
+  /** 清空上下文：仅清 LLM 将携带的历史（内存+持久化），界面消息保留展示 */
+  function doClearCtx() {
+    history = [];
+    Store.clearAiChat();
+    Util.toast("已清空上下文（界面消息保留）");
+  }
+
+  /** 清空对话（二次确认，复用 UI.confirmDialog）：全部清 + 重开 intro */
   function doClear() {
     UI.confirmDialog("确定清空当前 AI 对话？", "清空对话").then(function (ok) {
       if (!ok) return;
@@ -327,10 +568,23 @@
     return null;
   }
 
+  /** 按 id 查找搜索服务商（Config.SEARCH_PROVIDERS） */
+  function getSearchProvider(id) {
+    id = String(id || "");
+    var list = Config.SEARCH_PROVIDERS || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) return list[i];
+    }
+    return list[0] || null;
+  }
+
   function openSettings() {
     var key = Store.loadAiKey();
     var settings = Store.loadAiSettings();
     var provider = getProvider(settings.provider) || getProvider(Config.AI_DEFAULT_PROVIDER) || Config.AI_PROVIDERS[0];
+    var searchKey = Store.loadSearchKey();
+    var searchSettings = Store.loadSearchSettings();
+    var searchProvider = getSearchProvider(searchSettings.provider) || (Config.SEARCH_PROVIDERS || [])[0];
     var body = document.createElement("div");
     body.innerHTML =
       '<div class="ai-settings">' +
@@ -361,9 +615,47 @@
           '<label class="ai-check"><input type="checkbox" id="aiPersistChat"' +
             (settings.persistChat === false ? "" : " checked") + ' /> 保存会话历史（最多 50 条）</label>' +
         '</div>' +
+        '<div class="field">' +
+          '<label class="ai-context-hint">上下文：最近 ' + Config.AI_CONTEXT_ROUNDS + ' 轮（' +
+            Config.AI_CONTEXT_MAX_CHARS + ' 字符预算）</label>' +
+        '</div>' +
         '<div class="hint" id="aiProviderHint"></div>' +
+        '<div class="ai-sec-title">🔍 联网搜索</div>' +
+        '<div class="field">' +
+          '<label class="ai-check"><input type="checkbox" id="aiWeatherBox"' +
+            (searchSettings.enabledWeather === false ? "" : " checked") + ' /> 启用天气（免费，无需 Key）</label>' +
+        '</div>' +
+        '<div class="field">' +
+          '<label class="ai-check"><input type="checkbox" id="aiWikiBox"' +
+            (searchSettings.enabledWiki === false ? "" : " checked") + ' /> 启用百科（免费，无需 Key）</label>' +
+        '</div>' +
+        '<div class="field">' +
+          '<label class="ai-check"><input type="checkbox" id="aiNewsBox"' +
+            (searchSettings.enabledNews ? " checked" : "") + ' /> 启用新闻搜索（需 Key）</label>' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>搜索服务商</label>' +
+          '<select id="aiSearchProviderSelect">' +
+            (Config.SEARCH_PROVIDERS || []).map(function (p) {
+              return '<option value="' + Util.esc(p.id) + '"' +
+                ((searchProvider && searchProvider.id === p.id) ? " selected" : "") + ">" +
+                Util.esc(p.label) + "</option>";
+            }).join("") +
+          '</select>' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>搜索 API Key（可选，新闻搜索用）</label>' +
+          '<input type="password" id="aiSearchKeyInput" class="ai-key-input" placeholder="' +
+            (searchKey ? "已保存：" + Util.esc(maskKey(searchKey)) : "粘贴搜索 API Key（可选）") +
+            '" autocomplete="off" />' +
+        '</div>' +
+        '<div class="ai-sec-note-search">🌐 天气/百科免费无需 Key；新闻搜索需自行申请 Tavily Key（免费额度 1000 次/月）。</div>' +
+        '<div class="ai-sec-note-search lock">🔒 搜索 API Key 仅保存在本机浏览器（localStorage），不会上传到服务器，也不会写入代码或仓库。</div>' +
+        '<div class="ai-settings-actions">' +
+          '<button type="button" class="btn ghost sm" id="aiClearSearchKeyBtn">清除搜索 Key</button>' +
+        '</div>' +
         '<div class="ai-sec-note">🔒 API Key 仅保存在本机浏览器（localStorage），不会上传到服务器，也不会写入代码或仓库；' +
-          'AI 数据查询仅在提问时发送给所选服务商；不同服务商需填写对应服务商的 API Key（DeepSeek 为 sk-…，智谱 AI 为 {id}.{secret}）。</div>' +
+          'AI 数据查询仅在提问时发送给所选服务商；不同服务商需填写对应服务商的 API Key（DeepSeek 与智谱 AI 的 Key 格式不同）。</div>' +
         '<div class="ai-settings-actions">' +
           '<button type="button" class="btn ghost sm" id="aiTestBtn">测试连接</button>' +
           '<button type="button" class="btn ghost sm" id="aiClearKeyBtn">清除 Key</button>' +
@@ -381,6 +673,11 @@
     var persistBox = mBody.querySelector("#aiPersistChat");
     var hintEl = mBody.querySelector("#aiProviderHint");
     var testResult = mBody.querySelector("#aiTestResult");
+    var searchKeyInput = mBody.querySelector("#aiSearchKeyInput");
+    var searchProviderSelect = mBody.querySelector("#aiSearchProviderSelect");
+    var weatherBox = mBody.querySelector("#aiWeatherBox");
+    var wikiBox = mBody.querySelector("#aiWikiBox");
+    var newsBox = mBody.querySelector("#aiNewsBox");
 
     /** 根据当前服务商渲染模型下拉 + 提示文案；服务商切换时模型自动切到该服务商首模型 */
     function renderModels() {
@@ -409,6 +706,18 @@
       settings2.baseUrl = p.baseUrl;   // 与服务商保持一致，避免旧 baseUrl 残留串服务商
       settings2.persistChat = persistBox.checked;
       Store.saveAiSettings(settings2);
+
+      // 联网搜索区块
+      var sv = (searchKeyInput.value || "").trim();
+      if (sv) Store.saveSearchKey(sv);
+      var sp = getSearchProvider(searchProviderSelect.value) || (Config.SEARCH_PROVIDERS || [])[0];
+      Store.saveSearchSettings({
+        provider: sp ? sp.id : "tavily",
+        enabledWeather: weatherBox.checked,
+        enabledWiki: wikiBox.checked,
+        enabledNews: newsBox.checked
+      });
+
       UI.Modal.hide();
       Util.toast("AI 设置已保存" + (val ? "（已更新 Key）" : ""));
     };
@@ -418,6 +727,15 @@
         Store.clearAiKey();
         UI.Modal.hide();
         Util.toast("已清除 API Key，回到本地问答");
+      });
+    };
+    mBody.querySelector("#aiClearSearchKeyBtn").onclick = function () {
+      UI.confirmDialog("确定清除本机保存的搜索 API Key？清除后新闻搜索将不可用。", "清除搜索 API Key").then(function (ok) {
+        if (!ok) return;
+        Store.clearSearchKey();
+        searchKeyInput.value = "";
+        searchKeyInput.placeholder = "粘贴搜索 API Key（可选）";
+        Util.toast("已清除搜索 API Key");
       });
     };
     mBody.querySelector("#aiTestBtn").onclick = function () {
@@ -464,6 +782,7 @@
     renderEmbedded: renderEmbedded,
     close: close,
     send: send,
-    clear: doClear
+    clear: doClear,
+    clearContext: doClearCtx
   };
 })();

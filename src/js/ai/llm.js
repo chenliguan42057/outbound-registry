@@ -38,14 +38,17 @@
 
   /**
    * 构建有界系统数据上下文（控制 token 成本）：
-   * 库存 TOP15、低库存货品数、今日出库件数、最近 10 条记录摘要、本地记录总数。
+   * 角色/边界/风格指令 + 库存 TOP15、低库存货品数、今日出库件数、最近 10 条记录摘要、本地记录总数。
+   * 数据段结构保持 v4 不变（兼容 v4 冒烟）。
    * @returns {string}
    */
   function buildSystemContext() {
     var lines = [];
     var sum = Stock.summarize(State.list).slice().sort(function (a, b) { return b.stock - a.stock; });
     var top = sum.slice(0, Config.AI_CONTEXT_TOP_N);
-    lines.push("你是进销存管理系统的 AI 助手，以下为系统当前数据上下文（仅作参考）：");
+    lines.push("你是「进销存管理系统」的 AI 助手。系统数据上下文如下，仅作参考。");
+    lines.push("若用户问题属于库存/出入库统计/记录查询，请优先依据上下文数据回答；上下文无法给出准确数字时，明确说明并建议使用快捷问题（如「查库存」）获取准确数据。");
+    lines.push("回复使用中文，保持简洁、口语化；涉及数量时带单位。");
     lines.push("【当前库存 TOP" + top.length + "】");
     top.forEach(function (x) { lines.push("- " + x.name + "：" + x.stock + "件"); });
     var low = sum.filter(function (x) { return x.stock < Config.LOW_STOCK_THRESHOLD; });
@@ -72,6 +75,52 @@
     });
     lines.push("【本地记录总数】" + (State.list || []).length);
     return lines.join("\n");
+  }
+
+  /** 单条消息截断（超长加省略号） */
+  function truncate(s, max) {
+    s = String(s == null ? "" : s);
+    if (s.length <= max) return s;
+    return s.slice(0, max) + "…";
+  }
+
+  /**
+   * 构建多轮上下文消息（第五轮增量）：
+   *   system（buildSystemContext）+ 最近 ROUNDS*2 条历史（ai→assistant 映射，单条截断 300）+
+   *   累计超预算从最旧逐条丢弃 + 末尾当前问题（完整不截断）。
+   * @param {Array<{role:string, text:string}>} history 会话历史 [{role:"user"|"ai", text}]
+   * @param {string} question 当前问题
+   * @returns {Array<{role:string, content:string}>}
+   */
+  function buildMessages(history, question) {
+    var msgs = [{ role: "system", content: buildSystemContext() }];
+    var hist = (history || []).slice(-Config.AI_CONTEXT_ROUNDS * 2);
+    var mapped = hist.map(function (m) {
+      return {
+        role: m.role === "ai" ? "assistant" : "user",
+        content: truncate(m.text, Config.AI_CONTEXT_MAX_MSG_CHARS)
+      };
+    });
+    var budget = Config.AI_CONTEXT_MAX_CHARS;
+    var total = mapped.reduce(function (s, m) { return s + m.content.length; }, 0);
+    while (mapped.length && total > budget) {
+      total -= mapped[0].content.length;
+      mapped.shift();
+    }
+    msgs = msgs.concat(mapped);
+    msgs.push({ role: "user", content: String(question == null ? "" : question) });
+    return msgs;
+  }
+
+  /**
+   * 带历史的多轮对话：buildMessages(history, question) → chat。
+   * @param {Array<{role:string, text:string}>} history
+   * @param {string} question
+   * @param {{key?: string, provider?: string, baseUrl?: string, model?: string, timeout?: number}} [opts]
+   * @returns {Promise<{ok: boolean, text?: string, err?: string}>}
+   */
+  function chatWithHistory(history, question, opts) {
+    return chat(buildMessages(history, question), opts);
   }
 
   /**
@@ -168,6 +217,8 @@
   window.App.AI = window.App.AI || {};
   window.App.AI.LLM = {
     chat: chat,
+    chatWithHistory: chatWithHistory,
+    buildMessages: buildMessages,
     buildSystemContext: buildSystemContext,
     testConnection: testConnection,
     errText: errText

@@ -75,6 +75,27 @@
     AI_CONTEXT_RECENT: 10,
     AI_QUICK_CHIPS: ["查库存", "今日出库", "低库存", "最近出库记录", "帮我看看报表"],
 
+    /* AI 多轮上下文常量（第五轮增量） */
+    AI_CONTEXT_ROUNDS: 6,          // 保留最近 6 轮（用户+AI 各算一条，最多 12 条消息）
+    AI_CONTEXT_MAX_CHARS: 3500,    // 历史消息总字符预算
+    AI_CONTEXT_MAX_MSG_CHARS: 300, // 单条历史消息截断上限
+
+    /* 联网搜索（第五轮增量；outbound_search_key / outbound_search_settings 仅存 localStorage，
+       绝不入代码/仓库/云端 payload/CSV，与 outbound_ai_key 同等安全规则） */
+    SEARCH_KEY_KEY: "outbound_search_key",
+    SEARCH_SETTINGS_KEY: "outbound_search_settings",
+    SEARCH_PROVIDERS: [
+      { id: "tavily", label: "Tavily", baseUrl: "https://api.tavily.com" },
+      { id: "serpapi", label: "SerpAPI", baseUrl: "https://serpapi.com" }
+    ],
+    WEB_TIMEOUT_MS: 10000,         // 天气/百科超时
+    WEB_NEWS_TIMEOUT_MS: 15000,    // 新闻超时
+    WEB_WEATHER_GEO_URL: "https://geocoding-api.open-meteo.com/v1/search",
+    WEB_WEATHER_FORECAST_URL: "https://api.open-meteo.com/v1/forecast",
+    WEB_WIKI_URL: "https://zh.wikipedia.org/api/rest_v1/page/summary",
+    WEB_NEWS_URL: "https://api.tavily.com",
+    AI_EXTRA_CHIPS: ["计算", "单位换算", "今天几号", "北京天气", "生成二维码", "快递查询", "写个催货短信"],
+
     /* 认证常量（会话级内存标志，不落盘；旧 outbound_auth 残留不读取不清理） */
     PASSWORD: "1111",
     MAX_PW_FAILS: 5,                     // 连续 5 次失败
