@@ -1,12 +1,13 @@
 /**
  * components.js — 可复用 UI 组件
- * SVG 图标 / Modal / Confirm 弹窗 / 密码弹窗 / CollapseSection / ProductPicker / PhotoUpload
+ * SVG 图标 / Modal / Confirm 弹窗 / 密码弹窗 / 登录弹窗 / CollapseSection / ProductPicker / PhotoUpload
  */
 (function () {
   'use strict';
 
   var Util = window.App.Util;
   var Config = window.App.Config;
+  var Auth = window.App.Auth;
   var $ = Util.$;
 
   /* ================= SVG 图标 ================= */
@@ -132,6 +133,42 @@
       function ok() {
         if (window.App.Auth.checkPw(input.value)) { Modal.hide(); resolve(true); }
         else { errEl.textContent = "密码错误，请重试"; input.select(); }
+      }
+      mBody.querySelector('[data-act="ok"]').onclick = ok;
+      mBody.querySelector('[data-act="cancel"]').onclick = function () { Modal.hide(); resolve(false); };
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") ok(); });
+      setTimeout(function () { input.focus(); }, 50);
+    });
+  }
+
+  /** 登录弹窗（路由守卫 / 落地页管理入口）：Promise<boolean>，成功返回 true */
+  function showLoginDialog() {
+    return new Promise(function (resolve) {
+      var body =
+        '<div class="login-dialog">' +
+          '<div class="login-lock">' + icon("lock", 26) + '</div>' +
+          '<p class="login-sub">请输入访问密码进入管理</p>' +
+          '<input type="password" class="pw-input" id="loginPw" placeholder="请输入密码" autocomplete="off" />' +
+          '<div class="pw-err" id="loginErr"></div>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+            '<button type="button" class="btn sm" data-act="ok">进入</button>' +
+          '</div>' +
+        '</div>';
+      Modal.show("登录", body, { width: "320px" });
+      var mBody = Modal.body();
+      var input = mBody.querySelector("#loginPw");
+      var errEl = mBody.querySelector("#loginErr");
+      function ok() {
+        var remain = Auth.remainingLock();
+        if (remain > 0) {
+          errEl.textContent = "尝试次数过多，请 " + Math.ceil(remain / 1000) + " 秒后再试";
+          input.select();
+          return;
+        }
+        var res = Auth.login(input.value);
+        if (res.ok) { Modal.hide(); resolve(true); }
+        else { errEl.textContent = res.err || "密码错误，请重试"; input.select(); }
       }
       mBody.querySelector('[data-act="ok"]').onclick = ok;
       mBody.querySelector('[data-act="cancel"]').onclick = function () { Modal.hide(); resolve(false); };
@@ -417,6 +454,7 @@
     Modal: Modal,
     confirmDialog: confirmDialog,
     pwDialog: pwDialog,
+    showLoginDialog: showLoginDialog,
     collapseSection: collapseSection,
     bindCollapse: bindCollapse,
     ProductPicker: ProductPicker,

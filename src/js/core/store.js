@@ -1,5 +1,6 @@
 /**
- * store.js — localStorage 封装 + AppState（记录列表 / 导航 / 认证 / 草稿 / 搜索条件）
+ * store.js — localStorage 封装 + AppState（记录列表 / 导航 / 草稿 / 搜索条件）
+ * 认证改为会话级内存标志（auth.js），本模块不再提供任何认证存取。
  */
 (function () {
   'use strict';
@@ -25,11 +26,6 @@
     /* ---- 记录（冻结键 outbound_records_v2） ---- */
     loadRecords: function () { return Store.get(Config.STORE_KEY, []); },
     saveRecords: function (list) { Store.set(Config.STORE_KEY, list); },
-
-    /* ---- 认证（记住登录） ---- */
-    loadAuth: function () { return Store.get(Config.AUTH_KEY, null); },
-    saveAuth: function (auth) { Store.set(Config.AUTH_KEY, auth); },
-    clearAuth: function () { Store.remove(Config.AUTH_KEY); },
 
     /* ---- 导航状态（最后停留目录项 / 折叠状态） ---- */
     loadNav: function () {

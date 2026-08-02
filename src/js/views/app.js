@@ -1,6 +1,7 @@
 /**
- * app.js — 应用壳：左侧导航 + 顶栏 + 内容区 + 模块注册表 + 状态记忆恢复
- * 模块 id 与 window.App.Views.* 一一对应。
+ * app.js — Windows 桌面管理壳：窗口标题栏 + 深蓝顶栏 + 深色侧栏（7 菜单）+ 内容区
+ * 底部状态栏「就绪｜本地N条｜已同步HH:MM」+ 导入数据（JSON 数组或 {records:[]}）。
+ * 模块 id 与子路由映射：#/app/<id>；「出库管理」→ Views.outpos。
  */
 (function () {
   'use strict';
@@ -11,165 +12,222 @@
   var State = window.App.State;
   var Router = window.App.Router;
   var Cloud = window.App.Cloud;
+  var Records = window.App.Records;
+  var Config = window.App.Config;
 
   var NAV_ITEMS = [
-    { id: "out", icon: "out", label: "出库登记" },
-    { id: "in", icon: "in", label: "入库登记" },
+    { id: "dashboard", icon: "report", label: "仪表盘" },
     { id: "stock", icon: "stock", label: "库存查询" },
-    { id: "records", icon: "records", label: "记录管理" },
-    { id: "report", icon: "report", label: "报表统计" },
-    { id: "sync", icon: "sync", label: "云端同步" }
+    { id: "in", icon: "in", label: "入库管理" },
+    { id: "out", icon: "out", label: "出库管理" },
+    { id: "in-records", icon: "records", label: "入库记录" },
+    { id: "out-records", icon: "records", label: "出库记录" },
+    { id: "report", icon: "report", label: "报表统计" }
   ];
 
+  /* 模块 id → 视图注册名 */
+  var VIEW_MAP = {
+    dashboard: "dashboard",
+    stock: "stock",
+    in: "in",
+    out: "outpos",
+    "in-records": "inRecords",
+    "out-records": "outRecords",
+    report: "report"
+  };
+
   var MODULE_TITLES = {
-    out: "出库登记", in: "入库登记", stock: "库存查询",
-    records: "记录管理", report: "报表统计", sync: "云端同步"
+    dashboard: "仪表盘", stock: "库存查询", in: "入库管理", out: "出库管理",
+    "in-records": "入库记录", "out-records": "出库记录", report: "报表统计"
   };
 
   var shellEl = null;
+  var statusText = "就绪";
+  var statusIsErr = false;
 
-  /** 渲染应用壳；已挂载则仅刷新标题并保持模块状态 */
-  function render() {
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+  /** 渲染应用壳；已挂载则仅切换模块并保持壳状态 */
+  function render(module) {
     var el = Util.$("view-app");
     if (!el) return;
     if (State.appMounted && shellEl && document.body.contains(shellEl)) {
       el.style.display = "";
-      updateTitle();
+      mount(module || State.nav.active || "out");
       return;
     }
     State.appMounted = true;
     el.innerHTML =
-      '<div class="app-shell" id="appShell">' +
-        '<div class="app-overlay" id="appOverlay"></div>' +
-        '<aside class="app-sidebar" id="appSidebar">' +
-          '<div class="sidebar-head">' +
-            '<span class="sidebar-logo">' + UI.icon("box", 22) + '</span>' +
-            '<span class="sidebar-brand">出入库登记</span>' +
+      '<div class="win-shell" id="winShell">' +
+        '<div class="win-overlay" id="winOverlay"></div>' +
+        '<div class="win-titlebar">' +
+          '<span class="win-titlebar-title">' + Util.esc(Config.BRAND_TITLE) + '</span>' +
+          '<div class="win-titlebar-btns">' +
+            '<button type="button" class="win-titlebar-btn" id="winMin" title="最小化">&#8211;</button>' +
+            '<button type="button" class="win-titlebar-btn" id="winMax" title="最大化">&#9633;</button>' +
+            '<button type="button" class="win-titlebar-btn close" id="winClose" title="关闭">&#10005;</button>' +
           '</div>' +
-          '<nav class="sidebar-nav" id="sidebarNav"></nav>' +
-          '<div class="sidebar-foot">' +
-            '<button type="button" class="sidebar-collapse-btn" id="sidebarCollapse" title="折叠/展开">' + UI.icon("menu", 18) + '</button>' +
-          '</div>' +
-        '</aside>' +
-        '<div class="app-main">' +
-          '<header class="app-topbar">' +
-            '<button type="button" class="topbar-btn" id="topbarMenu" title="菜单">' + UI.icon("menu", 20) + '</button>' +
-            '<h2 class="topbar-title" id="topbarTitle">出库登记</h2>' +
-            '<div class="topbar-sync" id="topbarSync"></div>' +
-            '<button type="button" class="topbar-btn" id="topbarBack" title="返回落地页">' + UI.icon("back", 20) + '</button>' +
-          '</header>' +
-          '<main class="app-content" id="appContent"></main>' +
+        '</div>' +
+        '<div class="win-topbar">' +
+          '<button type="button" class="win-topbar-menu" id="winMenu" title="菜单">' + UI.icon("menu", 20) + '</button>' +
+          '<span class="win-topbar-title">' + Util.esc(Config.BRAND_TITLE) + '</span>' +
+        '</div>' +
+        '<div class="win-main">' +
+          '<aside class="win-sidebar" id="winSidebar">' +
+            '<nav class="win-sidebar-nav" id="winNav"></nav>' +
+            '<div class="win-sidebar-foot">' +
+              '<div class="win-status" id="winStatus">就绪</div>' +
+              '<button type="button" class="win-import-btn" id="winImport">导入数据</button>' +
+              '<input type="file" id="winImportFile" accept="application/json,.json" hidden />' +
+            '</div>' +
+          '</aside>' +
+          '<div class="win-content" id="winContent"></div>' +
         '</div>' +
       '</div>';
-    shellEl = Util.$("appShell");
+    shellEl = Util.$("winShell");
     renderNav();
     wireShell();
-    applyCollapsed(State.nav.sidebarCollapsed);
-    mount(State.nav.active || "out");
-    // 首次进入自动拉取云端
+    mount(module || State.nav.active || "out");
     autoSync();
-    // 回到页面自动同步，缓解微信等内置浏览器缓存导致数据不同步
-    document.addEventListener("visibilitychange", function () {
-      if (!document.hidden && Router.current() === "/app") autoSync();
-    });
   }
 
   function renderNav() {
-    var navEl = Util.$("sidebarNav");
+    var navEl = Util.$("winNav");
     navEl.innerHTML = NAV_ITEMS.map(function (item) {
-      return '<a href="#/app" class="sidebar-item" data-mod="' + item.id + '" title="' + item.label + '">' +
-        '<span class="sidebar-item-icon">' + UI.icon(item.icon, 19) + '</span>' +
-        '<span class="sidebar-item-label">' + item.label + '</span>' +
+      return '<a href="#/app/' + item.id + '" class="win-sidebar-item" data-mod="' + item.id + '">' +
+        '<span class="win-sidebar-item-icon">' + UI.icon(item.icon, 18) + '</span>' +
+        '<span class="win-sidebar-item-label">' + item.label + '</span>' +
       '</a>';
     }).join("");
     navEl.addEventListener("click", function (e) {
-      var a = e.target.closest(".sidebar-item");
+      var a = e.target.closest(".win-sidebar-item");
       if (!a) return;
       e.preventDefault();
-      mount(a.getAttribute("data-mod"));
+      Router.navigate("/app/" + a.getAttribute("data-mod"));
     });
   }
 
   function wireShell() {
-    Util.$("topbarMenu").addEventListener("click", toggleSidebar);
-    Util.$("sidebarCollapse").addEventListener("click", function () {
-      if (window.innerWidth <= 768) { closeDrawer(); return; }
-      State.nav.sidebarCollapsed = !State.nav.sidebarCollapsed;
-      Store.saveNav(State.nav);
-      applyCollapsed(State.nav.sidebarCollapsed);
-    });
-    Util.$("topbarBack").addEventListener("click", function () {
+    Util.$("winClose").addEventListener("click", function () {
       closeDrawer();
       Router.navigate("/");
     });
-    Util.$("appOverlay").addEventListener("click", closeDrawer);
-  }
-
-  function applyCollapsed(collapsed) {
-    shellEl.classList.toggle("sidebar-collapsed", !!collapsed);
-  }
-
-  /** 顶栏汉堡 / 侧栏折叠按钮：桌面折叠窄栏，移动端开关抽屉 */
-  function toggleSidebar() {
-    if (window.innerWidth <= 768) {
-      shellEl.classList.toggle("drawer-open");
-    } else {
-      State.nav.sidebarCollapsed = !State.nav.sidebarCollapsed;
-      Store.saveNav(State.nav);
-      applyCollapsed(State.nav.sidebarCollapsed);
-    }
-  }
-
-  function closeDrawer() {
-    if (shellEl) shellEl.classList.remove("drawer-open");
+    Util.$("winMin").addEventListener("click", function () {
+      /* 装饰按钮：无实际窗口行为 */
+    });
+    Util.$("winMax").addEventListener("click", function () {
+      if (shellEl) shellEl.classList.toggle("win-maximized");
+    });
+    Util.$("winMenu").addEventListener("click", toggleDrawer);
+    Util.$("winOverlay").addEventListener("click", closeDrawer);
+    Util.$("winImport").addEventListener("click", function () {
+      Util.$("winImportFile").click();
+    });
+    Util.$("winImportFile").addEventListener("change", handleImport);
   }
 
   /** 挂载模块：切换内容区 + 高亮导航 + 记忆最后停留项 */
   function mount(moduleName) {
-    var view = window.App.Views[moduleName];
+    var viewName = VIEW_MAP[moduleName] || "outpos";
+    var view = window.App.Views[viewName];
     if (!view) return;
     State.nav.active = moduleName;
     Store.saveNav(State.nav);
-    var items = Util.$("sidebarNav").querySelectorAll(".sidebar-item");
+    var items = Util.$("winNav").querySelectorAll(".win-sidebar-item");
     items.forEach(function (it) {
       it.classList.toggle("active", it.getAttribute("data-mod") === moduleName);
     });
-    updateTitle();
     closeDrawer();
-    var content = Util.$("appContent");
+    var content = Util.$("winContent");
     var viewEl = document.createElement("div");
     viewEl.className = "module-view";
     content.innerHTML = "";
     content.appendChild(viewEl);
     view.render(viewEl);
+    updateStatusBar();
   }
 
-  function updateTitle() {
-    var t = Util.$("topbarTitle");
-    if (t) t.textContent = MODULE_TITLES[State.nav.active] || "出入库登记";
+  /* 底部状态栏：就绪｜本地N条｜已同步HH:MM */
+  function updateStatusBar() {
+    var el = Util.$("winStatus");
+    if (!el) return;
+    var sync = State.lastSync
+      ? "已同步" + pad2(State.lastSync.getHours()) + ":" + pad2(State.lastSync.getMinutes())
+      : "未同步";
+    el.textContent = (statusText || "就绪") + "｜本地" + State.list.length + "条｜" + sync;
+    el.className = "win-status" + (statusIsErr ? " err" : "");
   }
 
-  /** 顶栏同步状态 */
+  /** 同步状态（out/in/outpos/records 调用）：更新底部状态栏 */
   function setSyncStatus(text, isErr) {
-    var el = Util.$("topbarSync");
-    if (el) {
-      el.textContent = text || "";
-      el.className = "topbar-sync" + (isErr ? " err" : "");
-    }
+    statusText = text || "就绪";
+    statusIsErr = !!isErr;
+    updateStatusBar();
   }
 
-  /** 自动拉取云端；完成后仅刷新数据型模块（不重置表单） */
+  /** 首次进入自动拉取云端；完成后刷新数据型模块 */
   function autoSync() {
     if (!Cloud.hasToken()) {
-      setSyncStatus("未配置云端令牌（本机模式）", true);
+      setSyncStatus("本机模式", true);
       return;
     }
-    Cloud.syncPull({ onStatus: setSyncStatus }).then(function (res) {
+    setSyncStatus("同步中…", false);
+    Cloud.syncPull({ onStatus: function () {} }).then(function (res) {
+      if (res.ok) setSyncStatus("就绪", false);
+      else setSyncStatus("同步失败", true);
       var cur = State.nav.active;
-      if (cur && window.App.Views[cur] && window.App.Views[cur].refresh) {
-        window.App.Views[cur].refresh();
-      }
+      var viewName = VIEW_MAP[cur];
+      var view = viewName && window.App.Views[viewName];
+      if (view && view.refresh) view.refresh();
+      updateStatusBar();
+    }).catch(function () {
+      setSyncStatus("同步失败", true);
     });
+  }
+
+  /** 导入 JSON：数组或 {records:[]} → mergeAndSort 合并 → 保存 → 刷新 → 有 token 自动推送 */
+  function handleImport() {
+    var input = Util.$("winImportFile");
+    var file = input.files && input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        var arr = Array.isArray(data) ? data : (data && Array.isArray(data.records) ? data.records : null);
+        if (!arr || !arr.length) { Util.toast("导入文件为空或格式不正确", true); return; }
+        var valid = arr.filter(function (r) {
+          return r && typeof r === "object" && (r.id || r.time) && Array.isArray(r.items);
+        });
+        if (!valid.length) { Util.toast("未识别到有效记录", true); return; }
+        State.list = Records.mergeAndSort(State.list, valid);
+        State.save();
+        Util.toast("已导入 " + valid.length + " 条记录");
+        var cur = State.nav.active;
+        var viewName = VIEW_MAP[cur];
+        var view = viewName && window.App.Views[viewName];
+        if (view && view.refresh) view.refresh();
+        else mount(cur);
+        updateStatusBar();
+        if (Cloud.hasToken()) {
+          Cloud.pushAllLocal().then(function (res) {
+            setSyncStatus(res.fail > 0 ? "部分推送失败" : "已推送云端", res.fail > 0);
+          });
+        }
+      } catch (e) {
+        Util.toast("导入失败：" + e.message, true);
+      }
+      input.value = "";
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  function toggleDrawer() {
+    if (shellEl) shellEl.classList.toggle("drawer-open");
+  }
+
+  function closeDrawer() {
+    if (shellEl) shellEl.classList.remove("drawer-open");
   }
 
   window.App = window.App || {};
@@ -178,6 +236,7 @@
     render: render,
     mount: mount,
     setSyncStatus: setSyncStatus,
+    updateStatusBar: updateStatusBar,
     closeDrawer: closeDrawer
   };
 })();

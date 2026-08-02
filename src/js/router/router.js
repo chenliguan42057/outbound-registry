@@ -1,25 +1,37 @@
 /**
- * router.js — hash 路由：#/ 落地页、#/verify 验证页、#/app 应用页
- * 未登录访问 #/app 自动重定向 #/verify；index.html 恒为入口。
+ * router.js — hash 路由：#/ 落地页（免密出库表单）、#/app[/module] 管理页
+ * 子路由：#/app/xxx → {base:"app", module:"xxx"}；#/app 等价 #/app/out；未知一律回落 #/。
+ * 未登录访问 #/app* → 记录 pendingHash → UI.showLoginDialog()（Promise）→ 成功跳回、取消回 #/。
+ * 旧 #/verify 链接（首版）不再存在，兼容回落 #/。
  */
 (function () {
   'use strict';
 
   var Auth = window.App.Auth;
+  var State = window.App.State;
+  /* 注意：UI（components.js）按脚本顺序在 router 之后加载，
+     因此此处不捕获 UI 引用，使用时经 window.App.UI 延迟访问。 */
 
-  var ROUTES = {
-    "/": "landing",
-    "/verify": "verify",
-    "/app": "app"
-  };
-
-  var current = "";
+  var current = null;
+  var pendingHash = null;   // 未登录时记录的目标 hash，登录成功后跳回
   var started = false;
 
-  /** 解析当前 hash 到合法路由（未知一律回落地页） */
+  /* 管理页合法模块（与 app.js NAV_ITEMS 一一对应） */
+  var KNOWN_MODULES = {
+    dashboard: 1, stock: 1, in: 1, out: 1,
+    "in-records": 1, "out-records": 1, report: 1
+  };
+
+  /** 解析当前 hash 到合法路由对象 */
   function parse() {
     var raw = location.hash.replace(/^#/, "") || "/";
-    return ROUTES[raw] ? raw : "/";
+    var parts = raw.split("/").filter(function (s) { return s; });
+    if (parts.length && parts[0] === "app") {
+      var module = parts[1] || "out";
+      if (!KNOWN_MODULES[module]) module = "out";
+      return { base: "app", module: module };
+    }
+    return { base: "landing" };
   }
 
   /** 跳转（写入 location.hash，触发 hashchange） */
@@ -27,22 +39,42 @@
     location.hash = hash;
   }
 
-  /** 路由处理：切换容器显示 + 调用对应视图渲染 */
+  /** 切换容器显示 */
+  function showView(id) {
+    ["view-landing", "view-app"].forEach(function (v) {
+      var el = document.getElementById(v);
+      if (el) el.style.display = (v === id) ? "" : "none";
+    });
+  }
+
+  /** 路由处理：守卫弹登录框 + 子路由驱动 mount */
   function handle() {
     var route = parse();
-    if (route === "/app" && !Auth.isAuthed()) {
-      if (location.hash !== "#/verify") location.hash = "/verify";
+
+    // 守卫：未认证访问管理页 → 记录目标并弹登录框
+    if (route.base === "app" && !Auth.isAuthed()) {
+      pendingHash = location.hash || "#/app/out";
+      window.App.UI.showLoginDialog().then(function (ok) {
+        var target = pendingHash;
+        pendingHash = null;
+        if (ok && target) navigate(target);
+        else navigate("/");
+      });
       return;
     }
+
     current = route;
-    var name = ROUTES[route];
-    var view = window.App.Views[name];
-    if (!view) return;
-    ["view-landing", "view-verify", "view-app"].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.style.display = (id === "view-" + name) ? "" : "none";
-    });
-    view.render();
+
+    if (route.base === "landing") {
+      showView("view-landing");
+      window.App.Views.landing.render();
+      return;
+    }
+
+    showView("view-app");
+    var module = route.module || "out";
+    if (State.appMounted) window.App.Views.app.mount(module);
+    else window.App.Views.app.render(module);
   }
 
   function start() {
@@ -59,11 +91,11 @@
 
   window.App = window.App || {};
   window.App.Router = {
-    routes: ROUTES,
     current: function () { return current; },
     navigate: navigate,
     start: start,
     handle: handle,
-    guard: guard
+    guard: guard,
+    parse: parse
   };
 })();

@@ -1,165 +1,174 @@
 /* ============================================================
-   layout.css — 应用壳布局：侧栏 + 顶栏 + 内容区 + 抽屉式响应式 + 折叠窄栏
+   layout.css — Windows 桌面管理壳布局
+   .win-shell（窗口框）→ 标题栏 / 深蓝顶栏 / 主区（深色侧栏 + 内容区）
+   侧栏激活态：左 3px 蓝色竖线 + 文字 #0b60c4 + 浅蓝底 #e8f1fb
+   ≤768px：侧栏抽屉式
    ============================================================ */
 
-:root {
-  --sidebar-w: 232px;
-  --sidebar-w-collapsed: 64px;
-}
-
-.app-shell { display: flex; min-height: 100vh; }
-
-/* ---------- 侧栏 ---------- */
-.app-sidebar {
-  width: var(--sidebar-w);
-  background: #fff;
-  border-right: 1px solid var(--border);
+.win-shell {
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  transition: width .2s, transform .25s ease;
-  z-index: 40;
-  flex-shrink: 0;
+  overflow: hidden;
+  background: #fff;
 }
-.app-sidebar .sidebar-head {
+
+/* ---------- 窗口标题栏 ---------- */
+.win-titlebar {
+  height: 38px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 16px 18px;
+  justify-content: space-between;
+  background: #f0f2f7;
   border-bottom: 1px solid var(--border);
-  color: var(--primary);
-  font-weight: 600;
+  padding: 0 6px 0 14px;
+  user-select: none;
+  flex-shrink: 0;
 }
-.sidebar-logo { display: inline-flex; flex: 0 0 auto; }
-.sidebar-brand { font-size: 15px; white-space: nowrap; overflow: hidden; }
-.sidebar-nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px 8px;
+.win-titlebar-title { font-size: 13px; color: var(--muted); font-weight: 500; }
+.win-titlebar-btns { display: flex; gap: 2px; }
+.win-titlebar-btn {
+  width: 38px;
+  height: 30px;
+  border: none;
+  background: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+}
+.win-titlebar-btn:hover { background: rgba(0, 0, 0, .06); color: var(--text); }
+.win-titlebar-btn.close:hover { background: var(--danger); color: #fff; }
+
+/* ---------- 深蓝顶栏 ---------- */
+.win-topbar {
+  height: 50px;
+  background: var(--primary);   /* #0b60c4 */
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  flex-shrink: 0;
+}
+.win-topbar-title { font-size: 16px; font-weight: 600; }
+.win-topbar-menu {
+  display: none;
+  border: none;
+  background: none;
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-right: 4px;
+}
+.win-topbar-menu:hover { background: rgba(255, 255, 255, .14); }
+
+/* ---------- 主区 ---------- */
+.win-main { flex: 1; display: flex; min-height: 0; }
+
+.win-sidebar {
+  width: 232px;
+  background: var(--sidebar-bg);   /* #202733 */
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  flex-shrink: 0;
 }
-.sidebar-item {
+
+.win-sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 0;
+}
+.win-sidebar-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius-m);
-  color: var(--text);
+  padding: 11px 16px 11px 13px;
+  color: #aab4c2;
   font-size: 14px;
-  white-space: nowrap;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  user-select: none;
   transition: background .15s, color .15s;
 }
-.sidebar-item:hover { background: var(--chip); }
-.sidebar-item.active { background: var(--primary); color: #fff; }
-.sidebar-item-icon { flex: 0 0 auto; display: inline-flex; }
-.sidebar-foot {
-  padding: 12px;
-  border-top: 1px solid var(--border);
+.win-sidebar-item:hover { color: #fff; background: rgba(255, 255, 255, .06); }
+/* 激活态：左蓝色竖线 + 文字 #0b60c4 + 浅蓝底 #e8f1fb */
+.win-sidebar-item.active {
+  color: var(--primary);
+  background: #e8f1fb;
+  border-left-color: var(--primary);
+  font-weight: 500;
+}
+.win-sidebar-item-icon { flex: 0 0 auto; display: inline-flex; }
+
+.win-sidebar-foot {
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  padding: 12px 14px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
 }
-.sidebar-collapse-btn {
-  border: none;
-  background: none;
-  color: var(--muted);
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-m);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.sidebar-collapse-btn:hover { background: var(--chip); color: var(--primary); }
-
-/* 折叠窄栏（桌面） */
-.app-shell.sidebar-collapsed .app-sidebar { width: var(--sidebar-w-collapsed); }
-.app-shell.sidebar-collapsed .sidebar-brand,
-.app-shell.sidebar-collapsed .sidebar-item-label { display: none; }
-.app-shell.sidebar-collapsed .sidebar-head { justify-content: center; padding: 16px 0; }
-.app-shell.sidebar-collapsed .sidebar-item { justify-content: center; padding: 12px 0; }
-
-/* ---------- 主区 ---------- */
-.app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-
-.app-topbar {
-  height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  background: #fff;
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 30;
-}
-.topbar-btn {
-  border: none;
-  background: none;
-  color: var(--muted);
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-m);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-}
-.topbar-btn:hover { background: var(--chip); color: var(--primary); }
-.topbar-title { font-size: 16px; font-weight: 600; margin: 0; flex: 1; }
-.topbar-sync {
+.win-status {
+  color: #8b95a5;
   font-size: 12px;
-  font-weight: 400;
-  color: var(--ok);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 40vw;
+  line-height: 1.4;
+  word-break: break-all;
 }
-.topbar-sync.err { color: var(--danger); }
+.win-status.err { color: #ff9a90; }
+.win-import-btn {
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .16);
+  color: #cfd6e0;
+  padding: 7px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: background .15s;
+}
+.win-import-btn:hover { background: rgba(255, 255, 255, .16); color: #fff; }
 
-.app-content {
+/* 内容区 */
+.win-content {
+  flex: 1;
+  background: var(--bg);   /* #f4f7fc */
+  overflow-y: auto;
   padding: 20px;
-  max-width: 1080px;
-  width: 100%;
-  margin: 0 auto;
+  min-width: 0;
 }
 .module-view { width: 100%; }
 
-/* ---------- 抽屉遮罩 ---------- */
-.app-overlay {
+/* 最大化装饰 */
+.win-shell.win-maximized .win-sidebar { width: 200px; }
+
+/* 抽屉遮罩 */
+.win-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, .45);
-  z-index: 35;
+  z-index: 55;
   display: none;
 }
 
-/* ---------- ≤768px：侧栏变抽屉式 ---------- */
+/* ---------- ≤768px：侧栏抽屉式 ---------- */
 @media (max-width: 768px) {
-  .app-sidebar {
+  .win-titlebar { display: none; }
+  .win-topbar { height: 48px; padding: 0 10px; }
+  .win-topbar-menu { display: inline-flex; }
+  .win-sidebar {
     position: fixed;
     left: 0;
     top: 0;
     bottom: 0;
+    z-index: 60;
+    width: 232px;
     transform: translateX(-100%);
-    width: var(--sidebar-w);
-    box-shadow: var(--shadow-l);
+    transition: transform .25s ease;
   }
-  .app-shell.drawer-open .app-sidebar { transform: translateX(0); }
-  .app-shell.drawer-open .app-overlay { display: block; }
-  /* 移动端忽略折叠窄栏，始终保持完整侧栏 */
-  .app-shell.sidebar-collapsed .app-sidebar { width: var(--sidebar-w); }
-  .app-shell.sidebar-collapsed .sidebar-brand,
-  .app-shell.sidebar-collapsed .sidebar-item-label { display: inline; }
-  .app-shell.sidebar-collapsed .sidebar-head { justify-content: flex-start; padding: 16px 18px; }
-  .app-shell.sidebar-collapsed .sidebar-item { justify-content: flex-start; padding: 10px 12px; }
-  .app-content { padding: 14px; }
-  .topbar-sync { max-width: 30vw; }
+  .win-shell.drawer-open .win-sidebar { transform: translateX(0); }
+  .win-shell.drawer-open .win-overlay { display: block; }
+  .win-content { padding: 12px; }
 }

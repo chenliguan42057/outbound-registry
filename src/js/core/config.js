@@ -1,6 +1,6 @@
 /**
- * config.js — 全局配置：产品目录 / 库存快照 / 云端仓库 / 认证常量
- * 冻结自现网 src/index.html（commit 77bf632），不得随意修改。
+ * config.js — 全局配置：产品目录 / 库存快照 / 云端仓库 / 认证常量 / POS 会话映射
+ * 冻结自现网 src/index.html（commit 77bf632），记录 schema 与 localStorage 键不得随意修改。
  * 挂载到 window.App.Config。
  */
 (function () {
@@ -42,24 +42,29 @@
     INVENTORY: INVENTORY,
     GH: GH,
 
+    /* 品牌标题（Windows 桌面壳标题栏 / 顶栏 / 落地页顶栏） */
+    BRAND_TITLE: "进销存管理系统",
+
     /* localStorage 键（冻结，不得改名） */
     STORE_KEY: "outbound_records_v2",
     GH_TOKEN_KEY: "gh_token",
     DEPT_HISTORY_KEY: "outbound_dept_history",
     PICKER_HISTORY_KEY: "outbound_picker_history",
 
-    /* 新增键（经 store.js 统一管理） */
-    AUTH_KEY: "outbound_auth",
+    /* 内部状态键（经 store.js 统一管理） */
     NAV_KEY: "outbound_nav",
     DRAFT_OUT_KEY: "outbound_draft_out",
     DRAFT_IN_KEY: "outbound_draft_in",
     SEARCH_KEY: "outbound_search",
 
-    /* 认证常量 */
+    /* 认证常量（会话级内存标志，不落盘；旧 outbound_auth 残留不读取不清理） */
     PASSWORD: "1111",
-    AUTH_TTL_MS: 7 * 24 * 3600 * 1000,   // 记住登录 7 天
     MAX_PW_FAILS: 5,                     // 连续 5 次失败
     PW_LOCK_MS: 60 * 1000,               // 锁定 60 秒
+
+    /* POS 会话映射（P1 预留空对象：售价/条码/单位仅会话展示，绝不落库） */
+    PRICE_MAP: {},
+    BARCODE_MAP: {},
 
     /* 业务常量 */
     LOW_STOCK_THRESHOLD: 30,

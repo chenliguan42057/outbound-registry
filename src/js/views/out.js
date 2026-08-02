@@ -181,6 +181,8 @@
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
     resetForm();
+    // 提交成功滚顶（落地页表单较长，便于看到成功反馈）
+    window.scrollTo({ top: 0, behavior: "smooth" });
     pushToCloud(wasEditing ? "修改已保存，正在同步到云端…" : "登记成功，正在同步到云端…");
   }
 
