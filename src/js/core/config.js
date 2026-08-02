@@ -77,7 +77,7 @@
   };
 
   /**
-   * 解析云端令牌：优先部署注入的 window.__GH_TOKEN__（占位 __GH_TOKEN__ 视为未注入），
+   * 解析云端令牌：优先部署注入的 window.__GH_TOKEN__（占位 __GH_TOKEN_PLACEHOLDER__ 视为未注入），
    * 其次 localStorage gh_token 兜底；两者皆无 → 空串（本机模式）。
    * @returns {string}
    */
