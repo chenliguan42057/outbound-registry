@@ -19,7 +19,7 @@
   /* 管理页合法模块（与 app.js NAV_ITEMS 一一对应；sync 为顶栏☁️按钮直达，不进菜单） */
   var KNOWN_MODULES = {
     dashboard: 1, stock: 1, in: 1, sync: 1,
-    "in-records": 1, "out-records": 1, report: 1
+    "in-records": 1, "out-records": 1, report: 1, ai: 1
   };
 
   /** 解析当前 hash 到合法路由对象 */

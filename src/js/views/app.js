@@ -21,7 +21,8 @@
     { id: "in", icon: "in", label: "入库管理" },
     { id: "out-records", icon: "records", label: "出库记录" },
     { id: "in-records", icon: "records", label: "入库记录" },
-    { id: "report", icon: "report", label: "报表统计" }
+    { id: "report", icon: "report", label: "报表统计" },
+    { id: "ai", icon: "box", label: "AI 助手" }
   ];
 
   /* 模块 id → 视图注册名 */
@@ -32,12 +33,13 @@
     sync: "sync",
     "in-records": "inRecords",
     "out-records": "outRecords",
-    report: "report"
+    report: "report",
+    ai: "ai"
   };
 
   var MODULE_TITLES = {
     dashboard: "仪表盘", stock: "库存查询", in: "入库管理", sync: "云端同步",
-    "in-records": "入库记录", "out-records": "出库记录", report: "报表统计"
+    "in-records": "入库记录", "out-records": "出库记录", report: "报表统计", ai: "AI 助手"
   };
 
   var shellEl = null;

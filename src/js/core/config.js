@@ -55,6 +55,19 @@
     DRAFT_IN_KEY: "outbound_draft_in",
     SEARCH_KEY: "outbound_search",
 
+    /* AI 助手常量（第四轮增量；outbound_ai_key 仅存 localStorage，绝不入云端/CSV/记录/代码明文） */
+    AI_KEY_KEY: "outbound_ai_key",
+    AI_SETTINGS_KEY: "outbound_ai_settings",
+    AI_CHAT_KEY: "outbound_ai_chat",
+    AI_DEFAULT_MODEL: "deepseek-chat",
+    AI_MODELS: ["deepseek-chat", "deepseek-reasoner"],
+    AI_BASE_URL: "https://api.deepseek.com",
+    AI_TIMEOUT_MS: 30000,
+    AI_CHAT_HISTORY_LIMIT: 50,
+    AI_CONTEXT_TOP_N: 15,
+    AI_CONTEXT_RECENT: 10,
+    AI_QUICK_CHIPS: ["查库存", "今日出库", "低库存", "最近出库记录", "帮我看看报表"],
+
     /* 认证常量（会话级内存标志，不落盘；旧 outbound_auth 残留不读取不清理） */
     PASSWORD: "1111",
     MAX_PW_FAILS: 5,                     // 连续 5 次失败

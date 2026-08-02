@@ -1,0 +1,245 @@
+/* ============================================================
+   ai.css — AI 助手模块样式（第四轮增量）
+   浮动聊天面板 / 内嵌面板 / 消息气泡 / 快捷 chips / AI 表格 / 落地页 FAB / 移动端 sheet
+   全部沿用 base.css 设计令牌（--primary / --grad-main / --border / --shadow 等）
+   ============================================================ */
+
+/* ---------- 聊天面板（浮动卡片，默认隐藏） ---------- */
+.ai-panel {
+  display: none;
+  flex-direction: column;
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: 360px;
+  height: 520px;
+  background: #fff;
+  border: 1px solid rgba(99, 102, 241, .14);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(30, 41, 59, .28);
+  overflow: hidden;
+  z-index: 65;
+}
+.ai-panel.show { display: flex; }
+
+/* 内嵌模式（管理后台 #/app/ai）：静态填满容器，无定位 */
+.ai-panel.embedded {
+  position: static;
+  width: 100%;
+  height: calc(100vh - 150px);
+  min-height: 420px;
+  box-shadow: none;
+  border-color: var(--border);
+}
+
+/* ---------- 面板头部 ---------- */
+.ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--grad-main);
+  color: #fff;
+  flex-shrink: 0;
+}
+.ai-header-title { font-size: 14px; font-weight: 600; }
+.ai-header-btns { display: flex; gap: 4px; }
+.ai-hbtn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: rgba(255, 255, 255, .16);
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, transform .1s;
+}
+.ai-hbtn:hover { background: rgba(255, 255, 255, .32); }
+.ai-hbtn:active { transform: scale(.94); }
+
+/* 内嵌模式隐藏关闭按钮 */
+.ai-panel.embedded .ai-hbtn[data-act="close"] { display: none; }
+
+/* ---------- 消息区 ---------- */
+.ai-msgs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 12px;
+  background: var(--bg);
+  -webkit-overflow-scrolling: touch;
+}
+.ai-msgs::-webkit-scrollbar { width: 8px; }
+.ai-msgs::-webkit-scrollbar-thumb { background: #C7CDDC; border-radius: 4px; }
+
+.ai-msg { display: flex; margin-bottom: 10px; }
+.ai-msg-user { justify-content: flex-end; }
+.ai-msg-ai { justify-content: flex-start; }
+
+.ai-bubble {
+  max-width: 86%;
+  padding: 9px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+.ai-msg-user .ai-bubble {
+  background: var(--grad-main);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.ai-msg-ai .ai-bubble {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+  box-shadow: var(--shadow);
+}
+.ai-title { font-weight: 600; margin-bottom: 4px; }
+.ai-text { white-space: pre-wrap; }
+.ai-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--primary);
+  background: #EEF2FF;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.ai-thinking .ai-bubble { color: var(--muted); font-style: italic; }
+
+/* ---------- 快捷 chips ---------- */
+.ai-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 12px 8px;
+}
+.ai-chip {
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.ai-chip:hover { background: #EEF2FF; }
+
+/* ---------- AI 表格 ---------- */
+.ai-table-wrap { overflow-x: auto; margin-top: 6px; }
+.ai-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ai-table th, .ai-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+.ai-table th { background: #FAFBFF; color: var(--muted); font-weight: 600; }
+/* 低库存行红色高亮 */
+.ai-table tr.low td {
+  background: #FFF0F0;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ---------- 输入区 ---------- */
+.ai-inputbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: #fff;
+  flex-shrink: 0;
+}
+.ai-input { flex: 1; }
+.ai-input:disabled { opacity: .6; }
+.ai-send {
+  flex: 0 0 auto;
+  border: none;
+  background: var(--grad-main);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 0 18px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: filter .15s, transform .1s;
+}
+.ai-send:hover { filter: brightness(1.06); }
+.ai-send:active { transform: translateY(1px); }
+.ai-send:disabled { opacity: .6; cursor: default; filter: none; }
+
+/* ---------- AI 设置弹窗 ---------- */
+.ai-settings .field { margin-bottom: 12px; }
+.ai-mode-hint {
+  font-size: 13px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #FAFBFF;
+  border: 1px solid var(--border);
+}
+.ai-mode-local { color: var(--green); font-weight: 600; }
+.ai-mode-hybrid { color: var(--primary); font-weight: 600; }
+.ai-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); margin-bottom: 0; cursor: pointer; }
+.ai-check input { width: auto; }
+.ai-sec-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  background: #F0FDF4;
+  border: 1px solid rgba(16, 185, 129, .25);
+  border-radius: 8px;
+  padding: 8px 10px;
+  line-height: 1.6;
+}
+.ai-settings-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.ai-test-result { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 16px; }
+
+/* ---------- 落地页浮动气泡（FAB） ---------- */
+.ai-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  background: var(--grad-main);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(99, 102, 241, .4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 66;
+  transition: transform .15s, filter .15s;
+}
+.ai-fab:hover { transform: scale(1.08); filter: brightness(1.06); }
+.ai-fab:active { transform: scale(.94); }
+
+/* ---------- 移动端（<520px）：全宽底部 sheet ---------- */
+@media (max-width: 520px) {
+  .ai-panel:not(.embedded) {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 92vh;
+    border-radius: 16px 16px 0 0;
+  }
+  .ai-panel.embedded { height: calc(100vh - 120px); min-height: 0; }
+  .ai-input { font-size: 16px; }
+  /* chips 横向滚动 */
+  .ai-chips { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .ai-chip { flex: 0 0 auto; }
+  .ai-fab { right: 14px; bottom: 14px; }
+}

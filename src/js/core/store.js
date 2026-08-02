@@ -65,7 +65,32 @@
       arr.unshift(val);
       if (arr.length > 30) arr = arr.slice(0, 30);
       Store.set(key, arr);
-    }
+    },
+
+    /* ---- AI 助手存取（第四轮增量；Key 为原始字符串不 JSON 包裹，仅存本机） ---- */
+    loadAiKey: function () {
+      try { return localStorage.getItem(Config.AI_KEY_KEY) || ""; }
+      catch (e) { return ""; }
+    },
+    saveAiKey: function (k) {
+      try { localStorage.setItem(Config.AI_KEY_KEY, String(k || "")); }
+      catch (e) { console.warn("localStorage set ai key failed:", e); }
+    },
+    clearAiKey: function () {
+      try { localStorage.removeItem(Config.AI_KEY_KEY); } catch (e) {}
+    },
+    loadAiSettings: function () {
+      return Object.assign(
+        { model: Config.AI_DEFAULT_MODEL, baseUrl: Config.AI_BASE_URL },
+        Store.get(Config.AI_SETTINGS_KEY, {})
+      );
+    },
+    saveAiSettings: function (s) { Store.set(Config.AI_SETTINGS_KEY, s); },
+    loadAiChat: function () { return Store.get(Config.AI_CHAT_KEY, []); },
+    saveAiChat: function (msgs) {
+      Store.set(Config.AI_CHAT_KEY, (msgs || []).slice(-Config.AI_CHAT_HISTORY_LIMIT));
+    },
+    clearAiChat: function () { Store.remove(Config.AI_CHAT_KEY); }
   };
 
   /* ---- 应用级状态（内存） ---- */

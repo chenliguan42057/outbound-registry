@@ -26,6 +26,7 @@
         '<div class="landing-body">' +
           '<div class="landing-form" id="landingForm"></div>' +
         '</div>' +
+        '<button type="button" class="ai-fab" id="aiFab" title="AI 助手">🤖</button>' +
       '</div>';
 
     Util.$("landingAdmin").addEventListener("click", function () {
@@ -33,6 +34,11 @@
       UI.showLoginDialog().then(function (ok) {
         if (ok) Router.navigate("/app/out-records");
       });
+    });
+
+    // AI 助手浮动气泡（免登录即可用）
+    Util.$("aiFab").addEventListener("click", function () {
+      window.App.AI.Chat.openFloat();
     });
 
     // 复用 out.js 免密出库表单（out* 前缀 id 仅存在于落地页）
