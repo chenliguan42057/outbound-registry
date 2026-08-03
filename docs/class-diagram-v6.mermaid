@@ -1,0 +1,94 @@
+classDiagram
+    class Config {
+        +PRODUCTS string[]
+        +INVENTORY Object
+        +LOW_STOCK_THRESHOLD int = 95
+        +CATEGORY_MAP Object
+        +RANK_SORT_OPTIONS Object[]
+        +CHART_COLORS string[]
+    }
+    class Stock {
+        +getStock(name, list?) int
+        +summarize(list?) Object[]
+        +trend(list, days) Object[]
+    }
+    class Check {
+        +parseText(text) ParsedResult
+        +compare(parsed, summary) CompareResult
+        +answer(text) Answer
+    }
+    class Engine {
+        +normalize(q) string
+        +matchProducts(input) Object
+        +detectCheck(input) Object
+        +answer(question) Answer
+        +checkStock(text) Answer
+    }
+    class Chat {
+        +send(q) void
+        +openCheckModal() void
+        +appendAnswer(answer, hint?, noPersist?) void
+        +renderTable(table) string
+    }
+    class RankView {
+        +rankMode string
+        +renderRank() void
+        +onSort(mode) void
+    }
+    class Dashboard {
+        +aggregate(list) DashData
+        +renderCompare(agg) void
+        +renderDonut(catMap) void
+        +renderHeatmap(trend30) void
+        +renderLowBars(low) void
+        +renderTimeline(recent) void
+        +renderCards(agg) void
+    }
+    class ParsedRow {
+        +raw string
+        +name string
+        +qty int|null
+        +candidates string[]
+        +ambiguous bool
+        +unmatched bool
+        +unrecognized bool
+    }
+    class CompareRow {
+        +cells string[]
+        +cls string
+    }
+    class Answer {
+        +type string
+        +title string
+        +summaryText string
+        +table Object
+        +chips string[]
+        +guideAct Object
+    }
+    class DashData {
+        +totalOut int
+        +totalIn int
+        +todayOut int
+        +todayIn int
+        +todayActiveCount int
+        +out30 int
+        +catMap Object
+        +trend30 Object[]
+        +low Object[]
+        +recent Object[]
+    }
+
+    Engine --> Check : checkStock 薄封装
+    Engine ..> Config : PRODUCTS/LOW_STOCK_THRESHOLD
+    Check ..> Engine : 懒引用 matchProducts
+    Check ..> Stock : compare 数据源
+    Chat --> Engine : answer/checkStock
+    Chat ..> Config : AI_QUICK_CHIPS 等
+    RankView ..> Stock : summarize
+    RankView ..> Config : LOW_STOCK_THRESHOLD/RANK_SORT_OPTIONS
+    Dashboard ..> Stock : summarize/trend
+    Dashboard ..> Config : LOW_STOCK_THRESHOLD/CATEGORY_MAP/CHART_COLORS
+    Answer <-- Check : answer 产物
+    CompareRow <-- Answer : table.rows
+    ParsedRow <-- Check : parseText 产物
+    DashData <-- Dashboard : aggregate 产物

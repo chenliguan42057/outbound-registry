@@ -1,0 +1,28 @@
+sequenceDiagram
+    participant U as 用户
+    participant C as Chat(chat.js)
+    participant M as UI.Modal
+    participant E as Engine(engine.js)
+    participant K as Check(check.js)
+    participant S as Stock
+
+    U->>C: 点击 📷 按钮(data-act=check)
+    C->>M: openCheckModal() / UI.Modal.show(📷 库存核对)
+    U->>M: 粘贴截图文字 → 点击「开始核对」
+    M-->>C: 读取 textarea 文本
+    alt 空输入
+        C->>M: Util.toast("请先粘贴文字")，弹窗不关闭
+    else 非空
+        C->>E: Engine.checkStock(text)
+        E->>K: Check.answer(text)
+        K->>K: parseText(text) → ParsedRow[]
+        K->>S: Stock.summarize()（与报表同源）
+        K->>K: compare(parsed, summary) → 5 类结果
+        K-->>E: Answer{type:"check", table, summaryText, chips}
+        E-->>C: 返回 Answer
+        C->>M: UI.Modal.hide()
+        C->>C: appendAnswer(ans)（type="check" 卡片）
+        C->>C: history.push + saveHistory()（受 persistChat 控制；原始文本未入历史）
+    end
+
+    Note over C,E: 触发词入口：输入「帮我盘点一下库存」→ detectCheck 命中 → 引导卡 guideAct → 点击打开弹窗（同上述流程）

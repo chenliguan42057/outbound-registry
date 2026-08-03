@@ -401,3 +401,85 @@
   .ai-bubble { max-width: 92%; }
   .ai-header-btns .ai-hbtn { width: 28px; height: 28px; }
 }
+
+/* ============================================================
+   ai.css — 第六轮增量（全部追加，不改动既有样式）
+   库存核对按钮 / 核对弹窗 / 核对结果卡（5 类着色）
+   ============================================================ */
+
+/* ---------- 输入区 📷 库存核对按钮（发送按钮左侧） ---------- */
+.ai-check-btn {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--primary);
+  border-radius: var(--radius);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, transform .1s;
+}
+.ai-check-btn:hover { background: #EEF2FF; }
+.ai-check-btn:active { transform: scale(.94); }
+
+/* ---------- 库存核对弹窗 ---------- */
+.ai-check-modal { font-size: 13px; color: var(--text); }
+.ai-check-guide {
+  background: #EEF2FF;
+  border: 1px solid rgba(99, 102, 241, .2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  line-height: 1.6;
+  color: #3730A3;
+}
+.ai-check-example {
+  background: #FAFBFF;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+  white-space: pre-line;
+}
+.ai-check-textarea {
+  width: 100%;
+  min-height: 120px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.ai-check-textarea:focus { outline: none; border-color: var(--primary); }
+.ai-check-hint { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 16px; }
+.ai-check-hint.err { color: var(--danger); }
+.ai-check-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* ---------- 核对结果卡 ---------- */
+.ck-summary {
+  display: block;
+  font-size: 12px;
+  color: var(--text);
+  background: #FAFBFF;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+/* 5 类结果着色（ck-ok 一致 / ck-warn 数量不符 / ck-miss 截图未提及 / ck-nf 系统无 / ck-unk 无法识别） */
+.ai-table tr.ck-ok td { background: #F0FDF4; color: #047857; }
+.ai-table tr.ck-warn td { background: #FFFBEB; color: #B45309; font-weight: 600; }
+.ai-table tr.ck-miss td { background: #F8FAFC; color: #64748B; }
+.ai-table tr.ck-nf td { background: #FFF0F0; color: var(--danger); font-weight: 600; }
+.ai-table tr.ck-unk td { background: #F3F4F6; color: #6B7280; font-style: italic; }

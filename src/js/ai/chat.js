@@ -84,6 +84,7 @@
       '<div class="ai-msgs" id="aiMsgs"></div>' +
       '<div class="ai-inputbar">' +
         '<input type="text" class="ai-input" id="aiInput" placeholder="输入你的问题…" autocomplete="off" />' +
+        '<button type="button" class="ai-hbtn ai-check-btn" data-act="check" title="库存核对">📷</button>' +
         '<button type="button" class="ai-send" id="aiSend">发送</button>' +
       '</div>';
     document.body.appendChild(panel);
@@ -92,19 +93,26 @@
     sendBtn = panel.querySelector(".ai-send");
 
     panel.addEventListener("click", function (e) {
-      var chip = e.target.closest(".ai-chip");
-      if (chip) { send(chip.textContent); return; }
+      /* 1) data-act 按钮：header 操作 / 📷 库存核对 / 引导卡快捷按钮（优先于 chip，因引导按钮同时带 ai-chip 类） */
+      var actBtn = e.target.closest("[data-act]");
+      if (actBtn) {
+        var act = actBtn.getAttribute("data-act");
+        if (act === "check" || act === "openCheck") { openCheckModal(); return; }
+        if (act === "close") { close(); return; }
+        if (act === "clear") { doClear(); return; }
+        if (act === "clearctx") { doClearCtx(); return; }
+        if (act === "settings") { openSettings(); return; }
+      }
       var copy = e.target.closest(".ai-copy");
       if (copy) { copyToClipboard(copy.getAttribute("data-copy")); return; }
       var link = e.target.closest(".ai-wiki-link, .ai-news-item a");
       if (link) { e.preventDefault(); window.open(link.getAttribute("href"), "_blank", "noopener"); return; }
-      var btn = e.target.closest(".ai-hbtn");
-      if (!btn) return;
-      var act = btn.getAttribute("data-act");
-      if (act === "close") close();
-      else if (act === "clear") doClear();
-      else if (act === "clearctx") doClearCtx();
-      else if (act === "settings") openSettings();
+      /* 2) 普通 chip：「重新核对」特判重开弹窗；其余照常发送 */
+      var chip = e.target.closest(".ai-chip");
+      if (chip) {
+        if (chip.textContent === "重新核对") { openCheckModal(); return; }
+        send(chip.textContent); return;
+      }
     });
     sendBtn.addEventListener("click", function () { send(inputEl.value); });
     inputEl.addEventListener("keydown", function (e) {
@@ -177,13 +185,15 @@
     if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
   }
 
-  /** 渲染表格（全部值 esc） */
+  /** 渲染表格（全部值 esc）；支持 r.cls → <tr class="ck-{cls}">（核对结果 5 类着色，仅允许白名单类名） */
   function renderTable(table) {
+    var clsMap = { ok: 1, warn: 1, miss: 1, nf: 1, unk: 1 };
     var html = '<div class="ai-table-wrap"><table class="ai-table"><thead><tr>';
     (table.head || []).forEach(function (h) { html += "<th>" + Util.esc(h) + "</th>"; });
     html += "</tr></thead><tbody>";
     (table.rows || []).forEach(function (r) {
-      html += '<tr class="' + (r.low ? "low" : "") + '">';
+      var trCls = (r.low ? "low" : "") + (clsMap[r.cls] ? " ck-" + r.cls : "");
+      html += '<tr class="' + trCls.trim() + '">';
       (r.cells || []).forEach(function (c) { html += "<td>" + Util.esc(c) + "</td>"; });
       html += "</tr>";
     });
@@ -209,13 +219,24 @@
         '</div>';
     }
     var copyHtml = (!qrHtml && answer.copyText) ? copyBtnHTML(answer.copyText) : "";
+    /* 第六轮增量：引导卡快捷按钮（data-act 由面板委托处理） */
+    var guideHtml = (answer.guideAct && answer.guideAct.act)
+      ? '<button type="button" class="ai-chip" data-act="' + Util.esc(answer.guideAct.act) + '">' +
+          Util.esc(answer.guideAct.label || "打开") + '</button>'
+      : "";
+    /* 核对结果汇总徽章行（type="check"） */
+    var summaryHtml = (answer.type === "check" && answer.summaryText)
+      ? '<div class="ck-summary">' + Util.esc(answer.summaryText) + '</div>'
+      : "";
     var bubble =
       '<div class="ai-msg ai-msg-ai">' +
         '<div class="ai-bubble ai-type-' + Util.esc(answer.type || "text") + '">' +
           '<div class="ai-title">' + Util.esc(answer.title || "") + '</div>' +
           qrHtml +
+          summaryHtml +
           (answer.text ? '<div class="ai-text">' + nl2br(Util.esc(answer.text)) + '</div>' : "") +
           (answer.table ? renderTable(answer.table) : "") +
+          guideHtml +
           copyHtml +
           (hint ? '<div class="ai-hint">' + Util.esc(hint) + '</div>' : "") +
         '</div>' +
@@ -412,6 +433,58 @@
     } else {
       fallbackCopy(text);
     }
+  }
+
+  /* ================= 库存核对弹窗（第六轮增量） ================= */
+
+  /**
+   * 打开「📷 库存核对」弹窗：引导文案 + textarea + 示例 + 取消/开始核对。
+   * 隐私红线：粘贴文本仅局部变量 → Engine.checkStock(text) 解析；
+   * 原始文本绝不写入 history / localStorage / 云端；结果 Answer 走常规 appendAnswer 持久化。
+   */
+  function openCheckModal() {
+    if (busy) { Util.toast("请等待当前回复完成", true); return; }
+    var body = document.createElement("div");
+    body.className = "ai-check-modal";
+    body.innerHTML =
+      '<div class="ai-check-guide">📌 从库存截图里复制文字，粘贴到下方（本功能识别的是你粘贴的文字，不是图片本身）。<br/>每行格式：货品名 数量</div>' +
+      '<div class="ai-check-example">示例：<br/>冻干精华液 20支装 95<br/>面膜 5片装 120件<br/>洁面慕斯 150ml: 85</div>' +
+      '<textarea id="aiCheckText" class="ai-check-textarea" rows="8" placeholder="在此粘贴截图文字…" autocomplete="off"></textarea>' +
+      '<div class="ai-check-hint" id="aiCheckHint">粘贴后点击「开始核对」，结果将显示在聊天面板。</div>' +
+      '<div class="ai-check-actions">' +
+        '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+        '<button type="button" class="btn sm" data-act="start">开始核对</button>' +
+      '</div>';
+    UI.Modal.show("📷 库存核对", body, { width: "420px" });
+    var mBody = UI.Modal.body();
+    var ta = mBody.querySelector("#aiCheckText");
+    var hint = mBody.querySelector("#aiCheckHint");
+
+    /** 提交核对：空输入 → toast 提示且不关弹窗；非空 → 解析 → 关弹窗 → 渲染结果卡 */
+    function doCheck() {
+      var text = (ta.value || "").trim();
+      if (!text) {
+        hint.textContent = "⚠️ 请先粘贴文字（从库存截图复制后粘贴）";
+        hint.classList.add("err");
+        ta.focus();
+        return;
+      }
+      UI.Modal.hide();
+      var eng = Engine || window.App.AI.Engine;
+      var ans = (eng && eng.checkStock) ? eng.checkStock(text) : {
+        type: "check",
+        title: "📋 库存核对",
+        text: "库存核对模块加载失败，请刷新页面后重试。",
+        chips: ["重新核对"]
+      };
+      appendAnswer(ans);
+    }
+    mBody.querySelector('[data-act="start"]').onclick = doCheck;
+    mBody.querySelector('[data-act="cancel"]').onclick = function () { UI.Modal.hide(); };
+    ta.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); doCheck(); }
+    });
+    setTimeout(function () { ta.focus(); }, 50);
   }
 
   /* ================= 消息流 ================= */
@@ -783,6 +856,7 @@
     close: close,
     send: send,
     clear: doClear,
-    clearContext: doClearCtx
+    clearContext: doClearCtx,
+    openCheckModal: openCheckModal
   };
 })();

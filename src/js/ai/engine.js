@@ -15,6 +15,13 @@
   var Tools = window.App.AI && window.App.AI.Tools ? window.App.AI.Tools : null;
   var Knowledge = window.App.AI && window.App.AI.Knowledge ? window.App.AI.Knowledge : null;
 
+  /* 第六轮增量：库存核对（脚本顺序 check → engine；懒引用，运行时才调用） */
+  var Check = window.App.AI && window.App.AI.Check ? window.App.AI.Check : null;
+
+  /* 库存核对触发词（须与 库存/货 关联，避免误吞「库存还有多少」「最近出库记录」；
+     刻意不含「检查库存/查看库存」——二者属 v5 库存查询意图（/查库存/ 命中），保持 v5 零破坏） */
+  var CHECK_TRIGGER = /(库存.*(?:核对|对不上|盘点|清点))|((?:核对|盘点|清点|对一下|比较|比一下).*(?:库存|货))|^(?:核对|盘点|清点)$/;
+
   /* 记录意图关键词（命中产品名后判断是查库存还是查记录） */
   var RECORD_KW = /领过|领了|记录|领用/;
 
@@ -498,6 +505,41 @@
   /* ================= 第五轮：百科引导 / 联网意图 ================= */
 
   /**
+   * 库存核对意图：触发词（核对/盘点/清点/对一下/比较/比一下 + 库存/货）命中 →
+   * 返回引导卡片（非 pending），带 guideAct 快捷按钮打开粘贴弹窗。
+   * @param {string} input 已归一化输入
+   * @returns {?{type:string, title:string, text:string, guideAct:Object, chips:string[]}}
+   */
+  function detectCheck(input) {
+    if (!input || !CHECK_TRIGGER.test(input)) return null;
+    return {
+      type: "check_guide",
+      title: "📋 库存核对",
+      text: "请点击下方「📷 打开库存核对」按钮，从库存截图复制文字后粘贴，即可逐项比对系统库存。\n（本功能识别的是你粘贴的文字，不是图片本身）",
+      guideAct: { label: "📷 打开库存核对", act: "openCheck" },
+      chips: ["哪些货品低库存？", "今天出了多少货？"]
+    };
+  }
+
+  /**
+   * 库存核对薄封装：粘贴文本 → Check.answer(text)。
+   * 不经过 normalize（粘贴文本需保留原始分隔符）；防御性判空（check.js 未加载时兜底）。
+   * @param {string} text 用户粘贴的库存截图文字
+   * @returns {Object} Answer（type:"check"）
+   */
+  function checkStock(text) {
+    if (Check && Check.answer) {
+      return Check.answer(text);
+    }
+    return {
+      type: "check",
+      title: "📋 库存核对",
+      text: "库存核对模块加载失败，请刷新页面后重试。",
+      chips: ["重新核对"]
+    };
+  }
+
+  /**
    * 百科/知识引导：以「什么是/是什么/介绍一下/介绍下/百科」触发，且不含数据词。
    * @param {string} input 已归一化输入
    * @returns {?{type:string, pending:boolean, topic:string, title:string, chips:string[]}}
@@ -622,11 +664,15 @@
       if (kbAns) return kbAns;
     }
 
-    // 3. 百科引导（含数据词则跳过，保证数据意图优先级）
+    // 3. 库存核对引导（第六轮增量；触发词专属，不抢占既有意图；放 Knowledge 之后避免 KB 吞触发词）
+    var checkGuide = detectCheck(input);
+    if (checkGuide) return checkGuide;
+
+    // 4. 百科引导（含数据词则跳过，保证数据意图优先级）
     var wiki = detectWiki(input);
     if (wiki) return wiki;
 
-    // 4. 产品匹配（v4 原样）
+    // 5. 产品匹配（v4 原样）
     var prods = matchProducts(input);
     if (prods.exact.length || prods.fuzzy.length) {
       var names = unique(prods.exact.concat(prods.fuzzy));
@@ -634,7 +680,7 @@
       return stockAnswer(names);
     }
 
-    // 5. 数据意图链（v4 原样）
+    // 6. 数据意图链（v4 原样）
     var intent = detectIntent(input);
     switch (intent.intent) {
       case "help": return helpAnswer();
@@ -646,10 +692,10 @@
       case "records": return recordsAnswer(question, input, null);
       case "stock": return stockAnswer(null);
       default:
-        // 6. 联网意图（weather → news，返回 pending）
+        // 7. 联网意图（weather → news，返回 pending）
         var web = detectWeb(input);
         if (web) return web;
-        // 7. fallback（chat.js 据此决定是否走 LLM）
+        // 8. fallback（chat.js 据此决定是否走 LLM）
         return fallbackAnswer(question);
     }
   }
@@ -662,6 +708,8 @@
     detectIntent: detectIntent,
     detectWiki: detectWiki,
     detectWeb: detectWeb,
+    detectCheck: detectCheck,
+    checkStock: checkStock,
     answer: answer
   };
 })();

@@ -459,3 +459,187 @@
 .collapse-arrow { transition: transform .2s; color: var(--muted); display: inline-flex; }
 .collapse-head.open .collapse-arrow { transform: rotate(180deg); }
 .collapse-body { padding: 12px 14px; }
+
+/* ============================================================
+   views.css — 第六轮增量（全部追加，不改动既有类）
+   全部库存排名 + 仪表盘可视化图表（纯 CSS/SVG，零第三方依赖）
+   ============================================================ */
+
+/* ---------- 全部库存排名 ---------- */
+.rank-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.rank-sort select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  font-size: 13px;
+  color: var(--text);
+  max-width: 180px;
+}
+.rank-table th:nth-child(1) { width: 56px; }
+.rank-table th:nth-child(3) { width: 96px; }
+.rank-table th:nth-child(4) { width: 96px; }
+.rank-table td.stock-num.danger-text { color: var(--danger); }
+
+/* ---------- 仪表盘图表区布局 ---------- */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+@media (max-width: 1100px) { .chart-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 720px) { .chart-grid { grid-template-columns: 1fr; } }
+.chart-card {
+  background: #fff;
+  border: 1px solid rgba(99, 102, 241, .08);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+.chart-card h3 { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+.chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ---------- P0-1 出入库对比柱状图 ---------- */
+.compare-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 40px;
+  height: 180px;
+}
+.compare-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  width: 64px;
+}
+.compare-num { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.compare-fill { width: 46px; border-radius: 8px 8px 0 0; min-height: 2%; transition: height .3s; }
+.compare-fill.out { background: #6366F1; }
+.compare-fill.in { background: #10B981; }
+.compare-label { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.compare-legend {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------- P0-2 库存分布环形图（SVG） ---------- */
+.donut-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.donut-svg { display: block; }
+.donut-center-num { font-size: 20px; font-weight: 700; fill: var(--text); }
+.donut-center-label { font-size: 10px; fill: var(--muted); }
+.donut-legend { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.donut-legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.donut-legend-dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.donut-legend-name { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.donut-legend-val { color: var(--muted); flex: 0 0 auto; }
+
+/* ---------- P0-3 近30天出库热力（6列×5行 grid + 5 档色阶） ---------- */
+.heatmap-head { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  min-width: 300px;
+}
+.heatmap-cell {
+  height: 34px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #6B7280;
+  background: #F1F0FF;
+}
+.heatmap-t0 { background: #F1F0FF; color: #C4C0E8; }
+.heatmap-t1 { background: #DDD6FE; }
+.heatmap-t2 { background: #A5B4FC; color: #fff; }
+.heatmap-t3 { background: #818CF8; color: #fff; }
+.heatmap-t4 { background: #6366F1; color: #fff; }
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.heatmap-legend .heatmap-cell { width: 18px; height: 18px; font-size: 0; }
+
+/* ---------- P0-4 低库存横向条形（红色渐变） ---------- */
+.low-fill { background: linear-gradient(90deg, #F87171, #F04438); }
+
+/* ---------- P1 近期活动时间轴 ---------- */
+.timeline-item {
+  display: flex;
+  gap: 10px;
+  position: relative;
+  padding-bottom: 12px;
+}
+.timeline-item:last-child { padding-bottom: 0; }
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 20px;
+  bottom: -2px;
+  width: 2px;
+  background: #E5E7EB;
+}
+.timeline-item:last-child::before { display: none; }
+.timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  margin-top: 5px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #E5E7EB;
+  z-index: 1;
+}
+.timeline-dot.out { background: #6366F1; }
+.timeline-dot.in { background: #10B981; }
+.timeline-item.first .timeline-dot { box-shadow: 0 0 0 2px #6366F1; }
+.timeline-body {
+  flex: 1;
+  min-width: 0;
+  background: #FAFBFF;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.timeline-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.timeline-time { font-size: 12px; color: var(--muted); }
+.timeline-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; }
+.timeline-tag.out { background: #EEF2FF; color: #6366F1; }
+.timeline-tag.in { background: #ECFDF5; color: #059669; }
+.timeline-new {
+  font-size: 10px;
+  color: #fff;
+  background: var(--grad-main);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: auto;
+}
+.timeline-who { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 3px; }
+.timeline-items { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
