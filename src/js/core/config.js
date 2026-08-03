@@ -106,7 +106,7 @@
     BARCODE_MAP: {},
 
     /* 业务常量 */
-    LOW_STOCK_THRESHOLD: 30,
+    LOW_STOCK_THRESHOLD: 95,
     PHOTO_MAX_EDGE: 1280,
     PHOTO_QUALITY: 0.72,
 
