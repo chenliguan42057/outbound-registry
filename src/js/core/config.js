@@ -110,6 +110,10 @@
     PHOTO_MAX_EDGE: 1280,
     PHOTO_QUALITY: 0.72,
 
+    /* 自动同步（电脑端定时从云端拉取手机端提交的数据；30 秒兼顾实时性与 GitHub API 限流，
+       Contents API 限额 5000 次/小时，30 秒间隔 ≈ 120 次/小时，远低于限额；用户量大时可调至 60000） */
+    AUTO_SYNC_INTERVAL_MS: 30000,
+
     /* 令牌解析与刷新（运行时从注入/本地读取，代码中绝不出现令牌明文） */
     refreshToken: function () {
       GH.token = resolveToken();

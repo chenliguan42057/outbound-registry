@@ -92,7 +92,8 @@
     renderNav();
     wireShell();
     mount(module || State.nav.active || "out-records");
-    autoSync();
+    window.addEventListener("hashchange", onRouteChange);
+    startAutoSync();
   }
 
   function renderNav() {
@@ -172,22 +173,110 @@
 
   /** 首次进入自动拉取云端；完成后刷新数据型模块 */
   function autoSync() {
+    startAutoSync();
+  }
+
+  /* ================= 自动同步（30 秒轮询 + 可见性/聚焦即时触发） =================
+     背景：手机端提交后只推送（pushAllLocal），电脑端需要主动从云端拉取才能看到。
+     因此 #/app 挂载期间每 AUTO_SYNC_INTERVAL_MS 拉取一次；切回页面/聚焦时立即拉取。 */
+  var autoSyncTimer = null;     // setInterval id
+  var autoSyncOn = false;       // 自动同步是否开启
+  var syncing = false;          // 并发锁：同步进行中跳过本轮，防止请求重叠
+  var nextSyncAt = 0;           // 下次自动同步时间戳（毫秒），供同步面板倒计时
+
+  /** 触发一次同步；syncing 并发锁 + 无令牌降级本机模式 */
+  function triggerSync(reason) {
+    if (!autoSyncOn) return;
+    if (syncing) return;        // 并发防护：上一轮未结束则跳过本轮
     if (!Cloud.hasToken()) {
       setSyncStatus("本机模式", true);
       return;
     }
+    syncing = true;
     setSyncStatus("同步中…", false);
+    var before = State.list.length;
     Cloud.syncPull({ onStatus: function () {} }).then(function (res) {
-      if (res.ok) setSyncStatus("就绪", false);
-      else setSyncStatus("同步失败", true);
-      var cur = State.nav.active;
-      var viewName = VIEW_MAP[cur];
-      var view = viewName && window.App.Views[viewName];
-      if (view && view.refresh) view.refresh();
-      updateStatusBar();
+      syncing = false;
+      if (res.ok) {
+        setSyncStatus("就绪", false);
+        var added = State.list.length - before;
+        if (added > 0) Util.toast("已同步 " + added + " 条新记录");
+      } else {
+        setSyncStatus("同步失败", true);
+      }
+      refreshActiveView();
+      scheduleNextSync();
     }).catch(function () {
+      syncing = false;
       setSyncStatus("同步失败", true);
+      refreshActiveView();
+      scheduleNextSync();
     });
+  }
+
+  /** 刷新当前模块视图 + 底部状态栏（同步完成后调用） */
+  function refreshActiveView() {
+    var cur = State.nav.active;
+    var viewName = VIEW_MAP[cur];
+    var view = viewName && window.App.Views[viewName];
+    if (view && view.refresh) view.refresh();
+    updateStatusBar();
+  }
+
+  /** 设定下次自动同步时间并重置定时器（同步完成/手动同步后调用，倒计时从完成时刻重新计） */
+  function scheduleNextSync(ms) {
+    var interval = ms || Config.AUTO_SYNC_INTERVAL_MS;
+    nextSyncAt = Date.now() + interval;
+    if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null; }
+    autoSyncTimer = setInterval(function () { triggerSync("timer"); }, interval);
+  }
+
+  /** 页面重新可见：立即同步（不等定时器） */
+  function onVisibilityChange() {
+    if (document.visibilityState === "visible") triggerSync("visible");
+  }
+
+  /** 窗口重新聚焦：立即同步（不等定时器） */
+  function onWindowFocus() {
+    triggerSync("focus");
+  }
+
+  /** 启动自动同步：立即同步一次 + 定时轮询 + 可见性/聚焦监听（幂等） */
+  function startAutoSync() {
+    if (autoSyncOn || !State.appMounted) return;
+    if (!Cloud.hasToken()) {
+      setSyncStatus("本机模式", true);
+      return;
+    }
+    autoSyncOn = true;
+    window.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onWindowFocus);
+    scheduleNextSync();
+    triggerSync("start");
+  }
+
+  /** 停止自动同步：清理定时器与窗口监听（离开 #/app 或应用壳卸载时调用） */
+  function stopAutoSync() {
+    autoSyncOn = false;
+    if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null; }
+    window.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("focus", onWindowFocus);
+    nextSyncAt = 0;
+  }
+
+  /** 路由守卫：进入 #/app 启动自动同步，离开 #/app 停止（防泄漏） */
+  function onRouteChange() {
+    if (Router.parse().base !== "app") stopAutoSync();
+    else if (State.appMounted && !autoSyncOn && Cloud.hasToken()) startAutoSync();
+  }
+
+  /** 同步面板查询：自动同步是否开启 */
+  function isAutoSyncOn() { return autoSyncOn; }
+
+  /** 同步面板查询：距下次自动同步剩余秒数（未开启返回 null） */
+  function nextSyncRemainSec() {
+    if (!autoSyncOn || !nextSyncAt) return null;
+    return Math.max(0, Math.ceil((nextSyncAt - Date.now()) / 1000));
   }
 
   /** 导入 JSON：数组或 {records:[]} → mergeAndSort 合并 → 保存 → 刷新 → 有 token 自动推送 */
@@ -242,6 +331,13 @@
     mount: mount,
     setSyncStatus: setSyncStatus,
     updateStatusBar: updateStatusBar,
-    closeDrawer: closeDrawer
+    closeDrawer: closeDrawer,
+    autoSync: autoSync,
+    startAutoSync: startAutoSync,
+    stopAutoSync: stopAutoSync,
+    triggerSync: triggerSync,
+    scheduleNextSync: scheduleNextSync,
+    isAutoSyncOn: isAutoSyncOn,
+    nextSyncRemainSec: nextSyncRemainSec
   };
 })();

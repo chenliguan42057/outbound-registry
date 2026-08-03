@@ -16,6 +16,7 @@
 
   var container = null;
   var statusEl = null;
+  var countdownTimer = null;   // 「下次自动同步」倒计时定时器（仅同步面板挂载期间运行）
 
   /** 令牌掩码：ghp_****abcd（>8 位保留前 4 后 4，短令牌仅留后 4） */
   function maskToken(t) {
@@ -40,14 +41,20 @@
 
   function render(el) {
     container = el;
+    stopCountdown();   // 重新渲染前清理旧倒计时，防止重复定时器
     var hasToken = Cloud.hasToken();
     var info = tokenInfo();
+    var autoSec = Math.round(Config.AUTO_SYNC_INTERVAL_MS / 1000);
     el.innerHTML =
       '<div class="card">' +
         '<h2>云端同步 <span class="tag">GitHub Pages</span></h2>' +
         '<div class="sync-panel">' +
           '<div class="sync-row"><span class="sync-k">同步状态</span><span class="sync-v" id="syncStateText">' +
             (hasToken ? "就绪" : "未配置令牌（本机模式）") + '</span></div>' +
+          '<div class="sync-row"><span class="sync-k">自动同步</span><span class="sync-v"><span class="tag" id="syncAutoBadge">' +
+            (hasToken ? "已开启（每 " + autoSec + " 秒）" : "未开启") + '</span></span></div>' +
+          '<div class="sync-row"><span class="sync-k">下次自动同步</span><span class="sync-v" id="syncNextSync">' +
+            (hasToken ? "即将同步…" : "—") + '</span></div>' +
           '<div class="sync-row"><span class="sync-k">上次同步</span><span class="sync-v" id="syncLastTime">' +
             (State.lastSync ? Util.fmtDateTime(State.lastSync) : "尚未同步") + '</span></div>' +
           '<div class="sync-row"><span class="sync-k">本地记录数</span><span class="sync-v" id="syncLocalCount">' +
@@ -61,6 +68,8 @@
           '<button type="button" class="btn" id="syncNow">' + UI.icon("sync", 16) + '<span>立即同步</span></button>' +
           '<button type="button" class="btn ghost" id="syncLogout">退出登录</button>' +
         '</div>' +
+        '<div class="hint">自动同步：手机/电脑只要打开页面就会定时从云端拉取，最迟约 ' + autoSec +
+          ' 秒；切回页面会立即同步，无需手动操作。</div>' +
         '<div class="sync-err" id="syncErr"></div>' +
       '</div>' +
       '<div class="card">' +
@@ -93,6 +102,36 @@
     Util.$("syncTokenSave").addEventListener("click", saveToken);
     Util.$("syncTokenClear").addEventListener("click", clearToken);
     renderQr();
+    startCountdown();
+  }
+
+  /** 「下次自动同步」倒计时：每秒刷新徽标与剩余秒数 */
+  function startCountdown() {
+    stopCountdown();
+    updateCountdown();
+    countdownTimer = setInterval(updateCountdown, 1000);
+  }
+
+  /** 停止倒计时（重新渲染 / 离开 #/app 时调用） */
+  function stopCountdown() {
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  }
+
+  /** 刷新自动同步徽标 + 倒计时文案；未开启则显示「未开启」 */
+  function updateCountdown() {
+    var appView = window.App.Views.app;
+    var on = !!(appView && appView.isAutoSyncOn && appView.isAutoSyncOn());
+    var badge = Util.$("syncAutoBadge");
+    if (badge) {
+      badge.textContent = on
+        ? "已开启（每 " + Math.round(Config.AUTO_SYNC_INTERVAL_MS / 1000) + " 秒）"
+        : "未开启";
+    }
+    var el = Util.$("syncNextSync");
+    if (!el) return;
+    if (!on) { el.textContent = "未开启"; return; }
+    var sec = appView.nextSyncRemainSec();
+    el.textContent = sec === null ? "即将同步…" : (sec + " 秒后");
   }
 
   /** 保存本地令牌：写 localStorage gh_token → 刷新 Config.GH.token → 更新状态行 */
@@ -104,6 +143,9 @@
     Config.refreshToken();
     if (input) input.value = "";
     Util.toast("令牌已保存");
+    if (window.App.Views.app && window.App.Views.app.startAutoSync) {
+      window.App.Views.app.startAutoSync();   // 令牌就绪后立即开启自动同步（幂等）
+    }
     renderTokenInfo();
   }
 
@@ -114,6 +156,9 @@
     localStorage.removeItem(Config.GH_TOKEN_KEY);
     Config.refreshToken();
     Util.toast("已清除本地令牌");
+    if (!Cloud.hasToken() && window.App.Views.app && window.App.Views.app.stopAutoSync) {
+      window.App.Views.app.stopAutoSync();    // 令牌消失则停止自动同步
+    }
     renderTokenInfo();
   }
 
@@ -173,13 +218,23 @@
       if (statusEl) statusEl.textContent = text;
     } }).then(function (res) {
       refresh();
+      if (res.ok && window.App.Views.app && window.App.Views.app.scheduleNextSync) {
+        window.App.Views.app.scheduleNextSync();   // 手动同步成功后重置倒计时
+      }
+      updateCountdown();
       if (!res.ok && err) {
         err.textContent = "同步失败：" + (res.error && res.error.message ? res.error.message : "未知错误");
       }
     });
   }
 
+  /* 离开 #/app 时停止倒计时（返回时 render 会重新启动），避免残留定时器 */
+  window.addEventListener("hashchange", function () {
+    if (window.App.Router.parse().base !== "app") stopCountdown();
+    else if (container) startCountdown();
+  });
+
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
-  window.App.Views.sync = { render: render, refresh: refresh, doSync: doSync };
+  window.App.Views.sync = { render: render, refresh: refresh, doSync: doSync, startCountdown: startCountdown, stopCountdown: stopCountdown };
 })();
