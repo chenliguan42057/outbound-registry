@@ -178,8 +178,10 @@
     var cnt = { total: 0, ok: 0, mismatch: 0, missed: 0, notFound: 0, unrecognized: 0 };
 
     (parsed.rows || []).forEach(function (row) {
-      /* 1) 数量超范围 → ⚪ 无法识别 */
+      /* 1) 数量超范围 → ⚪ 无法识别（行产品名可能已匹配系统产品，需标记 referenced，
+             否则该产品在步骤 4 会被重复列入 🔵 截图未提及 → 双条目重复计数） */
       if (row.unrecognized) {
+        (row.candidates || []).forEach(function (c) { referenced[c] = true; });
         out.push({ name: row.name, sys: null, shot: row.qty, cls: "unk", ambiguous: false, diff: null, qty: row.qty, reason: "数量超范围" });
         cnt.unrecognized++; cnt.total++;
         return;
