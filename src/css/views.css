@@ -67,7 +67,9 @@
   flex: 1;
   padding: 20px 16px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
 }
 .landing-form {
   width: 100%;
@@ -94,6 +96,114 @@
 .landing-form .card h2 { font-size: 18px; }
 @media (max-width: 560px) {
   .landing-body { padding: 12px 10px; }
+}
+
+/* 最近提交卡片：白卡 + 圆角 + 阴影 + 顶部海洋渐变 accent bar（与表单主渐变区分） */
+.recent-card {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: var(--shadow);
+  padding: 18px 18px 14px;
+  overflow: hidden;
+}
+.recent-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: var(--grad-ocean);
+}
+.recent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.recent-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--grad-ocean);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+.recent-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.recent-card-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: #EEF2FF;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.recent-list { display: flex; flex-direction: column; }
+.recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px dashed var(--border);
+}
+.recent-item:last-child { border-bottom: none; }
+.recent-item-main { flex: 1; min-width: 0; }
+.recent-item-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recent-item-time {
+  font-size: 12px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.recent-item-who {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.recent-item-items {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-item-side { flex: 0 0 auto; }
+.recent-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 22px 0;
+  font-size: 13px;
+}
+/* 移动端（375px 主场景）：缩小字号/间距，保持单列可读 */
+@media (max-width: 560px) {
+  .recent-card { padding: 14px 12px 10px; }
+  .recent-card-tag { font-size: 10px; }
+  .recent-item { padding: 9px 2px; gap: 8px; }
+  .recent-item-who { font-size: 12px; }
+  .recent-item-time { font-size: 11px; }
+  .recent-item-items { font-size: 11px; }
 }
 
 /* ============================================================
