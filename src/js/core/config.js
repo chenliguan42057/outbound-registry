@@ -60,6 +60,9 @@
     PICKUP_STORE_KEY: "outbound_pickups_v2",
     PICKUP_DRAFT_KEY: "outbound_pickup_draft",
 
+    /* 备忘录（第八轮增量，纯追加，不改既有键值） */
+    MEMO_STORE_KEY: "outbound_memos_v2",
+
     /* AI 助手常量（第四轮增量；outbound_ai_key 仅存 localStorage，绝不入云端/CSV/记录/代码明文） */
     AI_KEY_KEY: "outbound_ai_key",
     AI_SETTINGS_KEY: "outbound_ai_settings",

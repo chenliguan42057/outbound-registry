@@ -20,6 +20,7 @@
     { id: "stock", icon: "stock", label: "库存查询" },
     { id: "in", icon: "in", label: "入库管理" },
     { id: "pickups", icon: "box", label: "待取货" },
+    { id: "memos", icon: "edit", label: "备忘录" },
     { id: "out-records", icon: "records", label: "出库记录" },
     { id: "in-records", icon: "records", label: "入库记录" },
     { id: "report", icon: "report", label: "报表统计" },
@@ -32,6 +33,7 @@
     stock: "stock",
     in: "in",
     pickups: "pickups",
+    memos: "memos",
     sync: "sync",
     "in-records": "inRecords",
     "out-records": "outRecords",
@@ -40,7 +42,7 @@
   };
 
   var MODULE_TITLES = {
-    dashboard: "仪表盘", stock: "库存查询", in: "入库管理", pickups: "待取货", sync: "云端同步",
+    dashboard: "仪表盘", stock: "库存查询", in: "入库管理", pickups: "待取货", memos: "备忘录", sync: "云端同步",
     "in-records": "入库记录", "out-records": "出库记录", report: "报表统计", ai: "AI 助手"
   };
 

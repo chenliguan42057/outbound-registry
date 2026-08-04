@@ -197,6 +197,32 @@ def build_pickup_update_markdown(data, old):
     )
 
 
+def build_memo_new_markdown(data):
+    """新增备忘录通知（字段：事项内容/添加时间/状态）。"""
+    return "### 📝 出入库登记 · 新备忘录\n- **事项内容**：{}\n- **添加时间**：{}\n- **状态**：⏳ 未完成".format(
+        data.get("text", ""), data.get("time", "")
+    )
+
+
+def build_memo_update_markdown(data, old):
+    """修改备忘录：识别「已完成」「改回未完成」等状态变化。"""
+    old = old or {}
+    # 完成动作：done 从非 true 变为 true
+    if old.get("done") is not True and data.get("done") is True:
+        return "### ✅ 出入库登记 · 备忘录已完成\n- **事项内容**：{}\n- **完成时间**：{}\n- **添加时间**：{}".format(
+            data.get("text", ""),
+            data.get("time", "") or time.strftime("%Y-%m-%d %H:%M"),
+            data.get("time", ""),
+        )
+    # 改回未完成：done 从 true 变为非 true
+    if old.get("done") is True and data.get("done") is not True:
+        return "### ↩️ 出入库登记 · 备忘录改回未完成\n- **事项内容**：{}".format(data.get("text", ""))
+    # 其他修改
+    return "### 📝 出入库登记 · 备忘录已更新\n- **事项内容**：{}\n- **时间**：{}".format(
+        data.get("text", ""), data.get("time", "")
+    )
+
+
 def send(text, title="新登记通知"):
     """发送 markdown 消息到钉钉。返回 (ok, errmsg)。"""
     if not WEBHOOK:
@@ -253,6 +279,12 @@ def main():
                 md = build_pickup_update_markdown(data, git_show_old(path))
             else:  # A 新增
                 md = build_pickup_new_markdown(data)
+        # 备忘录变更 → 备忘录通知（data/memos/ 前缀；同上，删除自然跳过）
+        elif path.startswith("data/memos/"):
+            if action == "M":
+                md = build_memo_update_markdown(data, git_show_old(path))
+            else:  # A 新增
+                md = build_memo_new_markdown(data)
         elif path.startswith("data/deleted/"):
             md = build_tombstone_markdown(data)
         elif action == "M":

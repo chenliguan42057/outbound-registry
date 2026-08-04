@@ -133,6 +133,63 @@
     return { ok: ok, fail: fail };
   }
 
+  /* ================= 备忘录云端同步（目录 data/memos） ================= */
+
+  /** 拉取云端全部备忘录（目录 404 视为空；逻辑同 pullPickups() 但目录不同） */
+  async function pullMemos() {
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/data/memos?ref=" + Config.GH.branch;
+    var arr;
+    try { arr = await apiJson(url); }
+    catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
+    if (!Array.isArray(arr)) return [];
+    var files = arr.filter(function (f) { return f.name.endsWith(".json") && f.size < 5 * 1024 * 1024; });
+    var recs = [];
+    for (var i = 0; i < files.length; i++) {
+      try {
+        var j = await apiJson(files[i].url);
+        recs.push(JSON.parse(Util.b64dec(j.content)));
+      } catch (e) { /* 单条失败跳过，不影响其余 */ }
+    }
+    return recs;
+  }
+
+  /** 推送单条备忘录（存在则更新，不存在则新增） */
+  async function pushMemo(rec) {
+    var path = "data/memos/" + rec.id + ".json";
+    var content = Util.b64enc(JSON.stringify(rec));
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+    var body = sha
+      ? { message: "update " + rec.id, content: content, sha: sha, branch: Config.GH.branch }
+      : { message: "add " + rec.id, content: content, branch: Config.GH.branch };
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
+    });
+  }
+
+  /** 删除云端单条备忘录（不带墓碑：备忘录为流程性数据，不做跨设备删除同步） */
+  async function delMemo(id) {
+    var path = "data/memos/" + id + ".json";
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "DELETE", headers: ghHeaders(),
+      body: JSON.stringify({ message: "del " + id, sha: sha, branch: Config.GH.branch })
+    });
+  }
+
+  /** 逐条推送本地全部备忘录 */
+  async function pushAllMemos(list) {
+    var ok = 0, fail = 0;
+    var arr = list || window.App.State.memos;
+    for (var i = 0; i < arr.length; i++) {
+      try { await pushMemo(arr[i]); ok++; } catch (e) { fail++; }
+    }
+    return { ok: ok, fail: fail };
+  }
+
   /** 清空云端全部记录 */
   async function clearAll() {
     var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.GH.dir + "?ref=" + Config.GH.branch;
@@ -271,6 +328,9 @@
       // 待取货同步：拉取失败（非 404 网络异常）不影响 records 同步，单独降级为空
       var pks = [];
       try { pks = await pullPickups(); } catch (e) { pks = []; }
+      // 备忘录同步：与待取货一致，失败降级为空，不影响 records
+      var mms = [];
+      try { mms = await pullMemos(); } catch (e) { mms = []; }
       var toms = await pullTombstones();
       var merged = window.App.Records.mergeAndSort(window.App.State.list, recs);
       // 应用墓碑：删除本地已标记删除的记录
@@ -282,9 +342,12 @@
       // 待取货合并：同 id 云端覆盖本地（流程性数据，不参与墓碑删除同步）
       window.App.State.pickups = window.App.Pickups.mergeAndSort(window.App.State.pickups, pks);
       Store.savePickups(window.App.State.pickups);
+      // 备忘录合并：同 id 云端覆盖本地（流程性数据，不参与墓碑删除同步）
+      window.App.State.memos = window.App.Memos.mergeAndSort(window.App.State.memos, mms);
+      Store.saveMemos(window.App.State.memos);
       window.App.State.lastSync = new Date();
       onStatus("已同步 " + window.App.State.lastSync.toLocaleString(), false);
-      return { ok: true, list: merged, pickups: pks, tombstones: toms };
+      return { ok: true, list: merged, pickups: pks, memos: mms, tombstones: toms };
     } catch (e) {
       onStatus("同步失败：" + e.message + "（显示本地缓存）", true);
       return { ok: false, error: e };
@@ -309,6 +372,10 @@
     pullPickups: pullPickups,
     pushPickup: pushPickup,
     delPickup: delPickup,
-    pushAllPickups: pushAllPickups
+    pushAllPickups: pushAllPickups,
+    pullMemos: pullMemos,
+    pushMemo: pushMemo,
+    delMemo: delMemo,
+    pushAllMemos: pushAllMemos
   };
 })();

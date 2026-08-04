@@ -65,6 +65,10 @@
     savePickupsDraft: function (draft) { Store.set(Config.PICKUP_DRAFT_KEY, draft); },
     clearPickupsDraft: function () { Store.remove(Config.PICKUP_DRAFT_KEY); },
 
+    /* ---- 备忘录（localStorage 键 outbound_memos_v2，纯追加不动既有键） ---- */
+    loadMemos: function () { return Store.get(Config.MEMO_STORE_KEY, []); },
+    saveMemos: function (list) { Store.set(Config.MEMO_STORE_KEY, list); },
+
     /* ---- 历史补全（部门 / 领取人，冻结键） ---- */
     getHistory: function (key) { return Store.get(key, []); },
     addHistory: function (key, val) {
@@ -126,16 +130,19 @@
   var State = {
     list: [],
     pickups: [],
+    memos: [],
     lastSync: null,
     nav: null,
     appMounted: false,
     init: function () {
       State.list = Store.loadRecords();
       State.pickups = Store.loadPickups();
+      State.memos = Store.loadMemos();
       State.nav = Store.loadNav();
     },
     save: function () { Store.saveRecords(State.list); },
-    savePickups: function () { Store.savePickups(State.pickups); }
+    savePickups: function () { Store.savePickups(State.pickups); },
+    saveMemos: function () { Store.saveMemos(State.memos); }
   };
 
   window.App = window.App || {};

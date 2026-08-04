@@ -741,3 +741,12 @@
   border-color: transparent;
   font-weight: 500;
 }
+
+/* ============================================================
+   views.css — 备忘录模块（第八轮增量，全部追加，不改动既有类）
+   状态徽章复用 .status-pill.pending / .submitted；tab 复用 .pickups-tabs/.pickups-tab
+   ============================================================ */
+.memo-done {
+  text-decoration: line-through;
+  color: var(--muted);
+}
