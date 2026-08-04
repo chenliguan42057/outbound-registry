@@ -188,7 +188,7 @@ def build_pickup_update_markdown(data, old):
         return "### 🚚 出入库登记 · 待取货已出库\n- **取货人**：{}\n- **货品**：{}\n- **出库时间**：{}\n- **说明**：已生成出库记录".format(
             data.get("picker", ""),
             goods,
-            data.get("time", "") or time.strftime("%Y-%m-%d %H:%M"),
+            data.get("time", "") or datetime.now(CST).strftime("%Y-%m-%d %H:%M"),
         )
     # 确认提单动作：提单状态从非已确认变为已确认
     if old.get("confirmed") is not True and data.get("confirmed") is True:
@@ -229,7 +229,7 @@ def build_memo_update_markdown(data, old):
     if old.get("done") is not True and data.get("done") is True:
         return "### ✅ 出入库登记 · 备忘录已完成\n- **事项内容**：{}\n- **完成时间**：{}\n- **添加时间**：{}".format(
             data.get("text", ""),
-            fmt_ts(data.get("_ts")) or data.get("time", "") or time.strftime("%Y-%m-%d %H:%M"),
+            fmt_ts(data.get("_ts")) or data.get("time", "") or datetime.now(CST).strftime("%Y-%m-%d %H:%M"),
             data.get("time", ""),
         )
     # 改回未完成：done 从 true 变为非 true
