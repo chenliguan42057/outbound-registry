@@ -414,8 +414,10 @@
     if (!ok) return;
     var updated = Pickups.update(id, { confirmed: true, shipped: true });
     if (!updated) { Util.toast("记录不存在", true); return; }
-    // 生成出库记录（Records.create 会 unshift 进 State.list 并 State.save()）
-    var rec = Records.create(Pickups.toOutboundPayload(updated));
+    // 幂等保护：该待取货的出库记录已存在（上次推送失败后重复确认），不再重复生成/重复扣库存，
+    // 但仍复用已有记录做云端补推（Cloud.push 幂等，云端已有则更新）。
+    var existing = State.list.find(function (r) { return r.pickupId === id; });
+    var rec = existing || Records.create(Pickups.toOutboundPayload(updated));
     renderList();
     if (Cloud.hasToken()) {
       try {
@@ -428,7 +430,7 @@
     } else {
       window.App.Views.app.setSyncStatus("本机模式，出库记录已存本机", true);
     }
-    Util.toast("已确认出库，出库记录已生成");
+    Util.toast(existing ? "该待取货的出库记录已存在，未重复生成" : "已确认出库，出库记录已生成");
   }
 
   /** 删除待取货：本地删除 + 云端直接删文件（不带墓碑，流程性数据不做删除同步） */

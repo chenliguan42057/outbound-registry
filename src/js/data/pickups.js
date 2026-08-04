@@ -43,11 +43,17 @@
     State.savePickups();
   }
 
-  /** 合并策略：同 id 云端覆盖本地；排序 = time 降序，次 _ts 降序（与记录一致） */
+  /** 合并策略：同 id 冲突时，若本地已出库而云端旧副本未出库，保留本地版本（操作状态以本地为准，
+      防止推送失败后云端旧副本把「已出库」回退成「未出库」导致重复确认出库）；其余情况云端覆盖本地；
+      排序 = time 降序，次 _ts 降序（与记录一致） */
   function mergeAndSort(local, remote) {
     var map = new Map();
     (local || []).forEach(function (p) { map.set(p.id, p); });
-    (remote || []).forEach(function (p) { map.set(p.id, p); });
+    (remote || []).forEach(function (p) {
+      var lp = map.get(p.id);
+      if (lp && lp.shipped === true && p.shipped !== true) return;   // 保留本地「已出库」操作状态
+      map.set(p.id, p);
+    });
     return Array.from(map.values()).sort(function (a, b) {
       return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
     });
