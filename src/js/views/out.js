@@ -292,7 +292,22 @@
     resetForm();
     // 提交成功滚顶（落地页表单较长，便于看到成功反馈）
     window.scrollTo({ top: 0, behavior: "smooth" });
+    pushPhotosToCloud(rec);
     pushToCloud(wasEditing ? "修改已保存，正在同步到云端…" : "登记成功，正在同步到云端…");
+  }
+
+  /** 照片上传云端（可选）：成功后记录 photoUrls，供钉钉通知渲染图片；失败不阻塞 */
+  function pushPhotosToCloud(rec) {
+    if (!Cloud.hasToken()) return;
+    var photos = (rec && rec.photos) || [];
+    if (!photos.length) return;
+    Cloud.pushPhotos(rec).then(function (urls) {
+      if (!urls || !urls.length) return;
+      var updated = Records.update(rec.id, { photoUrls: urls });
+      if (updated && Cloud.hasToken()) {
+        Cloud.push(updated).catch(function () {});
+      }
+    }).catch(function () {});
   }
 
   function pushToCloud(msg) {

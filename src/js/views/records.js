@@ -73,9 +73,9 @@
       });
       Util.$("recSync").addEventListener("click", function () { doSync(); });
       Util.$("recClearAll").addEventListener("click", async function () {
-        var sure = await UI.confirmDialog("将清空全部记录（含云端），且不可恢复。确定继续？", "清空全部记录");
-        if (!sure) return;
-        try { await Cloud.clearAll(); } catch (e) {}
+        var r = await UI.promptDialog("将清空全部记录（含云端），且不可恢复。请填写清空原因：", "例如：年度归档 / 数据迁移…", "清空全部记录", "确认清空");
+        if (!r.ok) return;
+        try { await Cloud.clearAllWithReason(r.value); } catch (e) {}
         Records.clear();
         renderList();
         window.App.Views.app.setSyncStatus("已清空全部记录", false);
@@ -259,20 +259,26 @@
       }
     }
 
-    /** 删除：确认（库存恢复提示），本地删除后同步云端 */
+    /** 删除：必填删除理由 → 本地删除 + 云端墓碑（其他设备同步后自动清除残留） */
     async function doDel(id) {
       var r = State.list.find(function (x) { return x.id === id; });
       if (!r) return;
       var affects = r.affectsStock === true;
-      var sure = await UI.confirmDialog(
-        affects ? "确定删除该条记录？删除后库存会自动恢复。" : "确定删除该条记录？",
-        "删除记录"
+      var res = await UI.promptDialog(
+        affects ? "删除后库存会自动恢复。请填写删除理由：" : "请填写删除理由：",
+        "例如：登记错误 / 重复登记 / 已撤销…",
+        "删除记录",
+        "确认删除"
       );
-      if (!sure) return;
+      if (!res.ok) return;
       Records.remove(id);
       renderList();
       Util.toast(affects ? "已删除，库存已自动恢复" : "已删除");
-      try { await Cloud.del(id); } catch (e) {}
+      if (Cloud.hasToken()) {
+        try { await Cloud.delWithTombstone(r, res.value); } catch (e) {
+          window.App.Views.app.setSyncStatus("云端删除失败（已存本地墓碑待同步）", true);
+        }
+      }
     }
 
     function doSync() {

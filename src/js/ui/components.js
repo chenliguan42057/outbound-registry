@@ -116,6 +116,34 @@
     });
   }
 
+  /** 带输入框的必填弹窗：Promise<{ok:boolean, value:string}>；输入为空点确认不关闭并提示 */
+  function promptDialog(msg, placeholder, title, okText) {
+    return new Promise(function (resolve) {
+      var body =
+        '<div class="confirm-msg">' + Util.esc(msg || "") + '</div>' +
+        '<input type="text" class="pw-input" id="promptInput" placeholder="' + Util.esc(placeholder || "") + '" autocomplete="off" />' +
+        '<div class="pw-err" id="promptErr"></div>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+          '<button type="button" class="btn sm" data-act="ok">' + Util.esc(okText || "确定") + '</button>' +
+        '</div>';
+      Modal.show(title || "请输入", body, { width: "340px" });
+      var mBody = Modal.body();
+      var input = mBody.querySelector("#promptInput");
+      var errEl = mBody.querySelector("#promptErr");
+      function ok() {
+        var val = input.value.trim();
+        if (!val) { errEl.textContent = "此项为必填，不能为空"; input.focus(); return; }
+        Modal.hide();
+        resolve({ ok: true, value: val });
+      }
+      mBody.querySelector('[data-act="ok"]').onclick = ok;
+      mBody.querySelector('[data-act="cancel"]').onclick = function () { Modal.hide(); resolve({ ok: false, value: "" }); };
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") ok(); });
+      setTimeout(function () { input.focus(); }, 50);
+    });
+  }
+
   /** 登录弹窗（路由守卫 / 落地页管理入口）：Promise<boolean>，成功返回 true */
   function showLoginDialog() {
     return new Promise(function (resolve) {
@@ -428,6 +456,7 @@
     icon: icon,
     Modal: Modal,
     confirmDialog: confirmDialog,
+    promptDialog: promptDialog,
     showLoginDialog: showLoginDialog,
     collapseSection: collapseSection,
     bindCollapse: bindCollapse,

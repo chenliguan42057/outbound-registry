@@ -66,6 +66,22 @@
     });
   }
 
+  /**
+   * 应用墓碑：删除 list 中已被云端标记删除的记录（解决"删除不同步"——
+   * 其他设备本地残留已删除记录，同步时按墓碑清除）。
+   * @param {Array} list 记录数组
+   * @param {Array} tombstones 墓碑数组（元素含 id；type==="clear-all" 表示全部清空）
+   * @returns {Array} 应用墓碑后的新数组
+   */
+  function applyTombstones(list, tombstones) {
+    if (!tombstones || !tombstones.length) return list;
+    var hasClearAll = tombstones.some(function (t) { return t && t.type === "clear-all"; });
+    if (hasClearAll) return [];
+    var dead = {};
+    tombstones.forEach(function (t) { if (t && t.id) dead[t.id] = true; });
+    return (list || []).filter(function (r) { return !dead[r.id]; });
+  }
+
   /** CSV 序列化（与现网一致，含 BOM 由导出时添加）；出库记录列表含「状态」列，入库列表无 */
   function toCsv(list) {
     var Stock = window.App.Stock;
@@ -102,6 +118,7 @@
     remove: remove,
     clear: clear,
     mergeAndSort: mergeAndSort,
+    applyTombstones: applyTombstones,
     getStatus: getStatus,
     toCsv: toCsv,
     exportCsv: exportCsv

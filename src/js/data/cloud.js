@@ -95,6 +95,100 @@
     }
   }
 
+  /* ================= 墓碑同步删除（解决删除不同步） ================= */
+
+  /** 写删除墓碑：data/deleted/<id>.json（含原记录快照 + 删除理由 + 时间）。
+      先写墓碑再删原文件，保证删除可追踪、其他设备可同步删除残留。 */
+  async function pushTombstone(rec, reason) {
+    if (!rec || !rec.id) return;
+    var path = "data/deleted/" + rec.id + ".json";
+    var tomb = { type: "tombstone", id: rec.id, deletedAt: Date.now(), reason: String(reason || ""), rec: rec };
+    var content = Util.b64enc(JSON.stringify(tomb));
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+    var body = sha
+      ? { message: "tombstone " + rec.id, content: content, sha: sha, branch: Config.GH.branch }
+      : { message: "tombstone " + rec.id, content: content, branch: Config.GH.branch };
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
+    });
+  }
+
+  /** 删除并写墓碑（先墓碑后删原文件） */
+  async function delWithTombstone(rec, reason) {
+    await pushTombstone(rec, reason);
+    await del(rec.id);
+  }
+
+  /** 清空全部并写一条汇总墓碑（data/deleted/__clear-all__.json） */
+  async function clearAllWithReason(reason) {
+    var path = "data/deleted/__clear-all__.json";
+    var tomb = { type: "clear-all", id: "__clear-all__", deletedAt: Date.now(), reason: String(reason || "") };
+    var content = Util.b64enc(JSON.stringify(tomb));
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+    var body = sha
+      ? { message: "clear-all tombstone", content: content, sha: sha, branch: Config.GH.branch }
+      : { message: "clear-all tombstone", content: content, branch: Config.GH.branch };
+    try {
+      await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+        method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
+      });
+    } catch (e) {}
+    await clearAll();
+  }
+
+  /** 拉取云端全部墓碑（目录 404 视为空） */
+  async function pullTombstones() {
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/data/deleted?ref=" + Config.GH.branch;
+    var arr;
+    try { arr = await apiJson(url); }
+    catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
+    if (!Array.isArray(arr)) return [];
+    var toms = [];
+    for (var i = 0; i < arr.length; i++) {
+      var f = arr[i];
+      if (!f.name.endsWith(".json") || f.size >= 5 * 1024 * 1024) continue;
+      try {
+        var j = await apiJson(f.url);
+        toms.push(JSON.parse(Util.b64dec(j.content)));
+      } catch (e) {}
+    }
+    return toms;
+  }
+
+  /** 照片上传云端：data/photos/<id>-<index>.jpg；返回公网 URL（jsdelivr CDN） */
+  async function pushPhoto(id, index, dataUrl) {
+    var m = /^data:image\/[^;]+;base64,(.+)$/.exec(String(dataUrl || ""));
+    if (!m) return "";
+    var path = "data/photos/" + id + "-" + index + ".jpg";
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+    var body = sha
+      ? { message: "photo " + id, content: m[1], sha: sha, branch: Config.GH.branch }
+      : { message: "photo " + id, content: m[1], branch: Config.GH.branch };
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
+    });
+    return "https://cdn.jsdelivr.net/gh/" + Config.GH.repo + "@" + Config.GH.branch + "/" + path;
+  }
+
+  /** 批量上传记录照片，返回 photoUrls 数组（失败跳过） */
+  async function pushPhotos(rec) {
+    var urls = [];
+    var photos = (rec && rec.photos) || [];
+    for (var i = 0; i < photos.length; i++) {
+      try {
+        var u = await pushPhoto(rec.id, i + 1, photos[i]);
+        if (u) urls.push(u);
+      } catch (e) {}
+    }
+    return urls;
+  }
+
   /** 逐条推送本地全部记录 */
   async function pushAllLocal(list) {
     var ok = 0, fail = 0;
@@ -106,9 +200,10 @@
   }
 
   /**
-   * 拉取 + 合并 + 落盘
+   * 拉取 + 合并 + 应用墓碑 + 落盘
+   * 墓碑机制：云端 data/deleted/ 中的墓碑会删除本地对应 id 的残留记录（解决"删除不同步"）。
    * opts.onStatus(text, isErr) 回调用于更新顶栏/模块同步状态
-   * 返回 { ok: boolean, list?: Record[], error?: Error }
+   * 返回 { ok: boolean, list?: Record[], tombstones?: Tombstone[], error?: Error }
    */
   async function syncPull(opts) {
     opts = opts || {};
@@ -116,12 +211,17 @@
     onStatus("同步中…", false);
     try {
       var recs = await pull();
+      var toms = await pullTombstones();
       var merged = window.App.Records.mergeAndSort(window.App.State.list, recs);
+      // 应用墓碑：删除本地已标记删除的记录
+      if (toms && toms.length) {
+        merged = window.App.Records.applyTombstones(merged, toms);
+      }
       window.App.State.list = merged;
       Store.saveRecords(merged);
       window.App.State.lastSync = new Date();
       onStatus("已同步 " + window.App.State.lastSync.toLocaleString(), false);
-      return { ok: true, list: merged };
+      return { ok: true, list: merged, tombstones: toms };
     } catch (e) {
       onStatus("同步失败：" + e.message + "（显示本地缓存）", true);
       return { ok: false, error: e };
@@ -136,6 +236,12 @@
     del: del,
     clearAll: clearAll,
     pushAllLocal: pushAllLocal,
-    syncPull: syncPull
+    syncPull: syncPull,
+    pushTombstone: pushTombstone,
+    delWithTombstone: delWithTombstone,
+    clearAllWithReason: clearAllWithReason,
+    pullTombstones: pullTombstones,
+    pushPhoto: pushPhoto,
+    pushPhotos: pushPhotos
   };
 })();

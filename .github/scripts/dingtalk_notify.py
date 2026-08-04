@@ -83,37 +83,51 @@ def status_text_of(data):
     return "未提单" if status == "pending" else "已提单"
 
 
+def photos_markdown(data):
+    """记录 photoUrls → markdown 图片（最多 3 张防消息过大）；无则返回空串。"""
+    urls = (data or {}).get("photoUrls") or []
+    lines = []
+    for i, u in enumerate(urls[:3], 1):
+        lines.append("![照片{}]({})".format(i, u))
+    return "\n".join(lines)
+
+
 def build_new_markdown(data):
     """新增记录：新登记通知。"""
     goods = goods_of(data)
+    photos = photos_markdown(data)
     if str(data.get("type", "")).lower() == "in":
-        return "### 📥 出入库登记 · 新入库登记\n- **货品**：{}\n- **时间**：{}".format(
+        base = "### 📥 出入库登记 · 新入库登记\n- **货品**：{}\n- **时间**：{}".format(
             goods, data.get("time", "")
         )
-    return "### 📦 出入库登记 · 新出库登记\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
-        data.get("picker", ""),
-        data.get("dept", ""),
-        data.get("purpose", ""),
-        goods,
-        data.get("time", ""),
-        status_text_of(data),
-    )
+    else:
+        base = "### 📦 出入库登记 · 新出库登记\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
+            data.get("picker", ""),
+            data.get("dept", ""),
+            data.get("purpose", ""),
+            goods,
+            data.get("time", ""),
+            status_text_of(data),
+        )
+    return base + ("\n" + photos if photos else "")
 
 
 def build_update_markdown(data, old):
     """修改记录：识别「提单」（status pending→submitted）等状态变化。"""
     goods = goods_of(data)
+    photos = photos_markdown(data)
     new_st = data.get("status", "submitted")
     old_st = (old or {}).get("status", "submitted")
     # 提单动作：出库记录状态从非已提单变为已提单
     if new_st == "submitted" and old_st != "submitted":
-        return "### 📤 出入库登记 · 出库已提单\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：✅ 已提单".format(
+        base = "### 📤 出入库登记 · 出库已提单\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：✅ 已提单".format(
             data.get("picker", ""),
             data.get("dept", ""),
             data.get("purpose", ""),
             goods,
             data.get("time", ""),
         )
+        return base + ("\n" + photos if photos else "")
     # 取消提单（已提单→未提单）
     if old_st == "submitted" and new_st == "pending":
         return "### ↩️ 出入库登记 · 已撤回未提单\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}".format(
@@ -122,6 +136,25 @@ def build_update_markdown(data, old):
     # 其他修改（编辑用途/货品等）
     return "### 📝 出入库登记 · 记录已更新\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
         data.get("picker", ""), goods, data.get("time", ""), status_text_of(data)
+    )
+
+
+def build_tombstone_markdown(data):
+    """删除墓碑：删除通知（含删除理由）。"""
+    if not data or data.get("type") == "clear-all":
+        # 清空全部墓碑
+        return "### 🗑 出入库登记 · 全部记录已清空\n- **清空原因**：{}\n- **时间**：{}".format(
+            data.get("reason", ""),
+            time.strftime("%Y-%m-%d %H:%M", time.localtime((data.get("deletedAt") or time.time()) / 1000 if data.get("deletedAt") and data.get("deletedAt") > 1e11 else (data.get("deletedAt") or time.time()))),
+        )
+    rec = data.get("rec") or {}
+    goods = goods_of(rec)
+    return "### 🗑 出入库登记 · 记录已删除\n- **删除理由**：{}\n- **领取人**：{}\n- **部门/客户**：{}\n- **货品**：{}\n- **登记时间**：{}".format(
+        data.get("reason", ""),
+        rec.get("picker", ""),
+        rec.get("dept", ""),
+        goods,
+        rec.get("time", ""),
     )
 
 
@@ -175,7 +208,10 @@ def main():
         data = load_json(path)
         if data is None:
             continue
-        if action == "M":
+        # 删除墓碑 → 删除通知（data/deleted/ 前缀）
+        if path.startswith("data/deleted/"):
+            md = build_tombstone_markdown(data)
+        elif action == "M":
             old = git_show_old(path)
             md = build_update_markdown(data, old)
         else:  # A 新增（或未知状态按新增处理）
