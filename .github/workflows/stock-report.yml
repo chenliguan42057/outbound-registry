@@ -1,0 +1,17 @@
+name: Stock Weekly Report
+on:
+  schedule:
+    # 每周五 17:55（北京时间 = UTC 09:55）；GitHub cron 使用 UTC 时区
+    - cron: '55 9 * * 5'
+  workflow_dispatch:   # 支持手动触发测试
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Send stock report to DingTalk
+        env:
+          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          SECRET: ${{ secrets.DINGTALK_SECRET }}
+        run: python3 .github/scripts/stock_report.py
