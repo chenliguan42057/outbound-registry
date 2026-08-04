@@ -101,8 +101,9 @@ def build_report():
 
     total_items = len(stock)
     total_qty = sum(max(0, v) for v in stock.values())
-    low = [(n, v) for n, v in sorted(stock.items(), key=lambda x: x[1]) if v < LOW_STOCK_THRESHOLD]
-    top = sorted(stock.items(), key=lambda x: x[1], reverse=True)[:10]
+    # 全部库存按数量降序（完整清单 = 完整排行）
+    all_items = sorted(stock.items(), key=lambda x: x[1], reverse=True)
+    low = [(n, v) for n, v in all_items if v < LOW_STOCK_THRESHOLD]
 
     lines = [
         "### 📊 出入库登记 · 库存周报",
@@ -111,6 +112,15 @@ def build_report():
         ),
         "- **货品种类**：{} 种 ｜ **库存总量**：{} 件".format(total_items, total_qty),
     ]
+
+    # 全部库存清单（按数量降序，低库存行加 🔴 标记）
+    lines.append("")
+    lines.append("**📋 全部库存（{} 种，按数量降序）：**".format(len(all_items)))
+    for i, (name, v) in enumerate(all_items, 1):
+        mark = " 🔴" if v < LOW_STOCK_THRESHOLD else ""
+        lines.append("{}. {}{}：**{}** 件".format(i, name, mark, v))
+
+    # 低库存预警汇总
     if low:
         lines.append("")
         lines.append("**⚠️ 低库存预警（< {} 件）共 {} 种：**".format(LOW_STOCK_THRESHOLD, len(low)))
@@ -119,11 +129,6 @@ def build_report():
     else:
         lines.append("")
         lines.append("✅ 暂无低库存货品（阈值 {} 件）".format(LOW_STOCK_THRESHOLD))
-
-    lines.append("")
-    lines.append("**📈 库存排行 TOP10：**")
-    for i, (name, v) in enumerate(top, 1):
-        lines.append("{}. {}：{} 件".format(i, name, v))
 
     lines.append("")
     lines.append("— 每周五自动推送 · 数据实时来自云端登记")
