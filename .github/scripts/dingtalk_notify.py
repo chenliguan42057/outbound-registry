@@ -197,6 +197,16 @@ def build_pickup_update_markdown(data, old):
     )
 
 
+def fmt_ts(ms):
+    """毫秒时间戳 → "YYYY-MM-DD HH:mm"（本地时区）；无效/缺失返回 None。"""
+    if not isinstance(ms, (int, float)) or not ms:
+        return None
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(ms / 1000))
+    except (OSError, ValueError, OverflowError):
+        return None
+
+
 def build_memo_new_markdown(data):
     """新增备忘录通知（字段：事项内容/添加时间/状态）。"""
     return "### 📝 出入库登记 · 新备忘录\n- **事项内容**：{}\n- **添加时间**：{}\n- **状态**：⏳ 未完成".format(
@@ -207,11 +217,11 @@ def build_memo_new_markdown(data):
 def build_memo_update_markdown(data, old):
     """修改备忘录：识别「已完成」「改回未完成」等状态变化。"""
     old = old or {}
-    # 完成动作：done 从非 true 变为 true
+    # 完成动作：done 从非 true 变为 true（前端 update 仅此动作刷新 _ts，_ts 即完成时刻）
     if old.get("done") is not True and data.get("done") is True:
         return "### ✅ 出入库登记 · 备忘录已完成\n- **事项内容**：{}\n- **完成时间**：{}\n- **添加时间**：{}".format(
             data.get("text", ""),
-            data.get("time", "") or time.strftime("%Y-%m-%d %H:%M"),
+            fmt_ts(data.get("_ts")) or data.get("time", "") or time.strftime("%Y-%m-%d %H:%M"),
             data.get("time", ""),
         )
     # 改回未完成：done 从 true 变为非 true

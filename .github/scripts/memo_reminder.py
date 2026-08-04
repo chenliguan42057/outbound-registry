@@ -64,7 +64,7 @@ def build_memo_reminder_markdown(memos_dir="data/memos", now=None):
             pending.append(data)
     if not pending:
         return None
-    lines = ["### ⏰ 出入库登记 · 今日待办备忘录（9:00）"]
+    lines = ["### ⏰ 出入库登记 · 待办备忘录提醒（9:00）"]
     for m in pending:
         text = str(m.get("text") or "").strip() or "（无内容）"
         t = str(m.get("time", "")).replace("T", " ")

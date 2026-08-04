@@ -175,11 +175,14 @@
     Util.toast("正在同步…");
     Cloud.syncPull({ onStatus: function (text, isErr) {
       window.App.Views.app.setSyncStatus(text, isErr);
-    } }).then(function () {
+    } }).then(function (res) {
       renderList();
+      // 同步失败时本机 State.memos 仍是旧值，若继续全量上传会用旧 done:false 覆盖云端已完成状态，
+      // 因此失败必须跳过上传（避免跨设备完成状态回退）
+      if (!res || !res.ok) { Util.toast("同步失败，未上传本机变更", true); return; }
       // 确保本机未推送的备忘录全部上传（幂等，失败不影响）
-      Cloud.pushAllMemos(State.memos).then(function (res) {
-        if (res.fail > 0) window.App.Views.app.setSyncStatus("部分备忘录推送失败（" + res.fail + "）", true);
+      Cloud.pushAllMemos(State.memos).then(function (r) {
+        if (r.fail > 0) window.App.Views.app.setSyncStatus("部分备忘录推送失败（" + r.fail + "）", true);
       });
     });
   }
