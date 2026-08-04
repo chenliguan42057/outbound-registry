@@ -183,7 +183,7 @@
           return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + Util.esc(it.name) + ' × ' + it.qty + '</div>';
         }).join("");
         var stocks = (r.items || []).map(function (it, idx, arr) {
-          return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + Stock.getStock(it.name) + '</div>';
+          return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + Stock.getRecordStock(it.name, r, it) + '</div>';
         }).join("");
         var qtySum = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
         var photos = r.photos || [];
@@ -221,7 +221,7 @@
       var isRecIn = r.type === "in";
       var itemsHtml = (r.items || []).map(function (it) {
         return '<div class="detail-item"><span>' + Util.esc(it.name) + ' × ' + it.qty + '</span>' +
-          '<span style="color:var(--muted);">库存 ' + Stock.getStock(it.name) + '</span></div>';
+          '<span style="color:var(--muted);">库存 ' + Stock.getRecordStock(it.name, r, it) + '</span></div>';
       }).join("");
       var photosHtml = (r.photos && r.photos.length)
         ? '<div class="detail-photos">' + r.photos.map(function (src, i) {

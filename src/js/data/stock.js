@@ -24,6 +24,32 @@
     return init + inQty - outQty;
   }
 
+  /**
+   * 历史记录库存：返回「该笔业务完成时」该货品的库存快照。
+   * - 新记录（item.stock 为数字）→ 直接返回快照，随后续出入库变动而固定不变。
+   * - 旧记录（无快照字段）→ 由 rec._ts 推算：当前实时库存 - 该记录之后记录的净变化。
+   * - 无 _ts 极端情况 → 退回当前实时库存。
+   */
+  function getRecordStock(name, rec, item) {
+    if (item && typeof item.stock === "number") return item.stock;
+    var t = rec && rec._ts;
+    if (t) {
+      var netAfter = 0;
+      (State.list || []).forEach(function (r) {
+        if (!r || r.id === rec.id) return;         // 跳过自身
+        if (r.affectsStock !== true) return;        // 只统计参与库存的记录
+        if ((r._ts || 0) <= t) return;              // 只统计该记录之后（_ts 更大）的记录
+        (r.items || []).forEach(function (it) {
+          if (!it || it.name !== name) return;
+          var q = Number(it.qty) || 0;
+          netAfter += (r.type === "in" ? q : -q);   // 之后入库 +，出库 -
+        });
+      });
+      return getStock(name) - netAfter;             // 当前实时库存 - 之后的变化 = 当时的库存
+    }
+    return getStock(name);
+  }
+
   /** 全部货品汇总：{name, stock, inQty, outQty} */
   function summarize(list) {
     return Config.PRODUCTS.map(function (name) {
@@ -76,6 +102,7 @@
   window.App = window.App || {};
   window.App.Stock = {
     getStock: getStock,
+    getRecordStock: getRecordStock,
     summarize: summarize,
     trend: trend
   };

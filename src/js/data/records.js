@@ -20,6 +20,18 @@
     return rec.status === "pending" ? "pending" : "submitted";
   }
 
+  /** 写入库存快照：对 rec.items 中每个有 name 的 item 写 it.stock = 当前实时库存。
+      必须在 rec 已加入 State.list 后调用（getStock 才会包含本笔影响）。
+      出库记录创建后 getStock = 出库后库存（已扣本笔），入库记录 = 入库后库存（已加本笔），
+      两者都正好是「该笔完成后库存」，满足历史记录库存固化需求。纯追加字段，不影响既有 schema。 */
+  function stampStock(rec) {
+    var Stock = window.App.Stock;   // 延迟访问（stock.js 在 records.js 之前加载，运行时必已存在）
+    if (!Stock || !Stock.getStock) return;
+    (rec.items || []).forEach(function (it) {
+      if (it && it.name) it.stock = Stock.getStock(it.name);
+    });
+  }
+
   /** 新增记录（默认出库；payload.type='in' 为入库） */
   function create(payload) {
     var rec = Object.assign({
@@ -30,6 +42,7 @@
       photos: []
     }, payload);
     State.list.unshift(rec);
+    stampStock(rec);        // 先入列再打快照：getStock 已包含本笔影响
     State.save();
     return rec;
   }
@@ -40,6 +53,7 @@
     if (idx < 0) return null;
     var rec = Object.assign({}, State.list[idx], patch, { _ts: Date.now(), affectsStock: true });
     State.list[idx] = rec;
+    stampStock(rec);        // 更新后重新打快照（入列后调用）
     State.save();
     return rec;
   }
@@ -90,7 +104,7 @@
     if (hasOut) head.splice(3, 0, "状态");   // 状态列插在「领取人」「部门」之间
     var rows = list.map(function (r, i) {
       var items = (r.items || []).map(function (it) { return it.name + "×" + it.qty; }).join("； ");
-      var stocks = (r.items || []).map(function (it) { return String(Stock.getStock(it.name)); }).join("； ");
+      var stocks = (r.items || []).map(function (it) { return String(Stock.getRecordStock(it.name, r, it)); }).join("； ");
       var row = [list.length - i, r.time || "", r.picker || "", r.dept || "", r.purpose || "", items, stocks, (r.photos || []).length];
       if (hasOut) row.splice(3, 0, getStatus(r) === "pending" ? "未提单" : "已提单");
       return row;
