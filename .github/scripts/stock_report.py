@@ -105,7 +105,7 @@ def build_report():
     top = sorted(stock.items(), key=lambda x: x[1], reverse=True)[:10]
 
     lines = [
-        "### 📊 库存周报",
+        "### 📊 出入库登记 · 库存周报",
         "- **生成时间**：{}（北京时间）".format(
             time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 8 * 3600))
         ),

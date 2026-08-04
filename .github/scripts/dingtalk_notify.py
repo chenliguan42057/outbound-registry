@@ -25,7 +25,7 @@ SECRET = os.environ.get("SECRET", "").strip()
 FILES = os.environ.get("FILES", "").strip()
 GITHUB_SHA = os.environ.get("GITHUB_SHA", "").strip()
 
-TEST_TEXT = "✅ 钉钉通知测试：仓库通知已连通"
+TEST_TEXT = "✅ 出入库登记通知测试：仓库通知已连通"
 
 
 def sign_url(webhook, secret):
@@ -87,10 +87,10 @@ def build_new_markdown(data):
     """新增记录：新登记通知。"""
     goods = goods_of(data)
     if str(data.get("type", "")).lower() == "in":
-        return "### 📥 新入库登记\n- **货品**：{}\n- **时间**：{}".format(
+        return "### 📥 出入库登记 · 新入库登记\n- **货品**：{}\n- **时间**：{}".format(
             goods, data.get("time", "")
         )
-    return "### 📦 新出库登记\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
+    return "### 📦 出入库登记 · 新出库登记\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
         data.get("picker", ""),
         data.get("dept", ""),
         data.get("purpose", ""),
@@ -107,7 +107,7 @@ def build_update_markdown(data, old):
     old_st = (old or {}).get("status", "submitted")
     # 提单动作：出库记录状态从非已提单变为已提单
     if new_st == "submitted" and old_st != "submitted":
-        return "### 📤 出库已提单\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：✅ 已提单".format(
+        return "### 📤 出入库登记 · 出库已提单\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：✅ 已提单".format(
             data.get("picker", ""),
             data.get("dept", ""),
             data.get("purpose", ""),
@@ -116,11 +116,11 @@ def build_update_markdown(data, old):
         )
     # 取消提单（已提单→未提单）
     if old_st == "submitted" and new_st == "pending":
-        return "### ↩️ 已撤回未提单\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}".format(
+        return "### ↩️ 出入库登记 · 已撤回未提单\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}".format(
             data.get("picker", ""), goods, data.get("time", "")
         )
     # 其他修改（编辑用途/货品等）
-    return "### 📝 记录已更新\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
+    return "### 📝 出入库登记 · 记录已更新\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
         data.get("picker", ""), goods, data.get("time", ""), status_text_of(data)
     )
 
