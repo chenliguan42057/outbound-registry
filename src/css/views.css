@@ -643,3 +643,74 @@
 }
 .timeline-who { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 3px; }
 .timeline-items { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
+
+/* ============================================================
+   views.css — 出库登记「用途/项目」chip 单选（全部追加，不改动既有类）
+   ============================================================ */
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.chip {
+  border: 1px solid var(--border);
+  background: #F8FAFF;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s, transform .1s;
+}
+.chip:hover { border-color: var(--primary); background: #EEF2FF; }
+.chip:active { transform: translateY(1px); }
+.chip.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+.chip.selected:hover { background: var(--primary); border-color: var(--primary); }
+
+.purpose-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* 「+ 添加」按钮：虚线边框 + 主色文字 */
+.chip-add {
+  border: 1.5px dashed var(--primary);
+  background: transparent;
+  color: var(--primary);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.chip-add:hover { background: #EEF2FF; }
+.purpose-add-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.purpose-add-input {
+  width: 168px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.purpose-add-input:focus { outline: none; border-color: var(--primary); }
+/* 小号按钮：inline 输入区的确定/取消 */
+.btn.mini { padding: 5px 12px; font-size: 13px; }
+.btn.ghost.mini { padding: 5px 12px; font-size: 13px; }
+/* 移动端（375px 主场景）：chips 换行可读、输入框自适应 */
+@media (max-width: 560px) {
+  .purpose-add-input { width: 100%; }
+  .purpose-add-inline { flex-wrap: wrap; }
+}

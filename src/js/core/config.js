@@ -48,6 +48,7 @@
     GH_TOKEN_KEY: "gh_token",
     DEPT_HISTORY_KEY: "outbound_dept_history",
     PICKER_HISTORY_KEY: "outbound_picker_history",
+    PURPOSE_HISTORY_KEY: "outbound_purpose_history",
 
     /* 内部状态键（经 store.js 统一管理） */
     NAV_KEY: "outbound_nav",
@@ -109,6 +110,9 @@
     LOW_STOCK_THRESHOLD: 95,
     PHOTO_MAX_EDGE: 1280,
     PHOTO_QUALITY: 0.72,
+
+    /* 出库「用途/项目」预设（chip 单选；用户自定义项存 outbound_purpose_history） */
+    PURPOSE_PRESETS: ["客户销售", "赠送客户", "内部员工使用"],
 
     /* 第六轮增量（纯追加，不改既有键值）：
        CATEGORY_MAP — 仪表盘库存分布环形图的 8 大类归组（未命中类目兜底「其他」）

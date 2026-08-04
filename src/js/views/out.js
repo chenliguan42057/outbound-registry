@@ -18,6 +18,8 @@
   var photos = null;
   var editingId = null;
   var els = null;
+  /** 当前选中的用途值（chip 单选，互斥高亮） */
+  var selectedPurpose = "";
 
   function render(container) {
     container.innerHTML =
@@ -46,7 +48,15 @@
         '</div>' +
         '<div class="field">' +
           '<label>用途 / 项目<span class="req">*</span></label>' +
-          '<input type="text" id="outPurpose" placeholder="请输入用途或项目（必填）" />' +
+          '<div id="outPurposeChips" class="chip-group"></div>' +
+          '<div class="purpose-add-row">' +
+            '<button type="button" class="chip-add" id="outPurposeAdd">+ 添加</button>' +
+            '<span class="purpose-add-inline" id="outPurposeAddInline" style="display:none;">' +
+              '<input type="text" id="outPurposeInput" class="purpose-add-input" placeholder="输入自定义用途" maxlength="30" autocomplete="off" />' +
+              '<button type="button" class="btn mini" id="outPurposeOk">确定</button>' +
+              '<button type="button" class="btn ghost mini" id="outPurposeCancel">取消</button>' +
+            '</span>' +
+          '</div>' +
         '</div>' +
         '<div class="field">' +
           '<label>货物名称<span class="req">*</span></label>' +
@@ -67,7 +77,12 @@
       dept: Util.$("outDept"),
       time: Util.$("outTime"),
       picker: Util.$("outPicker"),
-      purpose: Util.$("outPurpose"),
+      purposeChips: Util.$("outPurposeChips"),
+      purposeAdd: Util.$("outPurposeAdd"),
+      purposeAddInline: Util.$("outPurposeAddInline"),
+      purposeInput: Util.$("outPurposeInput"),
+      purposeOk: Util.$("outPurposeOk"),
+      purposeCancel: Util.$("outPurposeCancel"),
       submit: Util.$("outSubmit"),
       reset: Util.$("outReset"),
       cancelEdit: Util.$("outCancelEdit")
@@ -87,14 +102,94 @@
     setupHistorySuggest("outDept", "outDeptSuggest", Config.DEPT_HISTORY_KEY);
     setupHistorySuggest("outPicker", "outPickerSuggest", Config.PICKER_HISTORY_KEY);
 
-    // 自动保存草稿
-    ["outDept", "outTime", "outPicker", "outPurpose"].forEach(function (id) {
+    // 用途 chip 单选：事件委托（互斥高亮）
+    els.purposeChips.addEventListener("click", function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest(".chip") : null;
+      if (!btn) return;
+      closePurposeAdd();
+      setPurposeSelected(btn.getAttribute("data-val") || "");
+    });
+    els.purposeAdd.addEventListener("click", openPurposeAdd);
+    els.purposeOk.addEventListener("click", confirmPurposeAdd);
+    els.purposeCancel.addEventListener("click", closePurposeAdd);
+    els.purposeInput.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { ev.preventDefault(); closePurposeAdd(); }
+      else if (ev.key === "Enter") { ev.preventDefault(); confirmPurposeAdd(); }
+    });
+    renderPurposeChips();
+
+    // 自动保存草稿（用途 chip 选中/新增时在对应逻辑里单独触发）
+    ["outDept", "outTime", "outPicker"].forEach(function (id) {
       Util.$(id).addEventListener("input", saveDraft);
     });
     picker.onChange = saveDraft;
     photos.onChange = saveDraft;
 
     restoreDraft();
+  }
+
+  /* ---------- 用途/项目 chip 单选 ---------- */
+
+  /** 组装 chip 选项：预设 + 历史（历史按最近使用在前 ≈ 频次降序，去重，最多前 8） */
+  function getPurposeOptions() {
+    var presets = (Config.PURPOSE_PRESETS || []).slice();
+    var history = Store.getHistory(Config.PURPOSE_HISTORY_KEY)
+      .filter(function (v) { return v && presets.indexOf(v) === -1; })
+      .slice(0, 8);
+    var out = presets.concat(history);
+    // 确保当前选中值始终有 chip 可见（草稿/编辑恢复历史值时可能不在前 8 内）
+    if (selectedPurpose && out.indexOf(selectedPurpose) === -1) out.push(selectedPurpose);
+    return out;
+  }
+
+  /** 渲染 chip 列表（用户数据经 Util.esc 转义，防 XSS） */
+  function renderPurposeChips() {
+    var wrap = els.purposeChips;
+    if (!wrap) return;
+    wrap.innerHTML = getPurposeOptions().map(function (val) {
+      var cls = "chip" + (val === selectedPurpose ? " selected" : "");
+      return '<button type="button" class="' + cls + '" data-val="' + Util.esc(val) + '">' + Util.esc(val) + '</button>';
+    }).join("");
+  }
+
+  /** 读取当前选中的用途值 */
+  function getPurposeSelected() {
+    return selectedPurpose;
+  }
+
+  /** 选中某个用途（互斥高亮），并触发草稿保存 */
+  function setPurposeSelected(val) {
+    selectedPurpose = val || "";
+    renderPurposeChips();
+    saveDraft();
+  }
+
+  /** 打开「+ 添加」inline 输入框 */
+  function openPurposeAdd() {
+    els.purposeAdd.style.display = "none";
+    els.purposeAddInline.style.display = "inline-flex";
+    els.purposeInput.value = "";
+    els.purposeInput.focus();
+  }
+
+  /** 关闭 inline 输入框并还原「+ 添加」按钮 */
+  function closePurposeAdd() {
+    if (!els.purposeAdd) return;
+    els.purposeAdd.style.display = "";
+    els.purposeAddInline.style.display = "none";
+    els.purposeInput.value = "";
+  }
+
+  /** 确认新增自定义用途：非空 + 不重复 → 写历史 → 重排 chips → 自动选中 */
+  function confirmPurposeAdd() {
+    var val = els.purposeInput.value.trim();
+    if (!val) { Util.toast("请输入用途/项目", true); els.purposeInput.focus(); return; }
+    if (getPurposeOptions().indexOf(val) !== -1) { Util.toast("该用途已存在，请直接选择", true); return; }
+    Store.addHistory(Config.PURPOSE_HISTORY_KEY, val);
+    closePurposeAdd();
+    selectedPurpose = val;
+    renderPurposeChips();
+    saveDraft();
   }
 
   /** 历史补全（部门 / 领取人），与现网一致 */
@@ -130,7 +225,7 @@
       time: els.time.value,
       picker: els.picker.value,
       dept: els.dept.value,
-      purpose: els.purpose.value,
+      purpose: getPurposeSelected(),
       items: picker.selected,
       photos: photos.getPhotos()
     });
@@ -142,7 +237,7 @@
     els.time.value = d.time || Util.nowLocal();
     els.picker.value = d.picker || "";
     els.dept.value = d.dept || "";
-    els.purpose.value = d.purpose || "";
+    if (d.purpose) { selectedPurpose = d.purpose; renderPurposeChips(); }  // 旧草稿为字符串，直接匹配高亮对应 chip
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
   }
@@ -152,12 +247,12 @@
   function submit() {
     var time = els.time.value;
     var pickerVal = els.picker.value.trim();
-    var purpose = els.purpose.value.trim();
+    var purpose = getPurposeSelected();
     var dept = els.dept.value.trim();
     if (!time) return Util.toast("请填写领取时间", true);
     if (!pickerVal) return Util.toast("请填写领取人", true);
     if (!dept) return Util.toast("请填写部门/领取单位（必填）", true);
-    if (!purpose) return Util.toast("请填写用途/项目（必填）", true);
+    if (!purpose) return Util.toast("请选择用途/项目（必填）", true);
     var items = picker.getItems();
     if (!items.length) return Util.toast("请至少选择一项货品", true);
 
@@ -207,7 +302,9 @@
 
   function resetForm() {
     els.picker.value = "";
-    els.purpose.value = "";
+    selectedPurpose = "";
+    renderPurposeChips();
+    closePurposeAdd();
     els.dept.value = "";
     els.time.value = Util.nowLocal();
     picker.setSelected([]);
@@ -226,7 +323,7 @@
     els.time.value = r.time || Util.nowLocal();
     els.picker.value = r.picker || "";
     els.dept.value = r.dept || "";
-    els.purpose.value = r.purpose || "";
+    if (r.purpose) { selectedPurpose = r.purpose; renderPurposeChips(); }  // 编辑初始化选中态
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);
     els.submit.textContent = "保存修改";
