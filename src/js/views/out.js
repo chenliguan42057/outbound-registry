@@ -130,11 +130,24 @@
 
   /* ---------- 用途/项目 chip 单选 ---------- */
 
-  /** 组装 chip 选项：预设 + 历史（历史按最近使用在前 ≈ 频次降序，去重，最多前 8） */
+  /** 组装 chip 选项：预设 + 历史（历史按使用频次降序，同次数按最近使用在前，去重，最多前 8）。
+      注：Store.addHistory 通用实现为「去重+置顶」，历史数组本身一般不含重复项；
+      此处仍按原始数组做频次统计排序，以兼容历史/导入/手工数据含重复项的频次口径。 */
   function getPurposeOptions() {
     var presets = (Config.PURPOSE_PRESETS || []).slice();
-    var history = Store.getHistory(Config.PURPOSE_HISTORY_KEY)
-      .filter(function (v) { return v && presets.indexOf(v) === -1; })
+    var raw = Store.getHistory(Config.PURPOSE_HISTORY_KEY);
+    // 频次统计：遍历原始数组计数；order 保留首次出现顺序（即最近使用在前），用于同次数稳定排序
+    var count = {};
+    var order = [];
+    raw.forEach(function (v) {
+      if (!v || presets.indexOf(v) !== -1) return; // 空值与预设值不进历史排序区
+      if (!count[v]) { count[v] = 0; order.push(v); }
+      count[v]++;
+    });
+    var history = order
+      .map(function (v, i) { return { val: v, c: count[v], i: i }; })
+      .sort(function (a, b) { return b.c - a.c || a.i - b.i; }) // 次数降序，同次数最近使用在前
+      .map(function (o) { return o.val; })
       .slice(0, 8);
     var out = presets.concat(history);
     // 确保当前选中值始终有 chip 可见（草稿/编辑恢复历史值时可能不在前 8 内）
@@ -323,7 +336,9 @@
     els.time.value = r.time || Util.nowLocal();
     els.picker.value = r.picker || "";
     els.dept.value = r.dept || "";
-    if (r.purpose) { selectedPurpose = r.purpose; renderPurposeChips(); }  // 编辑初始化选中态
+    // 编辑初始化选中态：有值则选中，无值（旧记录/导入记录）必须清空，避免先前选中态残留带出
+    selectedPurpose = r.purpose || "";
+    renderPurposeChips();
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);
     els.submit.textContent = "保存修改";
