@@ -3,15 +3,18 @@
 """GitHub Actions 提交登记后自动推送钉钉群机器人消息。
 
 读取环境变量：
-  WEBHOOK: 钉钉群机器人 Webhook 地址
-  SECRET : 钉钉安全设置「加签」密钥
-  FILES  : 换行分隔的 data/records/*.json 路径；为空时发送测试消息
+  WEBHOOK  : 钉钉群机器人 Webhook 地址
+  SECRET   : 钉钉安全设置「加签」密钥
+  FILES    : 换行分隔的变更列表，每行形如 "A\tpath"（新增）或 "M\tpath"（修改）
+  GITHUB_SHA: 触发本次运行的提交 SHA（用于对比修改前后 status，识别提单动作）
+无 FILES 时发送测试消息。
 """
 import base64
 import hashlib
 import hmac
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -20,6 +23,7 @@ import urllib.request
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
 FILES = os.environ.get("FILES", "").strip()
+GITHUB_SHA = os.environ.get("GITHUB_SHA", "").strip()
 
 TEST_TEXT = "✅ 钉钉通知测试：仓库通知已连通"
 
@@ -37,41 +41,88 @@ def sign_url(webhook, secret):
     return webhook + "&timestamp=" + timestamp + "&sign=" + sign
 
 
-def build_markdown(path):
-    """解析单个记录 json，返回钉钉 markdown 文本。解析失败返回 None（跳过不中断）。"""
+def load_json(path):
+    """读取 json 文件，失败返回 None。"""
     try:
         with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            return json.load(f)
     except (OSError, ValueError) as exc:
         print("SKIP {}: {}".format(path, exc))
         return None
 
+
+def git_show_old(path):
+    """读取指定文件在上一提交（父提交）中的内容；文件不存在返回 None（新增）。"""
+    if not GITHUB_SHA:
+        return None
+    try:
+        out = subprocess.run(
+            ["git", "show", "{}^:{}".format(GITHUB_SHA, path)],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        if out.returncode != 0:
+            return None
+        return json.loads(out.stdout)
+    except Exception:
+        return None
+
+
+def goods_of(data):
     items = data.get("items") or []
-    goods = ", ".join(
+    return ", ".join(
         "{name}×{qty}".format(name=it.get("name", ""), qty=it.get("qty", ""))
         for it in items
         if it.get("name")
     ) or "（无明细）"
 
+
+def status_text_of(data):
+    status = data.get("status", "submitted")
+    return "未提单" if status == "pending" else "已提单"
+
+
+def build_new_markdown(data):
+    """新增记录：新登记通知。"""
+    goods = goods_of(data)
     if str(data.get("type", "")).lower() == "in":
-        lines = [
-            "### 📥 新入库登记",
-            "- **货品**：{}".format(goods),
-            "- **时间**：{}".format(data.get("time", "")),
-        ]
-    else:
-        status = data.get("status", "submitted")
-        status_text = "未提单" if status == "pending" else "已提单"
-        lines = [
-            "### 📦 新出库登记",
-            "- **领取人**：{}".format(data.get("picker", "")),
-            "- **部门/客户**：{}".format(data.get("dept", "")),
-            "- **用途**：{}".format(data.get("purpose", "")),
-            "- **货品**：{}".format(goods),
-            "- **时间**：{}".format(data.get("time", "")),
-            "- **状态**：{}".format(status_text),
-        ]
-    return "\n".join(lines)
+        return "### 📥 新入库登记\n- **货品**：{}\n- **时间**：{}".format(
+            goods, data.get("time", "")
+        )
+    return "### 📦 新出库登记\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
+        data.get("picker", ""),
+        data.get("dept", ""),
+        data.get("purpose", ""),
+        goods,
+        data.get("time", ""),
+        status_text_of(data),
+    )
+
+
+def build_update_markdown(data, old):
+    """修改记录：识别「提单」（status pending→submitted）等状态变化。"""
+    goods = goods_of(data)
+    new_st = data.get("status", "submitted")
+    old_st = (old or {}).get("status", "submitted")
+    # 提单动作：出库记录状态从非已提单变为已提单
+    if new_st == "submitted" and old_st != "submitted":
+        return "### 📤 出库已提单\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：✅ 已提单".format(
+            data.get("picker", ""),
+            data.get("dept", ""),
+            data.get("purpose", ""),
+            goods,
+            data.get("time", ""),
+        )
+    # 取消提单（已提单→未提单）
+    if old_st == "submitted" and new_st == "pending":
+        return "### ↩️ 已撤回未提单\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}".format(
+            data.get("picker", ""), goods, data.get("time", "")
+        )
+    # 其他修改（编辑用途/货品等）
+    return "### 📝 记录已更新\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
+        data.get("picker", ""), goods, data.get("time", ""), status_text_of(data)
+    )
 
 
 def send(text, title="新登记通知"):
@@ -112,11 +163,23 @@ def main():
         return 1
 
     records = []
-    for path in FILES.splitlines():
-        path = path.strip()
+    for line in FILES.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("\t")
+        action = parts[0].strip().upper() if parts else ""
+        path = parts[-1].strip() if len(parts) > 1 else ""
         if not path:
             continue
-        md = build_markdown(path)
+        data = load_json(path)
+        if data is None:
+            continue
+        if action == "M":
+            old = git_show_old(path)
+            md = build_update_markdown(data, old)
+        else:  # A 新增（或未知状态按新增处理）
+            md = build_new_markdown(data)
         if md:
             records.append(md)
 
@@ -127,13 +190,13 @@ def main():
     if len(records) == 1:
         text = records[0]
     else:
-        text = "### 🔔 新登记通知（共 {} 条）\n\n{}".format(
+        text = "### 🔔 通知（共 {} 条）\n\n{}".format(
             len(records), "\n\n---\n\n".join(records)
         )
 
     ok, err = send(text)
     if ok:
-        print("已发送 {} 条记录通知".format(len(records)))
+        print("已发送 {} 条通知".format(len(records)))
         return 0
     print("发送失败: {}".format(err), file=sys.stderr)
     return 1

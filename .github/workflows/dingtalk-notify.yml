@@ -16,10 +16,11 @@ jobs:
       - name: Get changed record files
         id: changed
         run: |
+          # name-status 输出形如 "A\tpath"（新增）/ "M\tpath"（修改），脚本据此区分登记与提单
           if [ "${{ github.event_name }}" = "push" ]; then
-            FILES=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} -- 'data/records/*.json' || true)
+            FILES=$(git diff-tree --no-commit-id --name-status -r ${{ github.sha }} -- 'data/records/*.json' || true)
           else
-            FILES=$(git log -1 --name-only --format= -- 'data/records/*.json' || true)
+            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data/records/*.json' || true)
           fi
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
@@ -29,4 +30,5 @@ jobs:
           WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           SECRET: ${{ secrets.DINGTALK_SECRET }}
           FILES: ${{ steps.changed.outputs.files }}
+          GITHUB_SHA: ${{ github.sha }}
         run: python3 .github/scripts/dingtalk_notify.py
