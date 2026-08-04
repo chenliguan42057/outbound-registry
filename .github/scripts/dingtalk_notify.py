@@ -158,6 +158,45 @@ def build_tombstone_markdown(data):
     )
 
 
+def build_pickup_new_markdown(data):
+    """新增待取货登记通知（字段：取货人/部门/用途/货品/预计取货时间/备注）。"""
+    goods = goods_of(data)
+    lines = [
+        "### 📦 出入库登记 · 新待取货登记",
+        "- **取货人**：{}".format(data.get("picker", "")),
+        "- **部门/客户**：{}".format(data.get("dept", "")),
+        "- **用途**：{}".format(data.get("purpose", "")),
+        "- **货品**：{}".format(goods),
+        "- **预计取货时间**：{}".format(data.get("time", "")),
+    ]
+    note = (data.get("note") or "").strip()
+    if note:
+        lines.append("- **备注**：{}".format(note))
+    return "\n".join(lines)
+
+
+def build_pickup_update_markdown(data, old):
+    """修改待取货：识别「确认出库」「确认提单」等状态变化。"""
+    goods = goods_of(data)
+    old = old or {}
+    # 出库动作：出库状态从非已出库变为已出库
+    if old.get("shipped") is not True and data.get("shipped") is True:
+        return "### 🚚 出入库登记 · 待取货已出库\n- **取货人**：{}\n- **货品**：{}\n- **出库时间**：{}\n- **说明**：已生成出库记录".format(
+            data.get("picker", ""),
+            goods,
+            data.get("time", "") or time.strftime("%Y-%m-%d %H:%M"),
+        )
+    # 确认提单动作：提单状态从非已确认变为已确认
+    if old.get("confirmed") is not True and data.get("confirmed") is True:
+        return "### ✅ 出入库登记 · 待取货已确认提单\n- **取货人**：{}\n- **货品**：{}\n- **登记时间**：{}".format(
+            data.get("picker", ""), goods, data.get("time", "")
+        )
+    # 其他修改
+    return "### 📝 出入库登记 · 待取货信息已更新\n- **取货人**：{}\n- **货品**：{}\n- **时间**：{}".format(
+        data.get("picker", ""), goods, data.get("time", "")
+    )
+
+
 def send(text, title="新登记通知"):
     """发送 markdown 消息到钉钉。返回 (ok, errmsg)。"""
     if not WEBHOOK:
@@ -208,8 +247,13 @@ def main():
         data = load_json(path)
         if data is None:
             continue
-        # 删除墓碑 → 删除通知（data/deleted/ 前缀）
-        if path.startswith("data/deleted/"):
+        # 待取货变更 → 待取货通知（data/pickups/ 前缀；删除为 D 时文件已不存在，load_json 返回 None 自然跳过）
+        if path.startswith("data/pickups/"):
+            if action == "M":
+                md = build_pickup_update_markdown(data, git_show_old(path))
+            else:  # A 新增
+                md = build_pickup_new_markdown(data)
+        elif path.startswith("data/deleted/"):
             md = build_tombstone_markdown(data)
         elif action == "M":
             old = git_show_old(path)
@@ -230,7 +274,7 @@ def main():
             len(records), "\n\n---\n\n".join(records)
         )
 
-    ok, err = send(text)
+    ok, err = send(text, title="出入库登记通知")
     if ok:
         print("已发送 {} 条通知".format(len(records)))
         return 0

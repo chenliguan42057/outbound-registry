@@ -76,6 +76,63 @@
     });
   }
 
+  /* ================= 待取货云端同步（目录 data/pickups） ================= */
+
+  /** 拉取云端全部待取货（目录 404 视为空；逻辑同 pull() 但目录不同） */
+  async function pullPickups() {
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/data/pickups?ref=" + Config.GH.branch;
+    var arr;
+    try { arr = await apiJson(url); }
+    catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
+    if (!Array.isArray(arr)) return [];
+    var files = arr.filter(function (f) { return f.name.endsWith(".json") && f.size < 5 * 1024 * 1024; });
+    var recs = [];
+    for (var i = 0; i < files.length; i++) {
+      try {
+        var j = await apiJson(files[i].url);
+        recs.push(JSON.parse(Util.b64dec(j.content)));
+      } catch (e) { /* 单条失败跳过，不影响其余 */ }
+    }
+    return recs;
+  }
+
+  /** 推送单条待取货（存在则更新，不存在则新增） */
+  async function pushPickup(rec) {
+    var path = "data/pickups/" + rec.id + ".json";
+    var content = Util.b64enc(JSON.stringify(rec));
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+    var body = sha
+      ? { message: "update " + rec.id, content: content, sha: sha, branch: Config.GH.branch }
+      : { message: "add " + rec.id, content: content, branch: Config.GH.branch };
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
+    });
+  }
+
+  /** 删除云端单条待取货（不带墓碑：待取货为流程性数据，不做跨设备删除同步） */
+  async function delPickup(id) {
+    var path = "data/pickups/" + id + ".json";
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "DELETE", headers: ghHeaders(),
+      body: JSON.stringify({ message: "del " + id, sha: sha, branch: Config.GH.branch })
+    });
+  }
+
+  /** 逐条推送本地全部待取货 */
+  async function pushAllPickups(list) {
+    var ok = 0, fail = 0;
+    var arr = list || window.App.State.pickups;
+    for (var i = 0; i < arr.length; i++) {
+      try { await pushPickup(arr[i]); ok++; } catch (e) { fail++; }
+    }
+    return { ok: ok, fail: fail };
+  }
+
   /** 清空云端全部记录 */
   async function clearAll() {
     var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.GH.dir + "?ref=" + Config.GH.branch;
@@ -211,6 +268,9 @@
     onStatus("同步中…", false);
     try {
       var recs = await pull();
+      // 待取货同步：拉取失败（非 404 网络异常）不影响 records 同步，单独降级为空
+      var pks = [];
+      try { pks = await pullPickups(); } catch (e) { pks = []; }
       var toms = await pullTombstones();
       var merged = window.App.Records.mergeAndSort(window.App.State.list, recs);
       // 应用墓碑：删除本地已标记删除的记录
@@ -219,9 +279,12 @@
       }
       window.App.State.list = merged;
       Store.saveRecords(merged);
+      // 待取货合并：同 id 云端覆盖本地（流程性数据，不参与墓碑删除同步）
+      window.App.State.pickups = window.App.Pickups.mergeAndSort(window.App.State.pickups, pks);
+      Store.savePickups(window.App.State.pickups);
       window.App.State.lastSync = new Date();
       onStatus("已同步 " + window.App.State.lastSync.toLocaleString(), false);
-      return { ok: true, list: merged, tombstones: toms };
+      return { ok: true, list: merged, pickups: pks, tombstones: toms };
     } catch (e) {
       onStatus("同步失败：" + e.message + "（显示本地缓存）", true);
       return { ok: false, error: e };
@@ -242,6 +305,10 @@
     clearAllWithReason: clearAllWithReason,
     pullTombstones: pullTombstones,
     pushPhoto: pushPhoto,
-    pushPhotos: pushPhotos
+    pushPhotos: pushPhotos,
+    pullPickups: pullPickups,
+    pushPickup: pushPickup,
+    delPickup: delPickup,
+    pushAllPickups: pushAllPickups
   };
 })();

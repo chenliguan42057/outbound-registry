@@ -56,6 +56,15 @@
     },
     saveSearch: function (s) { Store.set(Config.SEARCH_KEY, s); },
 
+    /* ---- 待取货（localStorage 键 outbound_pickups_v2，纯追加不动既有键） ---- */
+    loadPickups: function () { return Store.get(Config.PICKUP_STORE_KEY, []); },
+    savePickups: function (list) { Store.set(Config.PICKUP_STORE_KEY, list); },
+
+    /* ---- 待取货登记草稿（outbound_pickup_draft） ---- */
+    loadPickupsDraft: function () { return Store.get(Config.PICKUP_DRAFT_KEY, null); },
+    savePickupsDraft: function (draft) { Store.set(Config.PICKUP_DRAFT_KEY, draft); },
+    clearPickupsDraft: function () { Store.remove(Config.PICKUP_DRAFT_KEY); },
+
     /* ---- 历史补全（部门 / 领取人，冻结键） ---- */
     getHistory: function (key) { return Store.get(key, []); },
     addHistory: function (key, val) {
@@ -116,14 +125,17 @@
   /* ---- 应用级状态（内存） ---- */
   var State = {
     list: [],
+    pickups: [],
     lastSync: null,
     nav: null,
     appMounted: false,
     init: function () {
       State.list = Store.loadRecords();
+      State.pickups = Store.loadPickups();
       State.nav = Store.loadNav();
     },
-    save: function () { Store.saveRecords(State.list); }
+    save: function () { Store.saveRecords(State.list); },
+    savePickups: function () { Store.savePickups(State.pickups); }
   };
 
   window.App = window.App || {};

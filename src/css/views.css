@@ -714,3 +714,30 @@
   .purpose-add-input { width: 100%; }
   .purpose-add-inline { flex-wrap: wrap; }
 }
+
+/* ============================================================
+   views.css — 待取货模块（第七轮增量，全部追加，不改动既有类）
+   ============================================================ */
+.pickups-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.pickups-tab {
+  border: 1px solid var(--border);
+  background: #F8FAFF;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.pickups-tab:hover { border-color: var(--primary); color: var(--primary); }
+.pickups-tab.active {
+  background: var(--grad-main);
+  color: #fff;
+  border-color: transparent;
+  font-weight: 500;
+}
