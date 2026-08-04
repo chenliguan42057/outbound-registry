@@ -28,6 +28,18 @@ LOW_STOCK_THRESHOLD = 95  # 与前端 Config.LOW_STOCK_THRESHOLD 一致
 CONFIG_PATH = "src/js/core/config.js"
 RECORDS_DIR = "data/records"
 
+# 规格归组（与前端 Config.CATEGORY_MAP 一致）：同一系列的货品放一起展示
+CATEGORY_MAP = {
+    "冻干精华液": ["冻干精华液 20支装", "冻干精华液 5支装", "冻干精华液 单支装", "冻干精华液 30支装"],
+    "面膜": ["面膜 5片装", "面膜 1片装"],
+    "洁面": ["洁面慕斯 150ml", "洁面慕斯 50ml"],
+    "精粹水": ["舒缓精粹水 120ml", "舒缓精粹水 30ml"],
+    "精粹乳": ["赋活精粹乳 80ml", "赋活精粹乳 30ml", "赋活精粹乳 1ml"],
+    "精粹霜": ["舒缓精粹霜 50g", "舒缓精粹霜 15g", "舒缓精粹霜 5g", "舒缓精粹霜 1g"],
+    "礼盒": ["华大鹿茸凝时系列礼盒装"],
+    "手提袋": ["小鹿牛皮纸袋（全系列护肤品手提袋）大", "小鹿牛皮纸袋（精华+面膜手提袋）小"],
+}
+
 
 def sign_url(webhook, secret):
     """钉钉加签：timestamp + \n + secret 的 HMAC-SHA256，base64 后 URL 编码。"""
@@ -101,9 +113,7 @@ def build_report():
 
     total_items = len(stock)
     total_qty = sum(max(0, v) for v in stock.values())
-    # 全部库存按数量降序（完整清单 = 完整排行）
-    all_items = sorted(stock.items(), key=lambda x: x[1], reverse=True)
-    low = [(n, v) for n, v in all_items if v < LOW_STOCK_THRESHOLD]
+    low = [(n, v) for n, v in sorted(stock.items(), key=lambda x: x[1]) if v < LOW_STOCK_THRESHOLD]
 
     lines = [
         "### 📊 出入库登记 · 库存周报",
@@ -113,12 +123,35 @@ def build_report():
         "- **货品种类**：{} 种 ｜ **库存总量**：{} 件".format(total_items, total_qty),
     ]
 
-    # 全部库存清单（按数量降序，低库存行加 🔴 标记）
+    # 按规格分组展示（同一系列放一起；未匹配兜底「其他」）
     lines.append("")
-    lines.append("**📋 全部库存（{} 种，按数量降序）：**".format(len(all_items)))
-    for i, (name, v) in enumerate(all_items, 1):
-        mark = " 🔴" if v < LOW_STOCK_THRESHOLD else ""
-        lines.append("{}. {}{}：**{}** 件".format(i, name, mark, v))
+    lines.append("**📦 库存明细（按规格分组）：**")
+    grouped = False
+    for cat, specs in CATEGORY_MAP.items():
+        rows = [(s, stock.get(s)) for s in specs if s in stock]
+        if not rows:
+            continue
+        grouped = True
+        lines.append("")
+        lines.append("**▸ {}（{} 个规格）**".format(cat, len(rows)))
+        for name, v in rows:
+            mark = " 🔴" if v < LOW_STOCK_THRESHOLD else ""
+            lines.append("- {}{}：**{}** 件".format(name, mark, v))
+    # 兜底未匹配的货品
+    known = set()
+    for specs in CATEGORY_MAP.values():
+        known.update(specs)
+    others = [(n, v) for n, v in stock.items() if n not in known]
+    if others:
+        grouped = True
+        lines.append("")
+        lines.append("**▸ 其他（{} 个）**".format(len(others)))
+        for name, v in sorted(others, key=lambda x: x[1], reverse=True):
+            mark = " 🔴" if v < LOW_STOCK_THRESHOLD else ""
+            lines.append("- {}{}：**{}** 件".format(name, mark, v))
+    if not grouped:
+        lines.append("")
+        lines.append("- 暂无库存数据")
 
     # 低库存预警汇总
     if low:
