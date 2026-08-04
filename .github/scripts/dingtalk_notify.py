@@ -19,11 +19,15 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
 FILES = os.environ.get("FILES", "").strip()
 GITHUB_SHA = os.environ.get("GITHUB_SHA", "").strip()
+
+# 北京时间（UTC+8）：GitHub Actions runner 默认 UTC，钉钉消息时间必须显式用 CST
+CST = timezone(timedelta(hours=8))
 
 TEST_TEXT = "✅ 出入库登记通知测试：仓库通知已连通"
 
@@ -142,10 +146,10 @@ def build_update_markdown(data, old):
 def build_tombstone_markdown(data):
     """删除墓碑：删除通知（含删除理由）。"""
     if not data or data.get("type") == "clear-all":
-        # 清空全部墓碑
+        # 清空全部墓碑（deletedAt 与当前时间均显式用 CST，避免 Actions/UTC 早 8 小时）
         return "### 🗑 出入库登记 · 全部记录已清空\n- **清空原因**：{}\n- **时间**：{}".format(
             data.get("reason", ""),
-            time.strftime("%Y-%m-%d %H:%M", time.localtime((data.get("deletedAt") or time.time()) / 1000 if data.get("deletedAt") and data.get("deletedAt") > 1e11 else (data.get("deletedAt") or time.time()))),
+            fmt_ts(data.get("deletedAt")) or datetime.now(CST).strftime("%Y-%m-%d %H:%M"),
         )
     rec = data.get("rec") or {}
     goods = goods_of(rec)
@@ -197,12 +201,16 @@ def build_pickup_update_markdown(data, old):
     )
 
 
-def fmt_ts(ms):
-    """毫秒时间戳 → "YYYY-MM-DD HH:mm"（本地时区）；无效/缺失返回 None。"""
-    if not isinstance(ms, (int, float)) or not ms:
+def fmt_ts(ts):
+    """时间戳 → "YYYY-MM-DD HH:mm"（北京时间 CST）；无效/缺失返回 None。
+    兼容毫秒（>1e11，如 Date.now()）与秒（如 time.time()）。
+    必须显式用 CST：Actions runner 默认 UTC，time.localtime 会早 8 小时。"""
+    if not isinstance(ts, (int, float)) or not ts:
         return None
+    if ts > 1e11:
+        ts = ts / 1000.0
     try:
-        return time.strftime("%Y-%m-%d %H:%M", time.localtime(ms / 1000))
+        return datetime.fromtimestamp(ts, CST).strftime("%Y-%m-%d %H:%M")
     except (OSError, ValueError, OverflowError):
         return None
 
