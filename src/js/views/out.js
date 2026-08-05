@@ -53,9 +53,9 @@
             '<div class="hint"><span class="auto" id="outFillNow">📎 自动填入当前时间</span></div>' +
           '</div>' +
           '<div class="field">' +
-            '<label>领取人<span class="req">*</span></label>' +
+            '<label>领取人 and 工号or手机<span class="req">*</span></label>' +
             '<div class="search-wrap">' +
-              '<input type="text" id="outPicker" placeholder="请输入领取人姓名" autocomplete="off" />' +
+              '<input type="text" id="outPicker" placeholder="请输入领取人姓名、工号或手机" autocomplete="off" />' +
               '<div class="suggest" id="outPickerSuggest"></div>' +
             '</div>' +
           '</div>' +
