@@ -20,7 +20,7 @@
   var els = null;
   /** 当前选中的用途值（chip 单选，互斥高亮） */
   var selectedPurpose = "";
-  /** 当前选中的领用法人值（chip 单选，互斥高亮；必填） */
+  /** 当前选中的结算法人单位值（chip 单选，互斥高亮；必填） */
   var selectedEntity = "";
 
   function render(container) {
@@ -28,7 +28,7 @@
       '<div class="card">' +
         '<h2>出库登记 <span class="tag">基础登记</span></h2>' +
         '<div class="field">' +
-          '<label>领用法人<span class="req">*</span></label>' +
+          '<label>结算法人单位<span class="req">*</span></label>' +
           '<div id="outEntityChips" class="chip-group"></div>' +
           '<div class="purpose-add-row">' +
             '<button type="button" class="chip-add" id="outEntityAdd">+ 添加</button>' +
@@ -143,7 +143,7 @@
     });
     renderPurposeChips();
 
-    // 领用法人 chip 单选：事件委托（互斥高亮），与用途/项目同模式
+    // 结算法人单位 chip 单选：事件委托（互斥高亮），与用途/项目同模式
     els.entityChips.addEventListener("click", function (ev) {
       var btn = ev.target && ev.target.closest ? ev.target.closest(".chip") : null;
       if (!btn) return;
@@ -202,7 +202,7 @@
     return getHistoryChipOptions(Config.PURPOSE_PRESETS, Config.PURPOSE_HISTORY_KEY, selectedPurpose);
   }
 
-  /** 组装「领用法人」chip 选项 */
+  /** 组装「结算法人单位」chip 选项 */
   function getEntityOptions() {
     return getHistoryChipOptions(Config.ENTITY_PRESETS, Config.ENTITY_HISTORY_KEY, selectedEntity);
   }
@@ -257,9 +257,9 @@
     saveDraft();
   }
 
-  /* ---------- 领用法人 chip 单选（与用途/项目同模式） ---------- */
+  /* ---------- 结算法人单位 chip 单选（与用途/项目同模式） ---------- */
 
-  /** 渲染领用法人 chip 列表（用户数据经 Util.esc 转义，防 XSS） */
+  /** 渲染结算法人单位 chip 列表（用户数据经 Util.esc 转义，防 XSS） */
   function renderEntityChips() {
     var wrap = els.entityChips;
     if (!wrap) return;
@@ -269,12 +269,12 @@
     }).join("");
   }
 
-  /** 读取当前选中的领用法人值 */
+  /** 读取当前选中的结算法人单位值 */
   function getEntitySelected() {
     return selectedEntity;
   }
 
-  /** 选中某个领用法人（互斥高亮），并触发草稿保存 */
+  /** 选中某个结算法人单位（互斥高亮），并触发草稿保存 */
   function setEntitySelected(val) {
     selectedEntity = val || "";
     renderEntityChips();
@@ -300,7 +300,7 @@
   /** 确认新增自定义法人：非空 + 不重复 → 写历史 → 重排 chips → 自动选中 */
   function confirmEntityAdd() {
     var val = els.entityInput.value.trim();
-    if (!val) { Util.toast("请输入领用法人", true); els.entityInput.focus(); return; }
+    if (!val) { Util.toast("请输入结算法人单位", true); els.entityInput.focus(); return; }
     if (getEntityOptions().indexOf(val) !== -1) { Util.toast("该法人已存在，请直接选择", true); return; }
     Store.addHistory(Config.ENTITY_HISTORY_KEY, val);
     closeEntityAdd();
@@ -358,7 +358,7 @@
     els.dept.value = d.dept || "";
     els.note.value = d.note || "";
     if (d.purpose) { selectedPurpose = d.purpose; renderPurposeChips(); }  // 旧草稿为字符串，直接匹配高亮对应 chip
-    if (d.entity) { selectedEntity = d.entity; renderEntityChips(); }      // 领用法人同款回填
+    if (d.entity) { selectedEntity = d.entity; renderEntityChips(); }      // 结算法人单位同款回填
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
   }
@@ -375,7 +375,7 @@
     if (!pickerVal) return Util.toast("请填写领取人", true);
     if (!dept) return Util.toast("请填写部门/领取单位（必填）", true);
     if (!purpose) return Util.toast("请选择用途/项目（必填）", true);
-    if (!entity) return Util.toast("请选择领用法人", true);
+    if (!entity) return Util.toast("请选择结算法人单位", true);
     var items = picker.getItems();
     if (!items.length) return Util.toast("请至少选择一项货品", true);
 
@@ -386,7 +386,7 @@
       dept: dept,
       note: (els.note && els.note.value || "").trim(),  // 备注非必填，纯追加字段
       purpose: purpose,
-      entity: entity,                                    // 领用法人必填，纯追加字段（与 note 同类，不破坏 schema）
+      entity: entity,                                    // 结算法人单位必填，纯追加字段（与 note 同类，不破坏 schema）
       items: items,
       photos: photos.getPhotos(),
       affectsStock: true  // 新记录才参与库存计算
