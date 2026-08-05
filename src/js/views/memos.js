@@ -13,6 +13,8 @@
   var State = window.App.State;
   var Memos = window.App.Memos;
   var Cloud = window.App.Cloud;
+  var Store = window.App.Store;
+  var Config = window.App.Config;
 
   var container = null;
   var listBox = null;
@@ -35,6 +37,17 @@
         '</div>' +
       '</div>' +
       '<div class="card">' +
+        '<h2>提醒设置</h2>' +
+        '<div class="field">' +
+          '<label>每日提醒时间（北京时间）</label>' +
+          '<div class="reminder-row">' +
+            '<input type="time" id="memoReminderTime" step="60" />' +
+            '<button type="button" class="btn" id="memoReminderSave">保存</button>' +
+          '</div>' +
+          '<div class="hint">每天该时刻推送未完成备忘录提醒；保存后同步到云端定时任务生效。</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card">' +
         '<h2>备忘录 <span class="badge" id="memoCount">未完成 0 项</span></h2>' +
         '<div class="actions rec-actions">' +
           '<button type="button" class="btn ghost sm" id="memoSync">&#128260; 立即同步</button>' +
@@ -50,6 +63,7 @@
     Util.$("memoAdd").addEventListener("click", submit);
     Util.$("memoReset").addEventListener("click", function () { textInput.value = ""; textInput.focus(); });
     Util.$("memoSync").addEventListener("click", doSync);
+    Util.$("memoReminderSave").addEventListener("click", saveReminder);
     textInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
     });
@@ -57,6 +71,8 @@
 
     bindTabs();
     listBox.addEventListener("click", onListClick);
+    renderReminderSettings();
+    syncReminderFromCloud();
     renderList();
   }
 
@@ -78,6 +94,45 @@
     } else {
       Util.toast("已添加（已存本机）");
     }
+  }
+
+  /* ---------- 提醒设置 ---------- */
+
+  /** 读取本地提醒配置并回填时间控件（缺省兜底默认时间） */
+  function renderReminderSettings() {
+    var cfg = Store.loadMemoConfig();
+    var input = Util.$("memoReminderTime");
+    if (input) input.value = cfg.reminderTime || Config.MEMO_DEFAULT_REMINDER_TIME;
+  }
+
+  /** 保存提醒时间：写 localStorage + 有 token 时推云端 data/memos/config.json */
+  function saveReminder() {
+    var input = Util.$("memoReminderTime");
+    var v = (input && input.value) || "";
+    if (!/^\d{2}:\d{2}$/.test(v)) { Util.toast("请选择有效的提醒时间", true); if (input) input.focus(); return; }
+    Store.saveMemoConfig({ reminderTime: v });
+    Util.toast("已保存提醒时间：" + v);
+    if (Cloud.hasToken()) {
+      Cloud.pushMemoConfig({ reminderTime: v }).then(function () {
+        window.App.Views.app.setSyncStatus("已同步", false);
+      }).catch(function () {
+        window.App.Views.app.setSyncStatus("云端同步失败（已存本机）", true);
+      });
+    }
+  }
+
+  /** 从云端拉取提醒配置同步到本地（有 token 且云端有合法时间时以云端为准；失败静默保留本地） */
+  function syncReminderFromCloud() {
+    if (!Cloud.hasToken()) return;
+    Cloud.pullMemoConfig().then(function (obj) {
+      if (!obj || !/^\d{2}:\d{2}$/.test(String(obj.reminderTime || ""))) return;
+      var cur = Store.loadMemoConfig();
+      if (cur.reminderTime !== obj.reminderTime) {
+        Store.saveMemoConfig({ reminderTime: obj.reminderTime });
+        var input = Util.$("memoReminderTime");
+        if (input) input.value = obj.reminderTime;
+      }
+    }).catch(function () { /* 拉取失败静默，保留本地配置 */ });
   }
 
   /* ---------- 列表渲染 ---------- */

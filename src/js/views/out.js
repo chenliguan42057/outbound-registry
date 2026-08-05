@@ -63,6 +63,10 @@
           '<div id="outProductPicker"></div>' +
         '</div>' +
         '<div class="field">' +
+          '<label>备注</label>' +
+          '<textarea id="outNote" rows="2" maxlength="500" placeholder="如有任何补充说明…" autocomplete="off"></textarea>' +
+        '</div>' +
+        '<div class="field">' +
           '<label>现场照片（留存）</label>' +
           '<div id="outPhotoUpload"></div>' +
         '</div>' +
@@ -77,6 +81,7 @@
       dept: Util.$("outDept"),
       time: Util.$("outTime"),
       picker: Util.$("outPicker"),
+      note: Util.$("outNote"),
       purposeChips: Util.$("outPurposeChips"),
       purposeAdd: Util.$("outPurposeAdd"),
       purposeAddInline: Util.$("outPurposeAddInline"),
@@ -119,7 +124,7 @@
     renderPurposeChips();
 
     // 自动保存草稿（用途 chip 选中/新增时在对应逻辑里单独触发）
-    ["outDept", "outTime", "outPicker"].forEach(function (id) {
+    ["outDept", "outTime", "outPicker", "outNote"].forEach(function (id) {
       Util.$(id).addEventListener("input", saveDraft);
     });
     picker.onChange = saveDraft;
@@ -238,6 +243,7 @@
       time: els.time.value,
       picker: els.picker.value,
       dept: els.dept.value,
+      note: els.note.value,
       purpose: getPurposeSelected(),
       items: picker.selected,
       photos: photos.getPhotos()
@@ -250,6 +256,7 @@
     els.time.value = d.time || Util.nowLocal();
     els.picker.value = d.picker || "";
     els.dept.value = d.dept || "";
+    els.note.value = d.note || "";
     if (d.purpose) { selectedPurpose = d.purpose; renderPurposeChips(); }  // 旧草稿为字符串，直接匹配高亮对应 chip
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
@@ -274,6 +281,7 @@
       time: time,
       picker: pickerVal,
       dept: dept,
+      note: (els.note && els.note.value || "").trim(),  // 备注非必填，纯追加字段
       purpose: purpose,
       items: items,
       photos: photos.getPhotos(),
@@ -335,6 +343,7 @@
     closePurposeAdd();
     els.dept.value = "";
     els.time.value = Util.nowLocal();
+    els.note.value = "";
     picker.setSelected([]);
     photos.setPhotos([]);
     editingId = null;
@@ -351,6 +360,7 @@
     els.time.value = r.time || Util.nowLocal();
     els.picker.value = r.picker || "";
     els.dept.value = r.dept || "";
+    els.note.value = r.note || "";
     // 编辑初始化选中态：有值则选中，无值（旧记录/导入记录）必须清空，避免先前选中态残留带出
     selectedPurpose = r.purpose || "";
     renderPurposeChips();

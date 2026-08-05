@@ -20,10 +20,10 @@
     { id: "stock", icon: "stock", label: "库存查询" },
     { id: "in", icon: "in", label: "入库管理" },
     { id: "pickups", icon: "box", label: "待取货" },
-    { id: "memos", icon: "edit", label: "备忘录" },
     { id: "out-records", icon: "records", label: "出库记录" },
     { id: "in-records", icon: "records", label: "入库记录" },
     { id: "report", icon: "report", label: "报表统计" },
+    { id: "memos", icon: "edit", label: "备忘录" },
     { id: "ai", icon: "box", label: "AI 助手" }
   ];
 

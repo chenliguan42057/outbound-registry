@@ -69,6 +69,17 @@
     loadMemos: function () { return Store.get(Config.MEMO_STORE_KEY, []); },
     saveMemos: function (list) { Store.set(Config.MEMO_STORE_KEY, list); },
 
+    /* ---- 备忘录提醒配置（outbound_memo_config，纯追加；缺省兜底默认提醒时间） ---- */
+    loadMemoConfig: function () {
+      return Object.assign(
+        { reminderTime: Config.MEMO_DEFAULT_REMINDER_TIME },
+        Store.get(Config.MEMO_CONFIG_KEY, {})
+      );
+    },
+    saveMemoConfig: function (obj) {
+      Store.set(Config.MEMO_CONFIG_KEY, Object.assign({}, obj));
+    },
+
     /* ---- 历史补全（部门 / 领取人，冻结键） ---- */
     getHistory: function (key) { return Store.get(key, []); },
     addHistory: function (key, val) {

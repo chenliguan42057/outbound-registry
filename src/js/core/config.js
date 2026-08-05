@@ -63,6 +63,11 @@
     /* 备忘录（第八轮增量，纯追加，不改既有键值） */
     MEMO_STORE_KEY: "outbound_memos_v2",
 
+    /* 备忘录提醒配置（第九轮增量，纯追加）：localStorage 存 {reminderTime:"HH:MM"}，
+       云端同步到 data/memos/config.json 供 memo-reminder 定时任务读取 */
+    MEMO_CONFIG_KEY: "outbound_memo_config",
+    MEMO_DEFAULT_REMINDER_TIME: "17:00",
+
     /* AI 助手常量（第四轮增量；outbound_ai_key 仅存 localStorage，绝不入云端/CSV/记录/代码明文） */
     AI_KEY_KEY: "outbound_ai_key",
     AI_SETTINGS_KEY: "outbound_ai_settings",

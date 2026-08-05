@@ -96,6 +96,12 @@ def photos_markdown(data):
     return "\n".join(lines)
 
 
+def note_line(data):
+    """备注行（出库记录 note 字段，非必填）；为空时返回空串，避免输出空行。"""
+    note = str((data or {}).get("note") or "").strip()
+    return "\n- **备注**：{}".format(note) if note else ""
+
+
 def build_new_markdown(data):
     """新增记录：新登记通知。"""
     goods = goods_of(data)
@@ -112,7 +118,7 @@ def build_new_markdown(data):
             goods,
             data.get("time", ""),
             status_text_of(data),
-        )
+        ) + note_line(data)
     return base + ("\n" + photos if photos else "")
 
 
@@ -130,17 +136,17 @@ def build_update_markdown(data, old):
             data.get("purpose", ""),
             goods,
             data.get("time", ""),
-        )
+        ) + note_line(data)
         return base + ("\n" + photos if photos else "")
     # 取消提单（已提单→未提单）
     if old_st == "submitted" and new_st == "pending":
         return "### ↩️ 出入库登记 · 已撤回未提单\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}".format(
             data.get("picker", ""), goods, data.get("time", "")
-        )
+        ) + note_line(data)
     # 其他修改（编辑用途/货品等）
     return "### 📝 出入库登记 · 记录已更新\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
         data.get("picker", ""), goods, data.get("time", ""), status_text_of(data)
-    )
+    ) + note_line(data)
 
 
 def build_tombstone_markdown(data):
@@ -290,6 +296,9 @@ def main():
             continue
         data = load_json(path)
         if data is None:
+            continue
+        # 配置类文件（如 data/memos/config.json 提醒配置）不是业务记录，不发通知
+        if path.endswith("config.json"):
             continue
         # 待取货变更 → 待取货通知（data/pickups/ 前缀；删除为 D 时文件已不存在，load_json 返回 None 自然跳过）
         if path.startswith("data/pickups/"):
