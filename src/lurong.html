@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+<title>鹿茸精华液 · 领用登记</title>
+<style>
+  :root { --brand:#C8102E; --bg:#f6f7fb; --card:#fff; --line:#e6e8ef; --muted:#8a90a2; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+         background:var(--bg); color:#1f2430; -webkit-text-size-adjust:100%; }
+  .wrap { max-width:520px; margin:0 auto; padding:18px 16px 40px; }
+  .head { text-align:center; padding:14px 0 6px; }
+  .head h1 { font-size:20px; margin:0 0 4px; color:var(--brand); }
+  .head p { margin:0; color:var(--muted); font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 16px; margin-top:14px;
+          box-shadow:0 2px 10px rgba(20,30,60,.04); }
+  label { display:block; font-size:13px; color:#4a5066; margin:14px 0 6px; font-weight:600; }
+  label:first-child { margin-top:0; }
+  select, input { width:100%; padding:11px 12px; font-size:15px; border:1px solid var(--line); border-radius:10px;
+                  background:#fff; color:#1f2430; outline:none; }
+  select:focus, input:focus { border-color:var(--brand); }
+  .row2 { display:flex; gap:10px; }
+  .row2 > div { flex:1; }
+  .seg { display:flex; gap:8px; }
+  .seg label { flex:1; margin:0; }
+  .seg input { position:absolute; opacity:0; pointer-events:none; }
+  .seg span { display:block; text-align:center; padding:11px 0; border:1px solid var(--line); border-radius:10px;
+              font-size:15px; color:#4a5066; cursor:pointer; background:#fff; }
+  .seg input:checked + span { background:var(--brand); color:#fff; border-color:var(--brand); }
+  button.submit { width:100%; margin-top:20px; padding:14px; font-size:16px; font-weight:700; color:#fff;
+                  background:var(--brand); border:none; border-radius:12px; cursor:pointer; }
+  button.submit:disabled { opacity:.6; }
+  .tip { font-size:12px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .status { margin-top:14px; padding:12px 14px; border-radius:10px; font-size:14px; display:none; }
+  .status.ok { display:block; background:#eafaf0; color:#1a7f45; border:1px solid #bfe9cd; }
+  .status.err { display:block; background:#fdecec; color:#b42318; border:1px solid #f6c9c9; }
+  .brand-tag { display:inline-block; font-size:12px; color:var(--brand); border:1px solid var(--brand);
+               border-radius:999px; padding:2px 10px; margin-top:8px; }
+</style>
+
+<!-- 云端令牌：部署时由 workflow 把 __GH_TOKEN_PLACEHOLDER__ 替换为仓库密匙（与 index.html 同一机制） -->
+<script>
+  window.__GH_TOKEN__ = "__GH_TOKEN_PLACEHOLDER__";
+</script>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>鹿茸精华液 · 领用登记</h1>
+    <p>填写后自动同步到金山轻维表（照抄台账格式）</p>
+    <span class="brand-tag">提交同时推送钉钉群 · 陈利冠报备工作群</span>
+  </div>
+
+  <div class="card">
+    <label>板块</label>
+    <select id="f_board">
+      <option value="2026鹿茸水乳系列">2026鹿茸水乳系列</option>
+      <option value="2026时空鹿茸库存">2026时空鹿茸库存</option>
+    </select>
+
+    <label>商品（随板块变化）</label>
+    <select id="f_product"></select>
+
+    <label>类型</label>
+    <div class="seg">
+      <label><input type="radio" name="type" value="out" checked /><span>出库</span></label>
+      <label><input type="radio" name="type" value="in" /><span>入库</span></label>
+    </div>
+
+    <label>日期</label>
+    <input type="date" id="f_date" />
+
+    <div class="row2">
+      <div>
+        <label>领取人</label>
+        <input type="text" id="f_picker" placeholder="谁领的" />
+      </div>
+      <div>
+        <label>放发人</label>
+        <input type="text" id="f_sender" value="陈利冠" />
+      </div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label>部门</label>
+        <input type="text" id="f_dept" placeholder="如：市场部" />
+      </div>
+      <div>
+        <label>用途</label>
+        <input type="text" id="f_purpose" placeholder="如：展会 / 自用" />
+      </div>
+    </div>
+
+    <label>发放数量</label>
+    <input type="number" id="f_qty" min="1" step="1" placeholder="拿多少" />
+
+    <p class="tip">库存剩余由系统按「上一行库存 ± 发放」自动算出并填入对应列；入库时整行自动标黄、领取人填"入库"。</p>
+
+    <button class="submit" id="btnSubmit">提交登记</button>
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<script>
+/* ===== 配置 ===== */
+// 商品清单（key 必须与 AirScript 脚本里的 COLS 完全一致）
+var PRODUCTS = {
+  "2026鹿茸水乳系列": ["洁面150ml","洁面50ml","精粹水120ml","精粹水30ml","精粹乳80ml","精粹乳30ml","精粹乳1ml","精粹霜50g","精粹霜15g","精粹霜5g","精粹霜1g"],
+  "2026时空鹿茸库存": ["20支盒","5支盒","1支袋","面膜5片盒","面膜1片","精华30支盒","中秋礼盒","马年礼盒"]
+};
+
+var GH_REPO = "chenliguan42057/outbound-registry";
+var GH_BRANCH = "main";
+
+/* ===== 工具 ===== */
+function $(id){ return document.getElementById(id); }
+function b64enc(str){
+  // UTF-8 安全的 base64
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function fmtDateValue(iso){
+  // "2026-08-05" -> "2026/8/5"（照 xlsx 习惯）
+  var p = iso.split("-");
+  if (p.length !== 3) return iso;
+  return p[0] + "/" + (parseInt(p[1],10)) + "/" + (parseInt(p[2],10));
+}
+function todayISO(){
+  var d = new Date();
+  var p = function(n){ return (n<10?"0":"")+n; };
+  return d.getFullYear() + "-" + p(d.getMonth()+1) + "-" + p(d.getDate());
+}
+function showStatus(ok, msg){
+  var el = $("status");
+  el.className = "status " + (ok ? "ok" : "err");
+  el.textContent = msg;
+}
+
+/* ===== 商品下拉随板块变化 ===== */
+function refreshProducts(){
+  var board = $("f_board").value;
+  var sel = $("f_product");
+  sel.innerHTML = "";
+  (PRODUCTS[board] || []).forEach(function(name){
+    var o = document.createElement("option");
+    o.value = name; o.textContent = name;
+    sel.appendChild(o);
+  });
+}
+$("f_board").addEventListener("change", refreshProducts);
+refreshProducts();
+$("f_date").value = todayISO();
+
+/* ===== 写 GitHub（保留钉钉群推送：push 触发 dingtalk-notify Action） ===== */
+async function pushToGitHub(rec){
+  var path = "data/records/" + rec.id + ".json";
+  var content = b64enc(JSON.stringify(rec));
+  var api = "https://api.github.com/repos/" + GH_REPO + "/contents/" + path + "?ref=" + GH_BRANCH;
+  var headers = { "Accept":"application/vnd.github+json", "Content-Type":"application/json",
+                  "X-GitHub-Api-Version":"2022-11-28" };
+  var token = (window.__GH_TOKEN__ && window.__GH_TOKEN__.indexOf("__") !== 0) ? window.__GH_TOKEN__ : "";
+  if (token) headers["Authorization"] = "Bearer " + token;
+  // 取 sha（存在则更新）
+  var sha;
+  try {
+    var r = await fetch(api, { headers: { "Accept":"application/vnd.github+json" } });
+    if (r.ok) { var j = await r.json(); sha = j.sha; }
+  } catch(e){}
+  var body = sha
+    ? { message:"lurong update "+rec.id, content:content, sha:sha, branch:GH_BRANCH }
+    : { message:"lurong add "+rec.id, content:content, branch:GH_BRANCH };
+  var res = await fetch("https://api.github.com/repos/" + GH_REPO + "/contents/" + path, {
+    method:"PUT", headers:headers, body:JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error("GitHub " + res.status);
+  return true;
+}
+
+/* ===== 提交 ===== */
+$("btnSubmit").addEventListener("click", async function(){
+  var board = $("f_board").value;
+  var product = $("f_product").value;
+  var type = document.querySelector('input[name="type"]:checked').value;
+  var dateISO = $("f_date").value || todayISO();
+  var dateText = fmtDateValue(dateISO);
+  var picker = $("f_picker").value.trim();
+  var sender = $("f_sender").value.trim() || "陈利冠";
+  var dept = $("f_dept").value.trim();
+  var purpose = $("f_purpose").value.trim();
+  var qty = parseInt($("f_qty").value, 10);
+
+  if (!picker) { showStatus(false, "请填写领取人"); return; }
+  if (!qty || qty <= 0) { showStatus(false, "请填写有效的发放数量"); return; }
+
+  var btn = $("btnSubmit");
+  btn.disabled = true; btn.textContent = "提交中…";
+
+  // 1) 写 GitHub（钉钉推送靠这个触发；失败不阻断金山写入）
+  var rec = {
+    id: "lurong-" + Date.now() + "-" + Math.floor(Math.random()*1000),
+    type: type,
+    time: dateText,
+    picker: picker,
+    sender: sender,
+    dept: dept,
+    purpose: purpose,
+    items: [ { name: product, qty: qty } ],
+    status: "submitted",
+    note: "放发人: " + sender,
+    lurong: { sheet_name: board, product: product }
+  };
+  var ghOk = false;
+  try { await pushToGitHub(rec); ghOk = true; } catch(e){ ghOk = false; }
+
+  // 金山轻维表 + 钉钉群推送，都由 GitHub Actions 在后台自动完成（基于这次 push）
+  btn.disabled = false; btn.textContent = "提交登记";
+  if (ghOk) {
+    showStatus(true, "✅ 已提交：" + board + " / " + product + " 已记录，金山轻维表与钉钉群将在几秒内自动同步。");
+  } else {
+    showStatus(false, "❌ 提交失败（GitHub 写入异常），请稍后重试。");
+  }
+});
+</script>
+</body>
+</html>

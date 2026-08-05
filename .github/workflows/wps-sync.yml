@@ -1,0 +1,32 @@
+name: WPS 轻维表同步 (鹿茸)
+# 链接提交 → 写 GitHub → 本 Action 自动把记录推送到金山轻维表（照台账格式追加一行）
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'data/records/*.json'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # 需要历史 diff 出本次变更的记录文件
+      - name: Get changed record files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            FILES=$(git diff-tree --no-commit-id --name-status -r ${{ github.sha }} -- 'data/records/*.json' || true)
+          else
+            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data/records/*.json' || true)
+          fi
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Sync to WPS AirScript
+        env:
+          WEBHOOK: ${{ secrets.WPS_AIRSCRIPT_WEBHOOK }}
+          FILES: ${{ steps.changed.outputs.files }}
+        run: python3 .github/scripts/wps_sync.py
