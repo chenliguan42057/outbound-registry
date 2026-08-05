@@ -28,5 +28,6 @@ jobs:
       - name: Sync to WPS AirScript
         env:
           WEBHOOK: ${{ secrets.WPS_AIRSCRIPT_WEBHOOK }}
+          AIRSCRIPT_TOKEN: ${{ secrets.WPS_AIRSCRIPT_TOKEN }}
           FILES: ${{ steps.changed.outputs.files }}
         run: python3 .github/scripts/wps_sync.py

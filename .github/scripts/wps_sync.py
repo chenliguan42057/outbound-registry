@@ -18,6 +18,7 @@ import sys
 import urllib.request
 
 WEBHOOK = (os.environ.get("WEBHOOK") or "").strip()
+TOKEN = (os.environ.get("AIRSCRIPT_TOKEN") or "").strip()   # 金山 脚本令牌(AirScript-Token 请求头)
 FILES = (os.environ.get("FILES") or "").strip()
 
 
@@ -27,6 +28,9 @@ def log(msg):
 
 if not WEBHOOK:
     log("⚠️ 未配置 secrets.WPS_AIRSCRIPT_WEBHOOK，跳过金山同步（网页提交仍会写 GitHub + 钉钉）。")
+    sys.exit(0)
+if not TOKEN:
+    log("⚠️ 未配置 secrets.WPS_AIRSCRIPT_TOKEN（金山脚本令牌），无法调用 AirScript，跳过同步。")
     sys.exit(0)
 
 if not FILES.strip():
@@ -85,7 +89,7 @@ for line in FILES.splitlines():
         req = urllib.request.Request(
             WEBHOOK,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "AirScript-Token": TOKEN},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
