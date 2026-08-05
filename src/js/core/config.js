@@ -63,10 +63,13 @@
     /* 备忘录（第八轮增量，纯追加，不改既有键值） */
     MEMO_STORE_KEY: "outbound_memos_v2",
 
-    /* 备忘录提醒配置（第九轮增量，纯追加）：localStorage 存 {reminderTime:"HH:MM"}，
+    /* 备忘录提醒配置（第九轮增量，纯追加）：旧版存 {reminderTime:"HH:MM"}（每日重复，已废弃，
+       MEMO_DEFAULT_REMINDER_TIME 保留但不再使用，避免连锁）；第十轮改为单次提醒，
+       localStorage 存 {reminderAt:"YYYY-MM-DDTHH:MM"}，留空/null 表示未设置；
        云端同步到 data/memos/config.json 供 memo-reminder 定时任务读取 */
     MEMO_CONFIG_KEY: "outbound_memo_config",
     MEMO_DEFAULT_REMINDER_TIME: "17:00",
+    MEMO_REMINDER_AT_DEFAULT: "",
 
     /* AI 助手常量（第四轮增量；outbound_ai_key 仅存 localStorage，绝不入云端/CSV/记录/代码明文） */
     AI_KEY_KEY: "outbound_ai_key",
@@ -125,6 +128,10 @@
 
     /* 出库「用途/项目」预设（chip 单选；用户自定义项存 outbound_purpose_history） */
     PURPOSE_PRESETS: ["客户销售", "赠送客户", "内部员工使用"],
+
+    /* 出库「领用法人」预设（chip 单选必填；用户自定义项存 outbound_entity_history） */
+    ENTITY_PRESETS: ["深圳细胞法人", "赛迪斯法人"],
+    ENTITY_HISTORY_KEY: "outbound_entity_history",
 
     /* 第六轮增量（纯追加，不改既有键值）：
        CATEGORY_MAP — 仪表盘库存分布环形图的 8 大类归组（未命中类目兜底「其他」）

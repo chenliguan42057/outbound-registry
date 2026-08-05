@@ -14,7 +14,6 @@
   var Memos = window.App.Memos;
   var Cloud = window.App.Cloud;
   var Store = window.App.Store;
-  var Config = window.App.Config;
 
   var container = null;
   var listBox = null;
@@ -39,12 +38,13 @@
       '<div class="card">' +
         '<h2>提醒设置</h2>' +
         '<div class="field">' +
-          '<label>每日提醒时间（北京时间）</label>' +
+          '<label>提醒时间（特定日期 + 时间，单次）</label>' +
           '<div class="reminder-row">' +
-            '<input type="time" id="memoReminderTime" step="60" />' +
+            '<input type="datetime-local" id="memoReminderAt" step="60" />' +
+            '<span class="hint" id="memoReminderWeekday"></span>' +
             '<button type="button" class="btn" id="memoReminderSave">保存</button>' +
           '</div>' +
-          '<div class="hint">每天该时刻推送未完成备忘录提醒；保存后同步到云端定时任务生效。</div>' +
+          '<div class="hint">到点提醒一次，推送后失效；留空表示不设置。</div>' +
         '</div>' +
       '</div>' +
       '<div class="card">' +
@@ -64,6 +64,7 @@
     Util.$("memoReset").addEventListener("click", function () { textInput.value = ""; textInput.focus(); });
     Util.$("memoSync").addEventListener("click", doSync);
     Util.$("memoReminderSave").addEventListener("click", saveReminder);
+    Util.$("memoReminderAt").addEventListener("input", updateReminderWeekday);
     textInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
     });
@@ -96,24 +97,49 @@
     }
   }
 
-  /* ---------- 提醒设置 ---------- */
+  /* ---------- 提醒设置（单次：特定日期 + 时间，到点推一次，推送后失效） ---------- */
 
-  /** 读取本地提醒配置并回填时间控件（缺省兜底默认时间） */
-  function renderReminderSettings() {
-    var cfg = Store.loadMemoConfig();
-    var input = Util.$("memoReminderTime");
-    if (input) input.value = cfg.reminderTime || Config.MEMO_DEFAULT_REMINDER_TIME;
+  /** 星期映射：JS getDay() 0=周日 … 6=周六 */
+  var WEEKDAY_CN = ["日", "一", "二", "三", "四", "五", "六"];
+
+  /** reminderAt 是否合法格式 "YYYY-MM-DDTHH:MM"（datetime-local 原生输出格式） */
+  function isReminderAtValid(v) {
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(v || "")) &&
+      !isNaN(new Date(String(v)).getTime());
   }
 
-  /** 保存提醒时间：写 localStorage + 有 token 时推云端 data/memos/config.json */
-  function saveReminder() {
-    var input = Util.$("memoReminderTime");
+  /** 更新「（星期X）」提示：new Date(value).getDay() 0=日 … 6=六；无效/空则清空 */
+  function updateReminderWeekday() {
+    var hint = Util.$("memoReminderWeekday");
+    if (!hint) return;
+    var input = Util.$("memoReminderAt");
     var v = (input && input.value) || "";
-    if (!/^\d{2}:\d{2}$/.test(v)) { Util.toast("请选择有效的提醒时间", true); if (input) input.focus(); return; }
-    Store.saveMemoConfig({ reminderTime: v });
-    Util.toast("已保存提醒时间：" + v);
+    if (!isReminderAtValid(v)) { hint.textContent = ""; return; }
+    hint.textContent = "（星期" + WEEKDAY_CN[new Date(v).getDay()] + "）";
+  }
+
+  /** 读取本地提醒配置并回填 datetime-local（留空表示未设置） */
+  function renderReminderSettings() {
+    var cfg = Store.loadMemoConfig();
+    var input = Util.$("memoReminderAt");
+    if (input) input.value = cfg.reminderAt || "";
+    updateReminderWeekday();
+  }
+
+  /** 保存提醒时间：校验格式 + 必须为未来 → 写 localStorage + 有 token 时推云端 data/memos/config.json */
+  function saveReminder() {
+    var input = Util.$("memoReminderAt");
+    var v = (input && input.value) || "";
+    if (v && !isReminderAtValid(v)) { Util.toast("请选择有效的提醒时间", true); if (input) input.focus(); return; }
+    if (v) {
+      var t = new Date(v).getTime();
+      // 必须晚于当前北京时间（留 1 分钟缓冲，避免保存后立即被 cron 命中）
+      if (t <= Date.now() + 60 * 1000) { Util.toast("提醒时间必须为未来", true); if (input) input.focus(); return; }
+    }
+    Store.saveMemoConfig({ reminderAt: v });
+    Util.toast(v ? "已保存提醒时间：" + v.replace("T", " ") : "已清除提醒（未设置）");
     if (Cloud.hasToken()) {
-      Cloud.pushMemoConfig({ reminderTime: v }).then(function () {
+      Cloud.pushMemoConfig({ reminderAt: v }).then(function () {
         window.App.Views.app.setSyncStatus("已同步", false);
       }).catch(function () {
         window.App.Views.app.setSyncStatus("云端同步失败（已存本机）", true);
@@ -121,16 +147,18 @@
     }
   }
 
-  /** 从云端拉取提醒配置同步到本地（有 token 且云端有合法时间时以云端为准；失败静默保留本地） */
+  /** 从云端拉取提醒配置同步到本地（有 token 且云端有合法 reminderAt 时以云端为准；失败静默保留本地） */
   function syncReminderFromCloud() {
     if (!Cloud.hasToken()) return;
     Cloud.pullMemoConfig().then(function (obj) {
-      if (!obj || !/^\d{2}:\d{2}$/.test(String(obj.reminderTime || ""))) return;
+      if (!obj) return;
+      var v = String(obj.reminderAt || "");
       var cur = Store.loadMemoConfig();
-      if (cur.reminderTime !== obj.reminderTime) {
-        Store.saveMemoConfig({ reminderTime: obj.reminderTime });
-        var input = Util.$("memoReminderTime");
-        if (input) input.value = obj.reminderTime;
+      if (cur.reminderAt !== v) {
+        Store.saveMemoConfig({ reminderAt: v });
+        var input = Util.$("memoReminderAt");
+        if (input) input.value = v;  // datetime-local 原生格式与 reminderAt 完全一致，直接赋值
+        updateReminderWeekday();
       }
     }).catch(function () { /* 拉取失败静默，保留本地配置 */ });
   }

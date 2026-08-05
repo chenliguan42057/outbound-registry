@@ -69,10 +69,10 @@
     loadMemos: function () { return Store.get(Config.MEMO_STORE_KEY, []); },
     saveMemos: function (list) { Store.set(Config.MEMO_STORE_KEY, list); },
 
-    /* ---- 备忘录提醒配置（outbound_memo_config，纯追加；缺省兜底默认提醒时间） ---- */
+    /* ---- 备忘录提醒配置（outbound_memo_config，纯追加；reminderAt 为空表示未设置，单次提醒） ---- */
     loadMemoConfig: function () {
       return Object.assign(
-        { reminderTime: Config.MEMO_DEFAULT_REMINDER_TIME },
+        { reminderAt: Config.MEMO_REMINDER_AT_DEFAULT },
         Store.get(Config.MEMO_CONFIG_KEY, {})
       );
     },

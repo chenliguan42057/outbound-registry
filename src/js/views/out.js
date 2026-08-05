@@ -20,11 +20,25 @@
   var els = null;
   /** 当前选中的用途值（chip 单选，互斥高亮） */
   var selectedPurpose = "";
+  /** 当前选中的领用法人值（chip 单选，互斥高亮；必填） */
+  var selectedEntity = "";
 
   function render(container) {
     container.innerHTML =
       '<div class="card">' +
         '<h2>出库登记 <span class="tag">基础登记</span></h2>' +
+        '<div class="field">' +
+          '<label>领用法人<span class="req">*</span></label>' +
+          '<div id="outEntityChips" class="chip-group"></div>' +
+          '<div class="purpose-add-row">' +
+            '<button type="button" class="chip-add" id="outEntityAdd">+ 添加</button>' +
+            '<span class="purpose-add-inline" id="outEntityAddInline" style="display:none;">' +
+              '<input type="text" id="outEntityInput" class="purpose-add-input" placeholder="输入自定义法人" maxlength="30" autocomplete="off" />' +
+              '<button type="button" class="btn mini" id="outEntityOk">确定</button>' +
+              '<button type="button" class="btn ghost mini" id="outEntityCancel">取消</button>' +
+            '</span>' +
+          '</div>' +
+        '</div>' +
         '<div class="field">' +
           '<label>部门 / 领取单位<span class="req">*</span></label>' +
           '<div class="search-wrap">' +
@@ -78,6 +92,12 @@
       '</div>';
 
     els = {
+      entityChips: Util.$("outEntityChips"),
+      entityAdd: Util.$("outEntityAdd"),
+      entityAddInline: Util.$("outEntityAddInline"),
+      entityInput: Util.$("outEntityInput"),
+      entityOk: Util.$("outEntityOk"),
+      entityCancel: Util.$("outEntityCancel"),
       dept: Util.$("outDept"),
       time: Util.$("outTime"),
       picker: Util.$("outPicker"),
@@ -123,6 +143,22 @@
     });
     renderPurposeChips();
 
+    // 领用法人 chip 单选：事件委托（互斥高亮），与用途/项目同模式
+    els.entityChips.addEventListener("click", function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest(".chip") : null;
+      if (!btn) return;
+      closeEntityAdd();
+      setEntitySelected(btn.getAttribute("data-val") || "");
+    });
+    els.entityAdd.addEventListener("click", openEntityAdd);
+    els.entityOk.addEventListener("click", confirmEntityAdd);
+    els.entityCancel.addEventListener("click", closeEntityAdd);
+    els.entityInput.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { ev.preventDefault(); closeEntityAdd(); }
+      else if (ev.key === "Enter") { ev.preventDefault(); confirmEntityAdd(); }
+    });
+    renderEntityChips();
+
     // 自动保存草稿（用途 chip 选中/新增时在对应逻辑里单独触发）
     ["outDept", "outTime", "outPicker", "outNote"].forEach(function (id) {
       Util.$(id).addEventListener("input", saveDraft);
@@ -137,15 +173,16 @@
 
   /** 组装 chip 选项：预设 + 历史（历史按使用频次降序，同次数按最近使用在前，去重，最多前 8）。
       注：Store.addHistory 通用实现为「去重+置顶」，历史数组本身一般不含重复项；
-      此处仍按原始数组做频次统计排序，以兼容历史/导入/手工数据含重复项的频次口径。 */
-  function getPurposeOptions() {
-    var presets = (Config.PURPOSE_PRESETS || []).slice();
-    var raw = Store.getHistory(Config.PURPOSE_HISTORY_KEY);
+      此处仍按原始数组做频次统计排序，以兼容历史/导入/手工数据含重复项的频次口径。
+      presets = 预设数组；historyKey = 历史 localStorage 键；selected = 当前选中值（保证其 chip 始终可见）。 */
+  function getHistoryChipOptions(presets, historyKey, selected) {
+    var presetArr = (presets || []).slice();
+    var raw = Store.getHistory(historyKey);
     // 频次统计：遍历原始数组计数；order 保留首次出现顺序（即最近使用在前），用于同次数稳定排序
     var count = {};
     var order = [];
     raw.forEach(function (v) {
-      if (!v || presets.indexOf(v) !== -1) return; // 空值与预设值不进历史排序区
+      if (!v || presetArr.indexOf(v) !== -1) return; // 空值与预设值不进历史排序区
       if (!count[v]) { count[v] = 0; order.push(v); }
       count[v]++;
     });
@@ -154,10 +191,20 @@
       .sort(function (a, b) { return b.c - a.c || a.i - b.i; }) // 次数降序，同次数最近使用在前
       .map(function (o) { return o.val; })
       .slice(0, 8);
-    var out = presets.concat(history);
+    var out = presetArr.concat(history);
     // 确保当前选中值始终有 chip 可见（草稿/编辑恢复历史值时可能不在前 8 内）
-    if (selectedPurpose && out.indexOf(selectedPurpose) === -1) out.push(selectedPurpose);
+    if (selected && out.indexOf(selected) === -1) out.push(selected);
     return out;
+  }
+
+  /** 组装「用途/项目」chip 选项 */
+  function getPurposeOptions() {
+    return getHistoryChipOptions(Config.PURPOSE_PRESETS, Config.PURPOSE_HISTORY_KEY, selectedPurpose);
+  }
+
+  /** 组装「领用法人」chip 选项 */
+  function getEntityOptions() {
+    return getHistoryChipOptions(Config.ENTITY_PRESETS, Config.ENTITY_HISTORY_KEY, selectedEntity);
   }
 
   /** 渲染 chip 列表（用户数据经 Util.esc 转义，防 XSS） */
@@ -210,6 +257,58 @@
     saveDraft();
   }
 
+  /* ---------- 领用法人 chip 单选（与用途/项目同模式） ---------- */
+
+  /** 渲染领用法人 chip 列表（用户数据经 Util.esc 转义，防 XSS） */
+  function renderEntityChips() {
+    var wrap = els.entityChips;
+    if (!wrap) return;
+    wrap.innerHTML = getEntityOptions().map(function (val) {
+      var cls = "chip" + (val === selectedEntity ? " selected" : "");
+      return '<button type="button" class="' + cls + '" data-val="' + Util.esc(val) + '">' + Util.esc(val) + '</button>';
+    }).join("");
+  }
+
+  /** 读取当前选中的领用法人值 */
+  function getEntitySelected() {
+    return selectedEntity;
+  }
+
+  /** 选中某个领用法人（互斥高亮），并触发草稿保存 */
+  function setEntitySelected(val) {
+    selectedEntity = val || "";
+    renderEntityChips();
+    saveDraft();
+  }
+
+  /** 打开「+ 添加」inline 输入框 */
+  function openEntityAdd() {
+    els.entityAdd.style.display = "none";
+    els.entityAddInline.style.display = "inline-flex";
+    els.entityInput.value = "";
+    els.entityInput.focus();
+  }
+
+  /** 关闭 inline 输入框并还原「+ 添加」按钮 */
+  function closeEntityAdd() {
+    if (!els.entityAdd) return;
+    els.entityAdd.style.display = "";
+    els.entityAddInline.style.display = "none";
+    els.entityInput.value = "";
+  }
+
+  /** 确认新增自定义法人：非空 + 不重复 → 写历史 → 重排 chips → 自动选中 */
+  function confirmEntityAdd() {
+    var val = els.entityInput.value.trim();
+    if (!val) { Util.toast("请输入领用法人", true); els.entityInput.focus(); return; }
+    if (getEntityOptions().indexOf(val) !== -1) { Util.toast("该法人已存在，请直接选择", true); return; }
+    Store.addHistory(Config.ENTITY_HISTORY_KEY, val);
+    closeEntityAdd();
+    selectedEntity = val;
+    renderEntityChips();
+    saveDraft();
+  }
+
   /** 历史补全（部门 / 领取人），与现网一致 */
   function setupHistorySuggest(inputId, suggestId, historyKey) {
     var inp = Util.$(inputId), sug = Util.$(suggestId);
@@ -233,7 +332,7 @@
       sug.style.display = "block";
     }
     inp.addEventListener("input", render);
-    inp.addEventListener("focus", function () { if (inp.value.trim()) render(); });
+    // 聚焦不显示建议列表（用户只点输入框不显示历史），仅输入文字时由 input 事件触发
     inp.addEventListener("blur", function () { setTimeout(function () { sug.style.display = "none"; }, 120); });
   }
 
@@ -245,6 +344,7 @@
       dept: els.dept.value,
       note: els.note.value,
       purpose: getPurposeSelected(),
+      entity: getEntitySelected(),
       items: picker.selected,
       photos: photos.getPhotos()
     });
@@ -258,6 +358,7 @@
     els.dept.value = d.dept || "";
     els.note.value = d.note || "";
     if (d.purpose) { selectedPurpose = d.purpose; renderPurposeChips(); }  // 旧草稿为字符串，直接匹配高亮对应 chip
+    if (d.entity) { selectedEntity = d.entity; renderEntityChips(); }      // 领用法人同款回填
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
   }
@@ -268,11 +369,13 @@
     var time = els.time.value;
     var pickerVal = els.picker.value.trim();
     var purpose = getPurposeSelected();
+    var entity = getEntitySelected();
     var dept = els.dept.value.trim();
     if (!time) return Util.toast("请填写领取时间", true);
     if (!pickerVal) return Util.toast("请填写领取人", true);
     if (!dept) return Util.toast("请填写部门/领取单位（必填）", true);
     if (!purpose) return Util.toast("请选择用途/项目（必填）", true);
+    if (!entity) return Util.toast("请选择领用法人", true);
     var items = picker.getItems();
     if (!items.length) return Util.toast("请至少选择一项货品", true);
 
@@ -283,6 +386,7 @@
       dept: dept,
       note: (els.note && els.note.value || "").trim(),  // 备注非必填，纯追加字段
       purpose: purpose,
+      entity: entity,                                    // 领用法人必填，纯追加字段（与 note 同类，不破坏 schema）
       items: items,
       photos: photos.getPhotos(),
       affectsStock: true  // 新记录才参与库存计算
@@ -341,6 +445,9 @@
     selectedPurpose = "";
     renderPurposeChips();
     closePurposeAdd();
+    selectedEntity = "";
+    renderEntityChips();
+    closeEntityAdd();
     els.dept.value = "";
     els.time.value = Util.nowLocal();
     els.note.value = "";
@@ -364,6 +471,8 @@
     // 编辑初始化选中态：有值则选中，无值（旧记录/导入记录）必须清空，避免先前选中态残留带出
     selectedPurpose = r.purpose || "";
     renderPurposeChips();
+    selectedEntity = r.entity || "";
+    renderEntityChips();
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);
     els.submit.textContent = "保存修改";

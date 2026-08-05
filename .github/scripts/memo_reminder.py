@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""定时推送钉钉提醒：在用户配置的提醒时间列出所有未完成的备忘录（不限当日）。
+"""定时推送钉钉提醒：在用户配置的「特定日期 + 时间」推一次未完成备忘录提醒（单次，推送后失效）。
 
-提醒时间可配置：优先读取 data/memos/config.json 的 reminderTime（"HH:MM"），
-缺失/损坏时兜底 MEMO_DEFAULT_REMINDER_TIME（与前端 Config.MEMO_DEFAULT_REMINDER_TIME 对齐）。
-workflow 每分钟跑一次，按「容忍延迟窗口」匹配：当前北京时间当日分钟数 now_min 与目标
-target（h*60+m）满足 target <= now_min <= target + 3（cron 只能晚跑不能早跑，窗口只
-容忍最多 3 分钟调度延迟、不提前推送；00:00 目标时前一晚 23:5x 为当日分钟 143x，天然
-排除跨天误推）。
+提醒配置读取 data/memos/config.json 的 reminderAt（"YYYY-MM-DDTHH:MM"，北京时间本地表示，
+datetime-local 原生格式，naive 当作 CST 北京时间）。不存在/为空 → 跳过（未设置，需用户重新设置）。
+reminderAt 解析失败 → WARN 日志 + 跳过（不报错也不推，让用户重新设置）。
 
-当日去重：config.json 的 lastSentAt（YYYY-MM-DD）== 今天则跳过；推送成功后用 GitHub
-Contents API 写回 lastSentAt=今天，防止同一天重复推送。推送失败不写 lastSentAt，窗口内可重试。
+workflow 每分钟跑一次，按「容忍延迟窗口」匹配：当前北京时间 now（去秒/微秒精确到分钟）满足
+target_dt <= now <= target_dt + 3 分钟 → 命中。窗口只容忍最多 3 分钟调度延迟、不提前推送；
+一旦超过 3 分钟窗口，本次单次提醒即视为错过，不会在之后补推（单次语义，不循环）。
 
-FORCE=true（手动 workflow_dispatch）时跳过时间匹配与当日去重检查，直接推送（供手动测试/补推）。
+单次去重：config.json 的 lastSentAt == reminderAt（字符串相等）→ 已推送过，跳过。
+推送成功后用 GitHub Contents API 写回 lastSentAt=reminderAt（保留 reminderAt 不动）；
+无 GH_TOKEN 或写回失败仅 WARN 不阻塞本次推送。
+
+FORCE=true（手动 workflow_dispatch）时跳过时间匹配与去重检查，直接推送（供手动测试/补推），
+推送成功同样写回 lastSentAt=reminderAt。
+
+旧字段 reminderTime（每日重复模式）已废弃：忽略，仅看 reminderAt；旧 config 仅含
+reminderTime + lastSentAt 而无 reminderAt 时视为新 schema 缺失 reminderAt，跳过等待重新设置。
 
 读取环境变量：
   WEBHOOK : 钉钉群机器人 Webhook 地址
@@ -20,7 +26,7 @@ FORCE=true（手动 workflow_dispatch）时跳过时间匹配与当日去重检�
   GH_TOKEN: 仓库令牌（写回 config.json 的 lastSentAt）
   FORCE   : "true" 时强制推送
 
-全部备忘录已完成 / 无备忘录时不发送任何消息（避免每日无意义打扰）。
+全部备忘录已完成 / 无备忘录时不发送任何消息（避免无意义打扰）。
 """
 import base64
 import glob
@@ -28,7 +34,6 @@ import hashlib
 import hmac
 import json
 import os
-import re
 import sys
 import time
 import urllib.error
@@ -41,26 +46,34 @@ CST = timezone(timedelta(hours=8))
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
 
-# 提醒配置固定路径与默认提醒时间（默认与前端 Config.MEMO_DEFAULT_REMINDER_TIME 对齐）
+# 提醒配置固定路径
 GH_REPO = "chenliguan42057/outbound-registry"
 GH_BRANCH = "main"
 MEMO_CONFIG_PATH = "data/memos/config.json"
-MEMO_DEFAULT_REMINDER_TIME = "17:00"
 
-# 容忍延迟窗口（分钟）：命中条件 target <= now_min <= target + TOLERANCE_LATE。
-# cron 只能晚跑不能早跑，窗口只容忍调度延迟、不提前推送；覆盖最多 3 分钟队列延迟。
-# target=0（00:00）时前一晚 23:5x 为当日分钟 143x，远超 target+3=3，天然排除跨天误推。
+# 容忍延迟窗口（分钟）：命中条件 target_dt <= now <= target_dt + TOLERANCE_LATE。
+# cron 只能晚跑不能早跑，窗口只容忍调度延迟、不提前推送；超过窗口即错过，单次不补推。
 TOLERANCE_LATE = 3
 
-_TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+# 星期中文（Python datetime.weekday(): 0=周一 … 6=周日）
+WEEKDAY_CN = ["一", "二", "三", "四", "五", "六", "日"]
 
 
-def _valid_time(val):
-    """是否合法的 HH:MM（00:00-23:59）。"""
-    if not _TIME_RE.fullmatch(val):
-        return False
-    hh, mm = val.split(":")
-    return 0 <= int(hh) <= 23 and 0 <= int(mm) <= 59
+def _parse_reminder_at(val):
+    """解析 reminderAt（"YYYY-MM-DDTHH:MM"，naive 当作 CST 北京时间）。
+
+    要求格式合法且精确到分钟（datetime-local step=60 输出不含秒/微秒）；
+    缺失/损坏/非法 → 返回 None。
+    """
+    if not val:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(val).strip())
+    except (TypeError, ValueError):
+        return None
+    if dt.second != 0 or dt.microsecond != 0:
+        return None
+    return dt
 
 
 def _env_bool(name):
@@ -91,50 +104,55 @@ def load_json(path):
         return None
 
 
-def load_reminder_time(config_path=MEMO_CONFIG_PATH):
-    """读取 data/memos/config.json 的 reminderTime（"HH:MM"）；缺失/损坏/非法返回默认值。"""
+def load_reminder_at(config_path=MEMO_CONFIG_PATH):
+    """读取 data/memos/config.json 的 reminderAt（"YYYY-MM-DDTHH:MM"）。
+
+    不存在/为空 → 返回 None（未设置，跳过）；格式非法 → WARN 日志 + 返回 None（跳过）。
+    """
     data = load_json(config_path)
     if not isinstance(data, dict):
-        return MEMO_DEFAULT_REMINDER_TIME
-    val = str(data.get("reminderTime") or "").strip()
-    if not _valid_time(val):
-        print("WARN config {} reminderTime 非法（{}），使用默认 {}".format(
-            config_path, val or "空", MEMO_DEFAULT_REMINDER_TIME))
-        return MEMO_DEFAULT_REMINDER_TIME
+        return None
+    val = str(data.get("reminderAt") or "").strip()
+    if not val:
+        print("WARN config {} 未设置 reminderAt，跳过（单次提醒需重新设置）".format(config_path))
+        return None
+    if _parse_reminder_at(val) is None:
+        print("WARN config {} reminderAt 非法（{}），跳过（单次提醒需重新设置）".format(config_path, val))
+        return None
     return val
 
 
-def is_sent_today(config_path=MEMO_CONFIG_PATH, now=None):
-    """当日去重：config.json 的 lastSentAt == 今天（YYYY-MM-DD）→ 已推送过。"""
+def is_already_sent(config_path=MEMO_CONFIG_PATH, reminder_at=None):
+    """单次去重：config.json 的 lastSentAt == reminderAt → 已推送过。"""
     data = load_json(config_path)
     if not isinstance(data, dict):
         return False
-    now = now or datetime.now(CST)
-    return data.get("lastSentAt") == now.strftime("%Y-%m-%d")
+    return data.get("lastSentAt") == reminder_at
 
 
-def in_time_window(now=None, reminder_time=None):
-    """容忍延迟窗口匹配：target <= now_min <= target + TOLERANCE_LATE。
+def in_reminder_window(now, reminder_at):
+    """容忍延迟窗口匹配：target_dt <= now <= target_dt + TOLERANCE_LATE（分钟级）。
 
-    cron 只能晚跑不能早跑，窗口只容忍调度延迟、不提前推送（覆盖最多 3 分钟队列延迟）；
-    target=0（00:00）时前一晚 23:5x 为当日分钟 143x，远超 target+3=3，天然排除跨天误推。
-    now / reminder_time 用于测试注入。
+    now 为当前北京时间（调用方已去秒/微秒精确到分钟）。超过窗口即错过，单次不补推；
+    target 在未来（now < target_dt）也不会提前推送。解析失败返回 False。
     """
-    now = now or datetime.now(CST)
-    reminder_time = reminder_time or load_reminder_time()
-    hh, mm = reminder_time.split(":")
-    target = int(hh) * 60 + int(mm)
-    now_min = now.hour * 60 + now.minute
-    return target <= now_min <= target + TOLERANCE_LATE
+    target_dt = _parse_reminder_at(reminder_at)
+    if target_dt is None:
+        return False
+    return target_dt <= now <= target_dt + timedelta(minutes=TOLERANCE_LATE)
 
 
-def build_memo_reminder_markdown(memos_dir="data/memos", now=None, reminder_time=None):
+def build_memo_reminder_markdown(memos_dir="data/memos", now=None, reminder_at=None):
     """扫描全部未完成备忘录（不限当日），组装提醒 markdown；全部已完成/无备忘录返回 None。
 
-    now / reminder_time 仅用于测试注入；未完成判定只依赖 done 字段。
+    now / reminder_at 仅用于测试注入；未完成判定只依赖 done 字段。
     """
     now = now or datetime.now(CST)
-    reminder_time = reminder_time or load_reminder_time()
+    if reminder_at is None:
+        reminder_at = load_reminder_at()
+    target_dt = _parse_reminder_at(reminder_at)
+    if target_dt is None:
+        return None
     pending = []
     for path in sorted(glob.glob(os.path.join(memos_dir, "*.json"))):
         if path.endswith("config.json"):
@@ -146,7 +164,9 @@ def build_memo_reminder_markdown(memos_dir="data/memos", now=None, reminder_time
             pending.append(data)
     if not pending:
         return None
-    lines = ["### ⏰ 出入库登记 · 待办备忘录提醒（{}）".format(reminder_time)]
+    # 标题/日志中显示「提醒时间：YYYY-MM-DD HH:mm (周X)」便于排查
+    label = "{} (周{})".format(target_dt.strftime("%Y-%m-%d %H:%M"), WEEKDAY_CN[target_dt.weekday()])
+    lines = ["### ⏰ 出入库登记 · 待办备忘录提醒（提醒时间：{}）".format(label)]
     for m in pending:
         text = str(m.get("text") or "").strip() or "（无内容）"
         t = str(m.get("time", "")).replace("T", " ")
@@ -158,20 +178,30 @@ def decide(now=None, memos_dir="data/memos", config_path=MEMO_CONFIG_PATH, force
     """决策：当前是否应发送提醒并组装消息。
 
     返回 (should_send, text, skip_reason)：
-      should_send=False → skip_reason 为 "time"（非容忍窗口）或 "dedup"（今日已推送）；
+      should_send=False → skip_reason 为 "unset"（未设置/非法）、"time"（非容忍窗口）或
+                          "dedup"（本次已推送）；
       should_send=True  → text 为 markdown（无未完成备忘录时 text=None，由调用方跳过）。
-    force=True 跳过时间匹配与当日去重检查。now 用于测试注入固定北京时间。
+    force=True 跳过时间匹配与单次去重检查。now 用于测试注入固定北京时间。
     """
     now = now or datetime.now(CST)
-    reminder_time = load_reminder_time(config_path)
+    now = now.replace(second=0, microsecond=0)  # 精确到分钟，与 target 分钟级比较
+    reminder_at = load_reminder_at(config_path)
+    if reminder_at is None:
+        return False, None, "unset"
     if not force:
-        if not in_time_window(now, reminder_time):
-            print("当前 {} 非提醒时间 {}（容忍窗口内），跳过".format(now.strftime("%H:%M"), reminder_time))
+        if not in_reminder_window(now, reminder_at):
+            target_dt = _parse_reminder_at(reminder_at)
+            print("当前 {} 非提醒时间 {}（窗口 {}~{}，单次仅一次），跳过".format(
+                now.strftime("%Y-%m-%d %H:%M"),
+                target_dt.strftime("%Y-%m-%d %H:%M"),
+                target_dt.strftime("%Y-%m-%d %H:%M"),
+                (target_dt + timedelta(minutes=TOLERANCE_LATE)).strftime("%Y-%m-%d %H:%M"),
+            ))
             return False, None, "time"
-        if is_sent_today(config_path, now):
-            print("今日已推送，跳过")
+        if is_already_sent(config_path, reminder_at):
+            print("本次提醒已推送过（lastSentAt == reminderAt），跳过")
             return False, None, "dedup"
-    text = build_memo_reminder_markdown(memos_dir, now, reminder_time)
+    text = build_memo_reminder_markdown(memos_dir, now, reminder_at)
     return True, text, None
 
 
@@ -184,8 +214,8 @@ def run_check(now=None, memos_dir="data/memos", config_path=MEMO_CONFIG_PATH):
 def push_config_last_sent_at(last_sent_at, config_path=MEMO_CONFIG_PATH, token=None):
     """推送成功后写回云端 config.json 的 lastSentAt（GitHub Contents API PUT）。
 
-    先 GET 最新文件（拿 sha 与最新 reminderTime，避免覆盖用户刚改的时间），
-    合入 lastSentAt 后 PUT（message "update memo config lastSentAt"）。
+    先 GET 最新文件（拿 sha 与最新 reminderAt，避免覆盖用户刚改的时间），
+    合入 lastSentAt 后 PUT（保留 reminderAt 不动；message "update memo config lastSentAt"）。
     返回 (ok, errmsg)；无 token 或网络失败返回 False（不影响本次推送本身）。
     """
     token = (token if token is not None else os.environ.get("GH_TOKEN", "")).strip()
@@ -280,8 +310,10 @@ def main():
         print("提醒发送失败: {}".format(err), file=sys.stderr)
         return 1
     print("提醒发送成功")
-    # 推送成功后写回当日 lastSentAt，防止同一天重复推送（force 补推同样写回）
-    push_config_last_sent_at(now.strftime("%Y-%m-%d"))
+    # 单次提醒：推送成功后写回 lastSentAt=reminderAt（保留 reminderAt 不动，防重复推送）
+    reminder_at = load_reminder_at()
+    if reminder_at:
+        push_config_last_sent_at(reminder_at)
     return 0
 
 

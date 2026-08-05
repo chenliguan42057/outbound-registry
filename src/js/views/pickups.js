@@ -232,7 +232,7 @@
       sug.style.display = "block";
     }
     inp.addEventListener("input", render);
-    inp.addEventListener("focus", function () { if (inp.value.trim()) render(); });
+    // 聚焦不显示建议列表（用户只点输入框不显示历史），仅输入文字时由 input 事件触发
     inp.addEventListener("blur", function () { setTimeout(function () { sug.style.display = "none"; }, 120); });
   }
 
