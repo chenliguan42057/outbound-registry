@@ -64,6 +64,8 @@ def _parse_reminder_at(val):
 
     要求格式合法且精确到分钟（datetime-local step=60 输出不含秒/微秒）；
     缺失/损坏/非法 → 返回 None。
+    返回带 tzinfo=CST 的 aware datetime，避免与 datetime.now(CST) 比较时
+    抛出 "can't compare offset-naive and offset-aware datetimes"。
     """
     if not val:
         return None
@@ -73,7 +75,7 @@ def _parse_reminder_at(val):
         return None
     if dt.second != 0 or dt.microsecond != 0:
         return None
-    return dt
+    return dt.replace(tzinfo=CST)
 
 
 def _env_bool(name):
@@ -135,7 +137,10 @@ def in_reminder_window(now, reminder_at):
 
     now 为当前北京时间（调用方已去秒/微秒精确到分钟）。超过窗口即错过，单次不补推；
     target 在未来（now < target_dt）也不会提前推送。解析失败返回 False。
+    now 若为 naive（测试注入场景）自动挂上 CST tzinfo，与 aware 的 target_dt 保持一致比较。
     """
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=CST)
     target_dt = _parse_reminder_at(reminder_at)
     if target_dt is None:
         return False
