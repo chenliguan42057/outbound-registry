@@ -135,14 +135,15 @@
 
   /* ================= 备忘录云端同步（目录 data/memos） ================= */
 
-  /** 拉取云端全部备忘录（目录 404 视为空；逻辑同 pullPickups() 但目录不同） */
+  /** 拉取云端全部备忘录（目录 404 视为空；逻辑同 pullPickups() 但目录不同）。
+      config.json 是提醒配置不是备忘录，必须排除，否则会被解析成无 id 幽灵条目。 */
   async function pullMemos() {
     var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/data/memos?ref=" + Config.GH.branch;
     var arr;
     try { arr = await apiJson(url); }
     catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
     if (!Array.isArray(arr)) return [];
-    var files = arr.filter(function (f) { return f.name.endsWith(".json") && f.size < 5 * 1024 * 1024; });
+    var files = arr.filter(function (f) { return f.name.endsWith(".json") && f.name !== "config.json" && f.size < 5 * 1024 * 1024; });
     var recs = [];
     for (var i = 0; i < files.length; i++) {
       try {
