@@ -20,7 +20,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           mkdir -p dist
-          perl -pi -e 's/__GH_TOKEN_PLACEHOLDER__/$ENV{GH_TOKEN}/g' src/index.html src/legacy.html
+          perl -pi -e 's/__GH_TOKEN_PLACEHOLDER__/$ENV{GH_TOKEN}/g' src/index.html src/legacy.html src/lurong.html
           cp -r src/. dist/
       - uses: actions/upload-pages-artifact@v3
         with:
