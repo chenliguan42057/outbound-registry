@@ -4,9 +4,10 @@
 
 提醒时间可配置：优先读取 data/memos/config.json 的 reminderTime（"HH:MM"），
 缺失/损坏时兜底 MEMO_DEFAULT_REMINDER_TIME（与前端 Config.MEMO_DEFAULT_REMINDER_TIME 对齐）。
-workflow 每分钟跑一次，按「容忍窗口」匹配：当前北京时间当日分钟数 now_min 与目标
-target（h*60+m）满足 |now_min - target| <= 1（允许最多 1 分钟调度延迟，早/晚对称容忍；
-00:00 目标时前一晚 23:5x 为当日分钟 143x，天然排除跨天误推）。
+workflow 每分钟跑一次，按「容忍延迟窗口」匹配：当前北京时间当日分钟数 now_min 与目标
+target（h*60+m）满足 target <= now_min <= target + 3（cron 只能晚跑不能早跑，窗口只
+容忍最多 3 分钟调度延迟、不提前推送；00:00 目标时前一晚 23:5x 为当日分钟 143x，天然
+排除跨天误推）。
 
 当日去重：config.json 的 lastSentAt（YYYY-MM-DD）== 今天则跳过；推送成功后用 GitHub
 Contents API 写回 lastSentAt=今天，防止同一天重复推送。推送失败不写 lastSentAt，窗口内可重试。
@@ -46,10 +47,10 @@ GH_BRANCH = "main"
 MEMO_CONFIG_PATH = "data/memos/config.json"
 MEMO_DEFAULT_REMINDER_TIME = "17:00"
 
-# 容忍窗口（分钟，对称 ±TOLERANCE_MIN）：|now_min - target| <= TOLERANCE_MIN 视为命中。
-# 覆盖最多 1 分钟调度延迟（早/晚各容忍 1 分钟）；target=0（00:00）时前一晚 23:5x
-# 映射为当日分钟 143x，天然排除跨天误推。
-TOLERANCE_MIN = 1
+# 容忍延迟窗口（分钟）：命中条件 target <= now_min <= target + TOLERANCE_LATE。
+# cron 只能晚跑不能早跑，窗口只容忍调度延迟、不提前推送；覆盖最多 3 分钟队列延迟。
+# target=0（00:00）时前一晚 23:5x 为当日分钟 143x，远超 target+3=3，天然排除跨天误推。
+TOLERANCE_LATE = 3
 
 _TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 
@@ -113,10 +114,10 @@ def is_sent_today(config_path=MEMO_CONFIG_PATH, now=None):
 
 
 def in_time_window(now=None, reminder_time=None):
-    """容忍窗口匹配：|now_min - target| <= TOLERANCE_MIN。
+    """容忍延迟窗口匹配：target <= now_min <= target + TOLERANCE_LATE。
 
-    允许最多 TOLERANCE_MIN 分钟调度延迟（早/晚对称容忍）；target=0（00:00）时
-    前一晚 23:5x 为当日分钟 143x，距离 0 远超窗口，天然排除跨天误推。
+    cron 只能晚跑不能早跑，窗口只容忍调度延迟、不提前推送（覆盖最多 3 分钟队列延迟）；
+    target=0（00:00）时前一晚 23:5x 为当日分钟 143x，远超 target+3=3，天然排除跨天误推。
     now / reminder_time 用于测试注入。
     """
     now = now or datetime.now(CST)
@@ -124,7 +125,7 @@ def in_time_window(now=None, reminder_time=None):
     hh, mm = reminder_time.split(":")
     target = int(hh) * 60 + int(mm)
     now_min = now.hour * 60 + now.minute
-    return abs(now_min - target) <= TOLERANCE_MIN
+    return target <= now_min <= target + TOLERANCE_LATE
 
 
 def build_memo_reminder_markdown(memos_dir="data/memos", now=None, reminder_time=None):
