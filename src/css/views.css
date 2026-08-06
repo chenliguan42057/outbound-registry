@@ -715,24 +715,6 @@
   .purpose-add-inline { flex-wrap: wrap; }
 }
 
-/* 备忘录提醒设置：时间输入 + 保存按钮同行（移动端换行） */
-.reminder-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.reminder-row input[type="time"],
-.reminder-row input[type="datetime-local"] {
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 14px;
-  color: var(--text);
-}
-.reminder-row input[type="time"]:focus,
-.reminder-row input[type="datetime-local"]:focus { outline: none; border-color: var(--primary); }
-
 /* ============================================================
    views.css — 待取货模块（第七轮增量，全部追加，不改动既有类）
    ============================================================ */

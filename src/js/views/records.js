@@ -109,6 +109,7 @@
         if (searchState.picker && !(r.picker || "").toLowerCase().includes(searchState.picker.toLowerCase())) return false;
         if (q) {
           var hay = (r.dept || "") + " " + (r.picker || "") + " " + (r.purpose || "") + " " +
+            (r.entity || "") + " " + (r.note || "") + " " +
             (r.items || []).map(function (it) { return it.name; }).join(" ");
           if (!hay.toLowerCase().includes(q)) return false;
         }

@@ -191,35 +191,6 @@
     return { ok: ok, fail: fail };
   }
 
-  /** 拉取云端提醒配置 data/memos/config.json（固定路径；404 视为空 dict）。
-      apiJson 对非 2xx 抛错，此处与 pull() 一致对 404 单独降级。 */
-  async function pullMemoConfig() {
-    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/data/memos/config.json?ref=" + Config.GH.branch;
-    try {
-      var j = await apiJson(url);
-      var obj = JSON.parse(Util.b64dec(j.content));
-      return (obj && typeof obj === "object") ? obj : {};
-    } catch (e) {
-      if (String(e.message).indexOf("404") === 0) return {};
-      throw e;
-    }
-  }
-
-  /** 推送云端提醒配置（固定路径 data/memos/config.json，始终覆写） */
-  async function pushMemoConfig(obj) {
-    var path = "data/memos/config.json";
-    var content = Util.b64enc(JSON.stringify(obj || {}));
-    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
-    var sha;
-    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
-    var body = sha
-      ? { message: "update memo config", content: content, sha: sha, branch: Config.GH.branch }
-      : { message: "add memo config", content: content, branch: Config.GH.branch };
-    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
-      method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
-    });
-  }
-
   /** 清空云端全部记录 */
   async function clearAll() {
     var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.GH.dir + "?ref=" + Config.GH.branch;
@@ -406,8 +377,6 @@
     pullMemos: pullMemos,
     pushMemo: pushMemo,
     delMemo: delMemo,
-    pushAllMemos: pushAllMemos,
-    pullMemoConfig: pullMemoConfig,
-    pushMemoConfig: pushMemoConfig
+    pushAllMemos: pushAllMemos
   };
 })();
