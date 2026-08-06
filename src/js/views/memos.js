@@ -1,6 +1,9 @@
 /**
- * memos.js — 备忘录模块（登记表单 + 未完成/已完成 tab 列表）
- * 添加：输入待做事项 → Memos.create（默认 done:false）→ 推送云端 data/memos/<id>.json。
+ * memos.js — 备忘录模块（登记表单 + 未完成/已完成 tab 列表 + 每条备忘独立提醒）
+ * 添加：输入待做事项（可选填提醒时间）→ Memos.create（默认 done:false，remindAt 可选）→ 推送云端。
+ * 提醒：每条备忘各自绑定 remindAt（"YYYY-MM-DDTHH:mm" 北京时间本地表示，空=不提醒）；
+ *       到点未完成由 GitHub Action 定时任务推送钉钉，推送后写回 reminded:true 防重复；
+ *       列表每行提供「⏰ 设提醒/改提醒」按钮（可清空提醒）。
  * 状态：done=false 未完成（红徽章，可点击标记为已完成）；done=true 已完成（绿徽章静态）。
  * 删除：本地删除 + 云端直接删文件（不带墓碑，流程性数据不做删除同步，与待取货一致）。
  * 提交/变更均同步云端（无 token 存本机，下次「立即同步」自动上传）。
@@ -13,11 +16,11 @@
   var State = window.App.State;
   var Memos = window.App.Memos;
   var Cloud = window.App.Cloud;
-  var Store = window.App.Store;
 
   var container = null;
   var listBox = null;
   var textInput = null;
+  var remindInput = null;   // 添加区「提醒时间（可选）」datetime-local
   var activeTab = "todo";   // "todo"（未完成）| "done"（已完成）
 
   function render(el) {
@@ -30,21 +33,14 @@
           '<textarea id="memoText" rows="2" placeholder="例如：补充面膜 5片装库存…"></textarea>' +
           '<div class="hint">按 Ctrl + Enter 快速提交</div>' +
         '</div>' +
+        '<div class="field">' +
+          '<label>提醒时间（可选）</label>' +
+          '<input type="datetime-local" id="memoRemindAt" step="60" />' +
+          '<div class="hint">到点未完成将推送钉钉，推送后失效；留空则不提醒</div>' +
+        '</div>' +
         '<div class="actions">' +
           '<button type="button" class="btn" id="memoAdd">添加</button>' +
           '<button type="button" class="btn ghost" id="memoReset">清空</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="card">' +
-        '<h2>提醒设置</h2>' +
-        '<div class="field">' +
-          '<label>提醒时间（特定日期 + 时间，单次）</label>' +
-          '<div class="reminder-row">' +
-            '<input type="datetime-local" id="memoReminderAt" step="60" />' +
-            '<span class="hint" id="memoReminderWeekday"></span>' +
-            '<button type="button" class="btn" id="memoReminderSave">保存</button>' +
-          '</div>' +
-          '<div class="hint">到点提醒一次，推送后失效；留空表示不设置。</div>' +
         '</div>' +
       '</div>' +
       '<div class="card">' +
@@ -60,11 +56,14 @@
       '</div>';
 
     textInput = Util.$("memoText");
+    remindInput = Util.$("memoRemindAt");
     Util.$("memoAdd").addEventListener("click", submit);
-    Util.$("memoReset").addEventListener("click", function () { textInput.value = ""; textInput.focus(); });
+    Util.$("memoReset").addEventListener("click", function () {
+      textInput.value = "";
+      remindInput.value = "";
+      textInput.focus();
+    });
     Util.$("memoSync").addEventListener("click", doSync);
-    Util.$("memoReminderSave").addEventListener("click", saveReminder);
-    Util.$("memoReminderAt").addEventListener("input", updateReminderWeekday);
     textInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
     });
@@ -72,18 +71,38 @@
 
     bindTabs();
     listBox.addEventListener("click", onListClick);
-    renderReminderSettings();
-    syncReminderFromCloud();
     renderList();
   }
 
   /* ---------- 添加 ---------- */
 
+  /** remindAt 是否合法格式 "YYYY-MM-DDTHH:MM"（datetime-local 原生输出格式，step=60 无秒） */
+  function isRemindAtValid(v) {
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(v || "")) &&
+      !isNaN(new Date(String(v)).getTime());
+  }
+
+  /** 提醒时间是否已到点（当前时刻 ≥ remindAt；用于列表展示样式区分） */
+  function isRemindDue(v) {
+    if (!v) return false;
+    var t = new Date(String(v)).getTime();
+    return !isNaN(t) && t <= Date.now();
+  }
+
   function submit() {
     var text = textInput.value.trim();
     if (!text) { Util.toast("请输入待做事项", true); textInput.focus(); return; }
-    var memo = Memos.create({ text: text, time: Util.nowLocal() });
+    var remindAt = (remindInput && remindInput.value) || "";
+    if (remindAt) {
+      if (!isRemindAtValid(remindAt)) { Util.toast("请选择有效的提醒时间", true); remindInput.focus(); return; }
+      // 必须晚于当前北京时间（留 1 分钟缓冲，避免保存后立即被 cron 命中）
+      if (new Date(remindAt).getTime() <= Date.now() + 60 * 1000) {
+        Util.toast("提醒时间必须为未来", true); remindInput.focus(); return;
+      }
+    }
+    var memo = Memos.create({ text: text, time: Util.nowLocal(), remindAt: remindAt });
     textInput.value = "";
+    remindInput.value = "";
     renderList();
     if (Cloud.hasToken()) {
       Util.toast("已添加，正在同步到云端…");
@@ -97,73 +116,15 @@
     }
   }
 
-  /* ---------- 提醒设置（单次：特定日期 + 时间，到点推一次，推送后失效） ---------- */
-
-  /** 星期映射：JS getDay() 0=周日 … 6=周六 */
-  var WEEKDAY_CN = ["日", "一", "二", "三", "四", "五", "六"];
-
-  /** reminderAt 是否合法格式 "YYYY-MM-DDTHH:MM"（datetime-local 原生输出格式） */
-  function isReminderAtValid(v) {
-    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(v || "")) &&
-      !isNaN(new Date(String(v)).getTime());
-  }
-
-  /** 更新「（星期X）」提示：new Date(value).getDay() 0=日 … 6=六；无效/空则清空 */
-  function updateReminderWeekday() {
-    var hint = Util.$("memoReminderWeekday");
-    if (!hint) return;
-    var input = Util.$("memoReminderAt");
-    var v = (input && input.value) || "";
-    if (!isReminderAtValid(v)) { hint.textContent = ""; return; }
-    hint.textContent = "（星期" + WEEKDAY_CN[new Date(v).getDay()] + "）";
-  }
-
-  /** 读取本地提醒配置并回填 datetime-local（留空表示未设置） */
-  function renderReminderSettings() {
-    var cfg = Store.loadMemoConfig();
-    var input = Util.$("memoReminderAt");
-    if (input) input.value = cfg.reminderAt || "";
-    updateReminderWeekday();
-  }
-
-  /** 保存提醒时间：校验格式 + 必须为未来 → 写 localStorage + 有 token 时推云端 data/memos/config.json */
-  function saveReminder() {
-    var input = Util.$("memoReminderAt");
-    var v = (input && input.value) || "";
-    if (v && !isReminderAtValid(v)) { Util.toast("请选择有效的提醒时间", true); if (input) input.focus(); return; }
-    if (v) {
-      var t = new Date(v).getTime();
-      // 必须晚于当前北京时间（留 1 分钟缓冲，避免保存后立即被 cron 命中）
-      if (t <= Date.now() + 60 * 1000) { Util.toast("提醒时间必须为未来", true); if (input) input.focus(); return; }
-    }
-    Store.saveMemoConfig({ reminderAt: v });
-    Util.toast(v ? "已保存提醒时间：" + v.replace("T", " ") : "已清除提醒（未设置）");
-    if (Cloud.hasToken()) {
-      Cloud.pushMemoConfig({ reminderAt: v }).then(function () {
-        window.App.Views.app.setSyncStatus("已同步", false);
-      }).catch(function () {
-        window.App.Views.app.setSyncStatus("云端同步失败（已存本机）", true);
-      });
-    }
-  }
-
-  /** 从云端拉取提醒配置同步到本地（有 token 且云端有合法 reminderAt 时以云端为准；失败静默保留本地） */
-  function syncReminderFromCloud() {
-    if (!Cloud.hasToken()) return;
-    Cloud.pullMemoConfig().then(function (obj) {
-      if (!obj) return;
-      var v = String(obj.reminderAt || "");
-      var cur = Store.loadMemoConfig();
-      if (cur.reminderAt !== v) {
-        Store.saveMemoConfig({ reminderAt: v });
-        var input = Util.$("memoReminderAt");
-        if (input) input.value = v;  // datetime-local 原生格式与 reminderAt 完全一致，直接赋值
-        updateReminderWeekday();
-      }
-    }).catch(function () { /* 拉取失败静默，保留本地配置 */ });
-  }
-
   /* ---------- 列表渲染 ---------- */
+
+  /** 提醒时间列：有 remindAt 显示 "⏰ YYYY-MM-DD HH:MM"，已到点样式区分；无则占位 */
+  function remindCell(m) {
+    if (!m.remindAt) return '<span style="color:var(--muted);">—</span>';
+    var due = isRemindDue(m.remindAt);
+    return '<span class="memo-remind' + (due ? " due" : "") + '">⏰ ' +
+      Util.esc(String(m.remindAt).replace("T", " ")) + '</span>';
+  }
 
   function renderList() {
     if (!listBox) return;
@@ -179,16 +140,22 @@
       return;
     }
     var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
-      '<th>序号</th><th>事项内容</th><th>添加时间</th><th>状态</th><th>操作</th>' +
+      '<th>序号</th><th>事项内容</th><th>添加时间</th><th>提醒时间</th><th>状态</th><th>操作</th>' +
       '</tr></thead><tbody>';
     shown.forEach(function (m, i) {
       var textCls = m.done === true ? ' class="memo-done"' : "";
+      var remindedBadge = m.reminded === true ? ' <span class="memo-reminded-badge">已提醒</span>' : "";
       html += '<tr>' +
         '<td><div>' + (shown.length - i) + '</div></td>' +
         '<td><div' + textCls + '>' + Util.esc(m.text || "") + '</div></td>' +
         '<td>' + Util.esc(String(m.time || "").replace("T", " ")) + '</td>' +
-        '<td>' + statusPill(m) + '</td>' +
-        '<td><button type="button" class="btn danger sm" data-act="del" data-id="' + m.id + '">删除</button></td>' +
+        '<td>' + remindCell(m) + '</td>' +
+        '<td>' + statusPill(m) + remindedBadge + '</td>' +
+        '<td>' +
+          '<button type="button" class="btn ghost sm" data-act="remind" data-id="' + m.id + '">⏰ ' +
+            (m.remindAt ? "改提醒" : "设提醒") + '</button> ' +
+          '<button type="button" class="btn danger sm" data-act="del" data-id="' + m.id + '">删除</button>' +
+        '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -211,7 +178,51 @@
     var act = btn.getAttribute("data-act");
     var id = btn.getAttribute("data-id");
     if (act === "done") markDone(id);
+    else if (act === "remind") setReminder(id);
     else if (act === "del") doDel(id);
+  }
+
+  /** 设/改提醒弹窗：datetime-local（step=60）+ 清空/取消/保存；保存 → updateRemind + 推送云端 + 重建列表 */
+  function setReminder(id) {
+    var m = State.memos.find(function (x) { return x.id === id; });
+    if (!m) return;
+    var cur = m.remindAt || "";
+    var body =
+      '<div class="field">' +
+        '<label>提醒时间（可选）</label>' +
+        '<input type="datetime-local" id="memoRemindEdit" step="60" value="' + Util.esc(cur) + '" />' +
+        '<div class="hint">到点未完成将推送钉钉，推送后失效；留空则不提醒</div>' +
+      '</div>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="btn ghost sm" data-act="remind-clear">清空</button>' +
+        '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+        '<button type="button" class="btn sm" data-act="ok">保存</button>' +
+      '</div>';
+    UI.Modal.show(m.remindAt ? "改提醒" : "设提醒", body, { width: "380px" });
+    var mBody = UI.Modal.body();
+    var input = mBody.querySelector("#memoRemindEdit");
+    mBody.querySelector('[data-act="remind-clear"]').onclick = function () { input.value = ""; };
+    mBody.querySelector('[data-act="cancel"]').onclick = function () { UI.Modal.hide(); };
+    mBody.querySelector('[data-act="ok"]').onclick = function () {
+      var v = input.value;
+      if (v) {
+        if (!isRemindAtValid(v)) { Util.toast("请选择有效的提醒时间", true); return; }
+        if (new Date(v).getTime() <= Date.now() + 60 * 1000) { Util.toast("提醒时间必须为未来", true); return; }
+      }
+      var updated = Memos.updateRemind(id, v);
+      if (!updated) { Util.toast("记录不存在", true); return; }
+      UI.Modal.hide();
+      renderList();
+      Util.toast(v ? "已设提醒：" + String(v).replace("T", " ") : "已清除提醒");
+      if (Cloud.hasToken()) {
+        Cloud.pushMemo(updated).then(function () {
+          window.App.Views.app.setSyncStatus("已同步", false);
+        }).catch(function () {
+          window.App.Views.app.setSyncStatus("云端同步失败", true);
+        });
+      }
+    };
+    setTimeout(function () { input.focus(); }, 50);
   }
 
   /** 标记已完成：done false→true，本地保存 + 推送云端 */

@@ -102,6 +102,15 @@ def note_line(data):
     return "\n- **备注**：{}".format(note) if note else ""
 
 
+def entity_line(data):
+    """结算法人单位行（出库记录 entity 字段，非必填）；为空时返回空串，避免输出空行。
+
+    返回带行尾换行（便于直接拼接到「部门/客户」行之后）；仅 entity 非空时输出。
+    """
+    entity = str((data or {}).get("entity") or "").strip()
+    return "- **结算法人单位**：{}\n".format(entity) if entity else ""
+
+
 def build_new_markdown(data):
     """新增记录：新登记通知。"""
     goods = goods_of(data)
@@ -111,14 +120,18 @@ def build_new_markdown(data):
             goods, data.get("time", "")
         )
     else:
-        base = "### 📦 出入库登记 · 新出库登记\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
+        base = "### 📦 出入库登记 · 新出库登记\n- **领取人**：{}\n- **部门/客户**：{}\n".format(
             data.get("picker", ""),
             data.get("dept", ""),
+        )
+        base += entity_line(data)
+        base += "- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
             data.get("purpose", ""),
             goods,
             data.get("time", ""),
             status_text_of(data),
-        ) + note_line(data)
+        )
+        base += note_line(data)
     return base + ("\n" + photos if photos else "")
 
 
@@ -130,23 +143,31 @@ def build_update_markdown(data, old):
     old_st = (old or {}).get("status", "submitted")
     # 提单动作：出库记录状态从非已提单变为已提单
     if new_st == "submitted" and old_st != "submitted":
-        base = "### 📤 出入库登记 · 出库已提单\n- **领取人**：{}\n- **部门/客户**：{}\n- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：✅ 已提单".format(
+        base = "### 📤 出入库登记 · 出库已提单\n- **领取人**：{}\n- **部门/客户**：{}\n".format(
             data.get("picker", ""),
             data.get("dept", ""),
+        )
+        base += entity_line(data)
+        base += "- **用途**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：✅ 已提单".format(
             data.get("purpose", ""),
             goods,
             data.get("time", ""),
-        ) + note_line(data)
+        )
+        base += note_line(data)
         return base + ("\n" + photos if photos else "")
     # 取消提单（已提单→未提单）
     if old_st == "submitted" and new_st == "pending":
-        return "### ↩️ 出入库登记 · 已撤回未提单\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}".format(
-            data.get("picker", ""), goods, data.get("time", "")
-        ) + note_line(data)
+        base = "### ↩️ 出入库登记 · 已撤回未提单\n- **领取人**：{}\n".format(data.get("picker", ""))
+        base += entity_line(data)
+        base += "- **货品**：{}\n- **时间**：{}".format(goods, data.get("time", ""))
+        return base + note_line(data)
     # 其他修改（编辑用途/货品等）
-    return "### 📝 出入库登记 · 记录已更新\n- **领取人**：{}\n- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
-        data.get("picker", ""), goods, data.get("time", ""), status_text_of(data)
-    ) + note_line(data)
+    base = "### 📝 出入库登记 · 记录已更新\n- **领取人**：{}\n".format(data.get("picker", ""))
+    base += entity_line(data)
+    base += "- **货品**：{}\n- **时间**：{}\n- **状态**：{}".format(
+        goods, data.get("time", ""), status_text_of(data)
+    )
+    return base + note_line(data)
 
 
 def build_tombstone_markdown(data):
@@ -159,13 +180,14 @@ def build_tombstone_markdown(data):
         )
     rec = data.get("rec") or {}
     goods = goods_of(rec)
-    return "### 🗑 出入库登记 · 记录已删除\n- **删除理由**：{}\n- **领取人**：{}\n- **部门/客户**：{}\n- **货品**：{}\n- **登记时间**：{}".format(
+    base = "### 🗑 出入库登记 · 记录已删除\n- **删除理由**：{}\n- **领取人**：{}\n- **部门/客户**：{}\n".format(
         data.get("reason", ""),
         rec.get("picker", ""),
         rec.get("dept", ""),
-        goods,
-        rec.get("time", ""),
     )
+    base += entity_line(rec)
+    base += "- **货品**：{}\n- **登记时间**：{}".format(goods, rec.get("time", ""))
+    return base
 
 
 def build_pickup_new_markdown(data):

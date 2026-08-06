@@ -176,6 +176,7 @@
       var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
         '<th>序号</th><th>时间</th><th>' + (isIn ? "经办人" : "领取人") + '</th>' +
         (!isIn ? '<th>状态</th>' : '') +
+        (!isIn ? '<th>结算法人单位</th>' : '') +
         '<th>' + (isIn ? "来源" : "部门") + '</th><th>用途/项目</th><th>货物名称</th><th>数量</th><th>库存</th><th>照片</th><th>操作</th>' +
         '</tr></thead><tbody>';
       list.forEach(function (r, i) {
@@ -199,6 +200,7 @@
           '<td>' + Util.esc(r.time || "-") + '</td>' +
           '<td>' + Util.esc(r.picker || "-") + '</td>' +
           (!isIn ? '<td>' + statusPill(r) + '</td>' : '') +
+          (!isIn ? '<td>' + Util.esc(r.entity || "-") + '</td>' : '') +
           '<td>' + Util.esc(r.dept || "-") + '</td>' +
           '<td>' + Util.esc(r.purpose || "-") + '</td>' +
           '<td class="items-cell">' + items + '</td>' +
@@ -235,8 +237,14 @@
         rows += '<div class="detail-row"><span class="k">状态</span><span class="v">' + statusBadge(r) + '</span></div>';
         rows += '<div class="detail-row"><span class="k">领取人</span><span class="v">' + Util.esc(r.picker || "-") + '</span></div>';
         rows += '<div class="detail-row"><span class="k">部门</span><span class="v">' + Util.esc(r.dept || "-") + '</span></div>';
+        if (r.entity) {
+          rows += '<div class="detail-row"><span class="k">结算法人单位</span><span class="v">' + Util.esc(r.entity) + '</span></div>';
+        }
       }
       rows += '<div class="detail-row"><span class="k">' + (isRecIn ? "用途/来源" : "用途/项目") + '</span><span class="v">' + Util.esc(r.purpose || "-") + '</span></div>';
+      if (r.note) {
+        rows += '<div class="detail-row"><span class="k">备注</span><span class="v">' + Util.esc(r.note) + '</span></div>';
+      }
       rows += '<div class="detail-row"><span class="k">货品明细</span><span class="v detail-items">' + (itemsHtml || "-") + '</span></div>';
       rows += '<div class="detail-row"><span class="k">照片</span><span class="v">' + photosHtml + '</span></div>';
       UI.Modal.show(isRecIn ? "入库详情" : "出库详情", rows, { width: "560px" });

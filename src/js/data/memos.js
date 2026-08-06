@@ -1,8 +1,10 @@
 /**
  * memos.js — 备忘录 CRUD + 云端合并排序
- * 备忘录 schema（新增，不影响既有记录 schema）：{id, text, time, done, _ts}
+ * 备忘录 schema（新增，不影响既有记录 schema）：{id, text, time, done, _ts, remindAt?, reminded?}
  *   text = 事项内容；time = 添加时间（Util.nowLocal() "YYYY-MM-DDTHH:mm"）；
  *   done = 是否已完成（默认 false，手动点击改为 true）。
+ *   remindAt = 每条备忘各自绑定的提醒时间（可选，"" 或 "YYYY-MM-DDTHH:mm" 北京时间本地表示；空=不提醒）；
+ *   reminded = 该提醒是否已推送过（默认 false，防重复推送；改提醒时间时重置为 false）。
  * 注意：备忘录绝不影响库存计算（stock.js 只遍历 State.list，天然隔离）。
  */
 (function () {
@@ -11,13 +13,15 @@
   var Util = window.App.Util;
   var State = window.App.State;
 
-  /** 新增备忘录（本地保存 + 返回记录） */
+  /** 新增备忘录（本地保存 + 返回记录）；remindAt/reminded 为纯追加可选字段，create 合并默认值 */
   function create(payload) {
     var memo = Object.assign({
       id: Util.genId(),
       time: Util.nowLocal(),
       _ts: Date.now(),
-      done: false
+      done: false,
+      remindAt: "",
+      reminded: false
     }, payload);
     State.memos.unshift(memo);
     State.saveMemos();
@@ -32,6 +36,11 @@
     State.memos[idx] = memo;
     State.saveMemos();
     return memo;
+  }
+
+  /** 设/改提醒时间：置 remindAt 并重置 reminded:false（改时间后允许再次推送）；remindAt 传空串表示清除提醒 */
+  function updateRemind(id, remindAt) {
+    return update(id, { remindAt: String(remindAt || ""), reminded: false });
   }
 
   /** 删除备忘录（本地） */
@@ -55,6 +64,7 @@
   window.App.Memos = {
     create: create,
     update: update,
+    updateRemind: updateRemind,
     remove: remove,
     mergeAndSort: mergeAndSort
   };

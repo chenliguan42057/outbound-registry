@@ -68,6 +68,8 @@
       var who = [];
       if (rec.picker) who.push(Util.esc(rec.picker));
       if (rec.dept) who.push(Util.esc(rec.dept));
+      // 出库记录结算法人单位（若有）：追加展示，便于快速识别法人口径
+      if (rec.entity && rec.type !== "in") who.push(Util.esc(rec.entity));
       var whoHtml = who.length ? who.join(" · ") : "—";
       return '<div class="recent-item" data-id="' + Util.esc(rec.id || "") + '">' +
         '<div class="recent-item-main">' +

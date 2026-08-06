@@ -768,3 +768,24 @@
   text-decoration: line-through;
   color: var(--muted);
 }
+
+/* 每条备忘独立提醒（第十一轮增量）：提醒时间列 / 已提醒徽标 */
+.memo-remind {
+  font-size: 13px;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.memo-remind.due {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.memo-reminded-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--muted-bg, #EEF1F6);
+  color: var(--muted);
+  white-space: nowrap;
+}
