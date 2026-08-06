@@ -20,8 +20,10 @@
   var els = null;
   /** 当前选中的用途值（chip 单选，互斥高亮） */
   var selectedPurpose = "";
-  /** 当前选中的结算法人单位值（chip 单选，互斥高亮；必填） */
-  var selectedEntity = "";
+  /** 结算法人单位默认值：预设第一项「深圳细胞法人」，仅手动点击赛迪斯或自定义后才切换 */
+  var DEFAULT_ENTITY = (Config.ENTITY_PRESETS && Config.ENTITY_PRESETS[0]) || "";
+  /** 当前选中的结算法人单位值（chip 单选，互斥高亮；必填，默认深圳细胞法人） */
+  var selectedEntity = DEFAULT_ENTITY;
 
   function render(container) {
     container.innerHTML =
@@ -445,7 +447,7 @@
     selectedPurpose = "";
     renderPurposeChips();
     closePurposeAdd();
-    selectedEntity = "";
+    selectedEntity = DEFAULT_ENTITY;   // 清空后回默认「深圳细胞法人」
     renderEntityChips();
     closeEntityAdd();
     els.dept.value = "";
@@ -471,7 +473,7 @@
     // 编辑初始化选中态：有值则选中，无值（旧记录/导入记录）必须清空，避免先前选中态残留带出
     selectedPurpose = r.purpose || "";
     renderPurposeChips();
-    selectedEntity = r.entity || "";
+    selectedEntity = r.entity || DEFAULT_ENTITY;   // 旧记录无法人字段时回默认「深圳细胞法人」
     renderEntityChips();
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);
