@@ -9,7 +9,7 @@
    - reminded !== true（未推送过）
    - 窗口命中：target_dt = datetime.fromisoformat(remindAt).replace(tzinfo=CST)（aware），
      now_dt = datetime.now(CST).replace(second=0, microsecond=0)（aware，精确到分钟）；
-     命中条件 target_dt <= now_dt <= target_dt + timedelta(minutes=3)（只容忍最多 3 分钟调度延迟，
+     命中条件 target_dt <= now_dt <= target_dt + timedelta(minutes=TOLERANCE_LATE)（只容忍调度延迟，
      不提前推送；超过窗口即错过，单次不补推）。
 2. 命中列表 → 组装 markdown：「### ⏰ 出入库登记 · 待办提醒」+ 逐条列出
    （- 🟡 内容（提醒时间：YYYY-MM-DD HH:MM））；全部无命中 → print 跳过 return 0。
@@ -51,7 +51,9 @@ MEMOS_DIR = "data/memos"
 
 # 容忍延迟窗口（分钟）：命中条件 target_dt <= now <= target_dt + TOLERANCE_LATE。
 # cron 只能晚跑不能早跑，窗口只容忍调度延迟、不提前推送；超过窗口即错过，单次不补推。
-TOLERANCE_LATE = 3
+# GitHub Actions schedule 实际最短间隔 5 分钟（官方下限，且可能延迟/跳过），
+# 10 分钟窗口保证任意时刻到下一次运行（≤5 分钟）都在窗口内，配合 reminded 写回防重复。
+TOLERANCE_LATE = 10
 
 
 def _parse_remind_at(val):

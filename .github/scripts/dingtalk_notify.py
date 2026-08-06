@@ -185,7 +185,7 @@ def build_tombstone_markdown(data):
         rec.get("picker", ""),
         rec.get("dept", ""),
     )
-    base += entity_line(rec)
+    base += entity_line(rec) if str(rec.get("type", "")).lower() != "in" else ""
     base += "- **货品**：{}\n- **登记时间**：{}".format(goods, rec.get("time", ""))
     return base
 
@@ -253,6 +253,10 @@ def build_memo_new_markdown(data):
 def build_memo_update_markdown(data, old):
     """修改备忘录：识别「已完成」「改回未完成」等状态变化。"""
     old = old or {}
+    # 系统内部标记：reminded false→true 是提醒推送后的写回动作（write_reminded），
+    # 非用户真实修改，不发通知（main() 中 md 为空自然跳过）。
+    if old.get("reminded") is not True and data.get("reminded") is True:
+        return None
     # 完成动作：done 从非 true 变为 true（前端 update 仅此动作刷新 _ts，_ts 即完成时刻）
     if old.get("done") is not True and data.get("done") is True:
         return "### ✅ 出入库登记 · 备忘录已完成\n- **事项内容**：{}\n- **完成时间**：{}\n- **添加时间**：{}".format(
