@@ -210,6 +210,10 @@
       }
       refreshActiveView();
       scheduleNextSync();
+      // 每次自动同步后顺带冲刷「待补推队列」（空队列无 API 开销）
+      Cloud.flushQueue().then(function (fres) {
+        if (fres && fres.ok > 0) Util.toast("已补推 " + fres.ok + " 条记录");
+      }).catch(function () {});
     }).catch(function () {
       syncing = false;
       setSyncStatus("同步失败", true);
@@ -257,6 +261,10 @@
     window.addEventListener("focus", onWindowFocus);
     scheduleNextSync();
     triggerSync("start");
+    // 启动时冲刷「待补推队列」：把之前因页面关闭而没推上去的记录补推到云端
+    Cloud.flushQueue().then(function (fres) {
+      if (fres && fres.ok > 0) Util.toast("已补推 " + fres.ok + " 条记录");
+    }).catch(function () {});
   }
 
   /** 停止自动同步：清理定时器与窗口监听（离开 #/app 或应用壳卸载时调用） */

@@ -314,6 +314,69 @@
     return { ok: ok, fail: fail };
   }
 
+  /* ================= 单条带重试推送 + 持久化重试队列 =================
+     解决「页面被切走/关闭导致在途推送丢失 → 记录只留本机 → GitHub 收不到 → 钉钉不响」的问题。
+     - pushWithRetry：单条 PUT，最多 3 次指数退避（800ms / 1600ms）；401/403 令牌失效立即放弃，交队列等下次。
+     - pushRecord：优先立即推送；失败将 id 写入 localStorage 队列，待下次启动/操作冲刷。
+     - 队列只存 id（不存整条记录，避免照片 dataURL 撑爆 localStorage）；冲刷时从 State.list 取最新内容重推，
+       按 id 覆盖，幂等。 */
+
+  var SYNC_QUEUE_KEY = "outbound_sync_queue";
+
+  function loadQueue() {
+    try { return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function saveQueue(arr) {
+    try { localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
+  function enqueue(id) {
+    var q = loadQueue();
+    if (q.indexOf(id) === -1) q.push(id);
+    saveQueue(q);
+  }
+  function dequeue(id) {
+    saveQueue(loadQueue().filter(function (x) { return x !== id; }));
+  }
+
+  /** 带退避重试的单条推送；成功返回 true，失败（含令牌失效）返回 false */
+  async function pushWithRetry(rec, attempts) {
+    attempts = attempts || 3;
+    for (var i = 0; i < attempts; i++) {
+      try { await push(rec); return true; }
+      catch (e) {
+        var msg = String((e && e.message) || "");
+        if (/^401 |^403 /.test(msg)) break;           // 令牌失效：不再重试，交队列等下次
+        if (i < attempts - 1) await new Promise(function (r) { setTimeout(r, 800 * Math.pow(2, i)); });
+      }
+    }
+    return false;
+  }
+
+  /** 优先立即推送单条记录；失败入持久化队列，待冲刷。返回 Promise<boolean> */
+  async function pushRecord(rec) {
+    if (!rec || !rec.id) return false;
+    if (!hasToken()) { enqueue(rec.id); return false; }
+    var ok = await pushWithRetry(rec, 3);
+    if (ok) { dequeue(rec.id); return true; }
+    enqueue(rec.id);
+    return false;
+  }
+
+  /** 冲刷持久化队列：逐条重试（2 次），成功出队；记录已本地删除则直接出队。返回 {ok, remain} */
+  async function flushQueue() {
+    var q = loadQueue();
+    if (!q.length) return { ok: 0, remain: 0 };
+    if (!hasToken()) return { ok: 0, remain: q.length };
+    var ok = 0, remain = 0;
+    for (var i = 0; i < q.length; i++) {
+      var id = q[i];
+      var rec = (window.App.State.list || []).find(function (r) { return r.id === id; });
+      if (!rec) { dequeue(id); continue; }            // 本地已删，出队
+      if (await pushWithRetry(rec, 2)) { dequeue(id); ok++; } else { remain++; }
+    }
+    return { ok: ok, remain: remain };
+  }
+
   /**
    * 拉取 + 合并 + 应用墓碑 + 落盘
    * 墓碑机制：云端 data/deleted/ 中的墓碑会删除本地对应 id 的残留记录（解决"删除不同步"）。
@@ -363,6 +426,9 @@
     del: del,
     clearAll: clearAll,
     pushAllLocal: pushAllLocal,
+    pushRecord: pushRecord,
+    pushWithRetry: pushWithRetry,
+    flushQueue: flushQueue,
     syncPull: syncPull,
     pushTombstone: pushTombstone,
     delWithTombstone: delWithTombstone,

@@ -129,7 +129,7 @@
     }
     resetForm();
     pushPhotosToCloud(rec);
-    pushToCloud(wasEditing ? "修改已保存，正在同步到云端…" : "入库成功，正在同步到云端…");
+    pushToCloud(rec, wasEditing ? "修改已保存，正在同步到云端…" : "入库成功，正在同步到云端…");
   }
 
   /** 照片上传云端（可选）：成功后记录 photoUrls，供钉钉通知渲染图片；失败不阻塞 */
@@ -146,21 +146,25 @@
     }).catch(function () {});
   }
 
-  function pushToCloud(msg) {
+  function pushToCloud(rec, msg) {
     if (!Cloud.hasToken()) {
       Util.toast("入库成功（已存本机）");
       return;
     }
     Util.toast(msg);
-    Cloud.pushAllLocal().then(function (res) {
+    // 优先单条带重试推送本条；失败自动入持久化队列，下次启动/自动同步时补推（关页面也不丢）
+    Cloud.pushRecord(rec).then(function () {
+      return Cloud.flushQueue();
+    }).then(function (fres) {
       State.lastSync = new Date();
       window.App.Views.app.setSyncStatus("已同步 " + State.lastSync.toLocaleString(), false);
-      if (res.fail > 0) {
-        window.App.Views.app.setSyncStatus("部分同步失败（" + res.fail + " 条）", true);
-        Util.toast("已存本地，云端同步 " + res.ok + " 成功 / " + res.fail + " 失败", true);
+      var remain = (fres && fres.remain) || 0;
+      if (remain > 0) {
+        window.App.Views.app.setSyncStatus("部分待补推（" + remain + " 条稍后自动重试）", true);
+        Util.toast("已存本地，云端稍后自动补推", true);
       }
     }).catch(function (e) {
-      window.App.Views.app.setSyncStatus("云端同步失败：" + e.message + "（已存本地）", true);
+      window.App.Views.app.setSyncStatus("云端同步失败：" + e.message + "（已存本地，稍后重试）", true);
     });
   }
 
