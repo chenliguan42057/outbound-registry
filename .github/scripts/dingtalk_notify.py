@@ -237,7 +237,6 @@ def build_tombstone_markdown(data):
 
 def build_pickup_new_markdown(data):
     """新增待取货登记通知（标题 → 字段 → 货品明细）。"""
-    goods = goods_of(data)
     fields = [
         ("取货人", data.get("picker", "") or "-"),
         ("部门/客户", data.get("dept", "") or "-"),

@@ -89,6 +89,18 @@ def goods_of(order):
     ) or "（无明细）"
 
 
+def goods_lines_of(order):
+    """货品明细每行一项（缩进 4 空格），避免钉钉对超长单行强制换行堆在一起。"""
+    items = order.get("items") or []
+    if not items:
+        return "    （无明细）"
+    return "\n".join(
+        "    - {n} × {q}".format(n=it.get("name", ""), q=it.get("qty", ""))
+        for it in items
+        if it.get("name")
+    ) or "    （无明细）"
+
+
 def status_text_of(order):
     return "未提单" if order.get("status") == "pending" else "已提单"
 
@@ -102,34 +114,34 @@ def photos_lines(o):
 
 
 def build_order_lines(payload):
-    """把提醒请求中的订单摘要转成 markdown 行列表；无效订单跳过。"""
+    """把提醒请求中的订单摘要转成 markdown 行列表；无效订单跳过。货品明细逐项分行。"""
     lines = []
     for i, o in enumerate(payload.get("orders") or [], 1):
         if not isinstance(o, dict) or not o.get("id"):
             continue
-        goods = goods_of(o)
+        goods_lines = goods_lines_of(o)
         t = str(o.get("time") or "").strip() or "-"
         kind = str(o.get("type") or "").lower()
         if kind == "in":
             lines.append(
-                "- **#{} 入库**　{}\n  用途/来源：{}　货品：{}{}".format(
-                    i, t, o.get("purpose", "") or "-", goods, photos_lines(o)
+                "- **#{} 入库**　{}\n  用途/来源：{}\n{}\n{}".format(
+                    i, t, o.get("purpose", "") or "-", goods_lines, photos_lines(o)
                 )
             )
             continue
         head = "- **#{} 出库**　{}　领取人：{}　部门/客户：{}".format(
             i, t, o.get("picker", "") or "-", o.get("dept", "") or "-"
         )
-        body = "  用途：{}　货品：{}　状态：{}".format(
-            o.get("purpose", "") or "-", goods, status_text_of(o)
+        body = "  用途：{}　状态：{}\n{}".format(
+            o.get("purpose", "") or "-", status_text_of(o), goods_lines
         )
         entity = str(o.get("entity") or "").strip()
         if entity:
-            body += "　结算法人单位：{}".format(entity)
+            body += "\n  结算法人单位：{}".format(entity)
         note = str(o.get("note") or "").strip()
         if note:
-            body += "　备注：{}".format(note)
-        body += photos_lines(o)
+            body += "\n  备注：{}".format(note)
+        body += ("\n" if body else "") + photos_lines(o)
         lines.append(head + "\n" + body)
     return lines
 
@@ -139,7 +151,7 @@ def build_pickup_confirm_markdown(payload):
     p = payload.get("pickup") or {}
     if not p.get("id"):
         return None
-    goods = goods_of(p)
+    goods_lines = goods_lines_of(p)
     reg = str(p.get("time") or "").strip().replace("T", " ") or "-"
     conf = str(p.get("confirmedAt") or "").strip().replace("T", " ")[:16] or "-"
     gap = ""
@@ -161,9 +173,11 @@ def build_pickup_confirm_markdown(payload):
         "### ✅ 出入库登记 · 提单确认",
         "",
         "- **取货人：** {}".format(p.get("picker", "") or "-"),
-        "- **货品：** {}".format(goods),
         "- **登记时间：** {}".format(reg),
         "- **提单时间：** {}".format(conf + gap),
+        "",
+        "**货品明细**：",
+        goods_lines,
     ]
     dept = str(p.get("dept") or "").strip()
     if dept:
