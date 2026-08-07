@@ -223,15 +223,16 @@ def build_tombstone_markdown(data):
             fmt_ts(data.get("deletedAt")) or datetime.now(CST).strftime("%Y-%m-%d %H:%M"),
         )
     rec = data.get("rec") or {}
-    goods = goods_of(rec)
-    base = "### 🗑 出入库登记 · 记录已删除\n- **删除理由**：{}\n- **领取人**：{}\n- **部门/客户**：{}\n".format(
-        data.get("reason", ""),
-        rec.get("picker", ""),
-        rec.get("dept", ""),
+    goods_lines = goods_lines_of(rec)
+    md = "### 🗑 出入库登记 · 记录已删除\n- **删除理由**：{}\n- **领取人**：{}\n- **部门/客户**：{}\n".format(
+        data.get("reason", "") or "-",
+        rec.get("picker", "") or "-",
+        rec.get("dept", "") or "-",
     )
-    base += entity_line(rec) if str(rec.get("type", "")).lower() != "in" else ""
-    base += "- **货品**：{}\n- **登记时间**：{}".format(goods, rec.get("time", ""))
-    return base
+    if str(rec.get("type", "")).lower() != "in":
+        md += entity_line(rec)
+    md += "- **登记时间**：{}\n\n**货品明细**：\n{}".format(rec.get("time", "") or "-", goods_lines)
+    return md
 
 
 def build_pickup_new_markdown(data):
@@ -253,24 +254,24 @@ def build_pickup_new_markdown(data):
 
 
 def build_pickup_update_markdown(data, old):
-    """修改待取货：识别「确认出库」「确认提单」等状态变化。"""
-    goods = goods_of(data)
+    """修改待取货：识别「确认出库」「确认提单」等状态变化。统一：标题→字段→货品明细。"""
+    goods_lines = goods_lines_of(data)
     old = old or {}
     # 出库动作：出库状态从非已出库变为已出库
     if old.get("shipped") is not True and data.get("shipped") is True:
-        return "### 🚚 出入库登记 · 待取货已出库\n- **取货人**：{}\n- **货品**：{}\n- **出库时间**：{}\n- **说明**：已生成出库记录".format(
-            data.get("picker", ""),
-            goods,
+        return "### 🚚 出入库登记 · 待取货已出库\n- **取货人**：{}\n- **出库时间**：{}\n\n**货品明细**：\n{}\n- **说明**：已生成出库记录".format(
+            data.get("picker", "") or "-",
             data.get("time", "") or datetime.now(CST).strftime("%Y-%m-%d %H:%M"),
+            goods_lines,
         )
     # 确认提单动作：提单状态从非已确认变为已确认
     if old.get("confirmed") is not True and data.get("confirmed") is True:
-        return "### ✅ 出入库登记 · 待取货已确认提单\n- **取货人**：{}\n- **货品**：{}\n- **登记时间**：{}".format(
-            data.get("picker", ""), goods, data.get("time", "")
+        return "### ✅ 出入库登记 · 待取货已确认提单\n- **取货人**：{}\n- **登记时间**：{}\n\n**货品明细**：\n{}".format(
+            data.get("picker", "") or "-", data.get("time", "") or "-", goods_lines
         )
     # 其他修改
-    return "### 📝 出入库登记 · 待取货信息已更新\n- **取货人**：{}\n- **货品**：{}\n- **时间**：{}".format(
-        data.get("picker", ""), goods, data.get("time", "")
+    return "### 📝 出入库登记 · 待取货信息已更新\n- **取货人**：{}\n- **时间**：{}\n\n**货品明细**：\n{}".format(
+        data.get("picker", "") or "-", data.get("time", "") or "-", goods_lines
     )
 
 
