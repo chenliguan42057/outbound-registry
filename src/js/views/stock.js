@@ -13,6 +13,7 @@
   var container = null;
   var tableBox = null;
   var rankBox = null;
+  var chartBox = null;
   var q = "";
 
   /* 排名排序模式（默认库存多→少；不持久化，页面重进回到默认） */
@@ -21,6 +22,10 @@
   function render(el) {
     container = el;
     el.innerHTML =
+      '<div class="card">' +
+        '<h2>库存可视化 <span class="tag">Top 10</span></h2>' +
+        '<div id="stockChart"></div>' +
+      '</div>' +
       '<div class="card">' +
         '<h2>库存查询 <span class="tag">实时计算</span></h2>' +
         '<div class="field">' +
@@ -39,6 +44,7 @@
       '</div>';
     tableBox = Util.$("stockTableBox");
     rankBox = Util.$("rankBox");
+    chartBox = Util.$("stockChart");
     var search = Util.$("stockSearch");
     search.addEventListener("input", function () {
       q = search.value.trim().toLowerCase();
@@ -49,6 +55,7 @@
       rankMode = sort.value;
       renderRank();
     });
+    renderChart();
     renderTable();
     renderRank();
   }
@@ -57,6 +64,49 @@
   function refresh() {
     if (tableBox) renderTable();
     if (rankBox) renderRank();
+    if (chartBox) renderChart();
+  }
+
+  /* ================= 库存可视化条形图（手写 SVG，零依赖） ================= */
+
+  /** 渲染 Top 10 库存条形图：横向条形，低库存红色、正常绿色 */
+  function renderChart() {
+    if (!chartBox) return;
+    var summary = Stock.summarize()
+      .slice()
+      .sort(function (a, b) { return b.stock - a.stock; })
+      .slice(0, 10);
+    if (!summary.length) {
+      chartBox.innerHTML = '<div class="empty">暂无数据</div>';
+      return;
+    }
+    var max = summary[0].stock || 1;
+    var W = 640, H = 32 * summary.length + 30, barH = 18;
+    var esc = Util.esc;
+    var rows = summary.map(function (s, i) {
+      var w = Math.max(2, Math.round(s.stock / max * (W - 190)));
+      var low = s.stock < Config.LOW_STOCK_THRESHOLD;
+      var color = low ? "#e74c3c" : "#2ecc71";
+      var y = 10 + i * 32;
+      return '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + (low ? "#e74c3c" : "#555") + '">' +
+        esc(truncate(s.name, 14)) + '</text>' +
+        '<rect x="150" y="' + y + '" width="' + w + '" height="' + barH + '" rx="4" fill="' + color + '" opacity="0.9" />' +
+        '<text x="' + (158 + w) + '" y="' + (y + 14) + '" font-size="12" font-weight="bold" fill="' + color + '">' +
+        s.stock + '</text>';
+    }).join("");
+    chartBox.innerHTML =
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;" role="img" aria-label="库存条形图">' +
+      rows + '</svg>' +
+      '<div class="chart-legend">' +
+        '<span class="legend-dot low"></span>低库存（&lt;' + Config.LOW_STOCK_THRESHOLD + '）' +
+        '<span class="legend-dot ok"></span>正常' +
+      '</div>';
+  }
+
+  /** 名称截断（超长加省略号，避免顶出 SVG 画布） */
+  function truncate(s, n) {
+    s = String(s || "");
+    return s.length > n ? s.slice(0, n) + "…" : s;
   }
 
   function renderTable() {

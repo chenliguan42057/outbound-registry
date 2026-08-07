@@ -459,6 +459,26 @@ body.modal-open { overflow: hidden; }
 }
 .login-sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
 
+/* ---------- 库存可视化图例 ---------- */
+.chart-legend {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.chart-legend .legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+.chart-legend .legend-dot.low { background: #e74c3c; }
+.chart-legend .legend-dot.ok { background: #2ecc71; }
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 560px) {
   .grid2 { grid-template-columns: 1fr; }

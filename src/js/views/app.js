@@ -82,6 +82,9 @@
         '<div class="win-topbar">' +
           '<button type="button" class="win-topbar-menu" id="winMenu" title="菜单">' + UI.icon("menu", 20) + '</button>' +
           '<span class="win-topbar-title">' + Util.esc(Config.BRAND_TITLE) + '</span>' +
+          '<div class="win-topbar-search">' +
+            '<input type="text" id="winGlobalQ" placeholder="全局搜索：领取人 / 货品 / 用途…" autocomplete="off" />' +
+          '</div>' +
           '<div class="win-topbar-right">' +
             '<button type="button" class="win-topbar-sync" id="winSync" title="云端同步">' + UI.icon("sync", 18) + '</button>' +
           '</div>' +
@@ -140,6 +143,37 @@
       Util.$("winImportFile").click();
     });
     Util.$("winImportFile").addEventListener("change", handleImport);
+    // 全局搜索：回车 → 跳转到「出库记录」页并填入搜索词（跨出入库由各页搜索框覆盖）
+    var gq = Util.$("winGlobalQ");
+    gq.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      var q = gq.value.trim();
+      if (!q) return;
+      gq.value = "";
+      var target = stateHasMatch(q, "in") ? "in-records" : "out-records";
+      Router.navigate("/app/" + target);
+      // 等待目标视图渲染后写入搜索框（搜索关键词按领取人/货品/用途，两页都会命中）
+      setTimeout(function () {
+        var qEl = document.getElementById("recQ");
+        if (qEl) {
+          qEl.value = q;
+          qEl.dispatchEvent(new Event("input"));
+        }
+      }, 120);
+    });
+  }
+
+  /** 全局搜索辅助：判断入库/出库哪边更容易命中（先看出库，再看入库） */
+  function stateHasMatch(q, kind) {
+    var kw = q.toLowerCase();
+    return (State.list || []).some(function (r) {
+      if (kind === "in" ? (r.type || "out") !== "in" : (r.type || "out") === "in") return false;
+      if (r.borrowed === true) return false;
+      var hay = (r.dept || "") + " " + (r.picker || "") + " " + (r.purpose || "") + " " +
+        (r.entity || "") + " " + (r.note || "") + " " +
+        (r.items || []).map(function (it) { return it.name; }).join(" ");
+      return hay.toLowerCase().includes(kw);
+    });
   }
 
   /** 挂载模块：切换内容区 + 高亮导航 + 记忆最后停留项 */

@@ -97,6 +97,7 @@
         else if (act === "del") doDel(id);
         else if (act === "status") toggleStatus(id);
         else if (act === "photo") showPhoto(btn.getAttribute("data-src"));
+        else if (act === "print") doPrint(id);
       });
       renderList();
     }
@@ -214,6 +215,7 @@
           '<td class="items-cell">' + stocks + '</td>' +
           '<td><div class="photos-cell">' + photoHtml + '</div></td>' +
           '<td>' +
+            '<button type="button" class="btn ghost sm" data-act="print" data-id="' + r.id + '">🖨 打印</button> ' +
             '<button type="button" class="btn ghost sm" data-act="edit" data-id="' + r.id + '">编辑</button> ' +
             '<button type="button" class="btn danger sm" data-act="del" data-id="' + r.id + '">删除</button>' +
           '</td>' +
@@ -258,6 +260,57 @@
 
     function showPhoto(src) {
       UI.Modal.show("照片预览", '<img class="preview-img" src="' + src + '" alt="" />', { width: "fit-content" });
+    }
+
+    /** 打印单据：新窗口排版该记录并触发打印（含标题/字段/货品/签名栏） */
+    function doPrint(id) {
+      var r = State.list.find(function (x) { return x.id === id; });
+      if (!r) return;
+      var isRecIn = r.type === "in";
+      var kindLabel = isRecIn ? "入库单" : "出库单";
+      var itemsHtml = (r.items || []).map(function (it) {
+        return '<tr><td>' + Util.esc(it.name) + '</td><td class="c">' + it.qty + '</td>' +
+          '<td class="c">' + Stock.getRecordStock(it.name, r, it) + '</td></tr>';
+      }).join("");
+      var statusLabel = isRecIn ? "" : (Records.getStatus(r) === "pending" ? "未提单" : "已提单");
+      var win = window.open("", "_blank", "width=640,height=800");
+      if (!win) { Util.toast("浏览器拦截了打印窗口，请允许弹窗", true); return; }
+      win.document.write(
+        '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">' +
+        '<title>' + kindLabel + ' - ' + Util.esc(r.id) + '</title>' +
+        '<style>' +
+          'body{font-family:"Microsoft YaHei",sans-serif;color:#222;margin:32px;} ' +
+          'h1{font-size:22px;text-align:center;letter-spacing:2px;margin:0 0 4px;} ' +
+          '.sub{text-align:center;color:#888;font-size:12px;margin-bottom:24px;} ' +
+          'table{width:100%;border-collapse:collapse;margin:16px 0;} ' +
+          'th,td{border:1px solid #999;padding:8px 10px;font-size:14px;} ' +
+          'th{background:#f5f5f5;} .c{text-align:center;} ' +
+          '.field{font-size:14px;line-height:2;} .field b{display:inline-block;min-width:80px;} ' +
+          '.sign{display:flex;justify-content:space-between;margin-top:64px;font-size:14px;} ' +
+          '.sign div{text-align:center;} .sign .line{width:120px;border-top:1px solid #666;margin-top:28px;padding-top:6px;} ' +
+          '@media print{body{margin:8mm;}}' +
+        '</style></head><body>' +
+        '<h1>出入库登记 · ' + kindLabel + '</h1>' +
+        '<div class="sub">单号：' + Util.esc(r.id) + '　|　时间：' + Util.esc(String(r.time || "").replace("T", " ")) + '</div>' +
+        '<div class="field">' +
+          '<b>' + (isRecIn ? "经办人" : "领取人") + '：</b>' + Util.esc(r.picker || "-") + '<br>' +
+          (isRecIn ? '' : '<b>部门/客户：</b>' + Util.esc(r.dept || "-") + '<br>') +
+          (isRecIn ? '' : (r.entity ? '<b>结算法人单位：</b>' + Util.esc(r.entity) + '<br>' : '')) +
+          '<b>' + (isRecIn ? "用途/来源" : "用途/项目") + '：</b>' + Util.esc(r.purpose || "-") + '<br>' +
+          (isRecIn ? '' : '<b>状态：</b>' + statusLabel + '<br>') +
+          (r.note ? '<b>备注：</b>' + Util.esc(r.note) + '<br>' : '') +
+        '</div>' +
+        '<table><thead><tr><th>货品名称</th><th class="c">数量</th><th class="c">库存</th></tr></thead>' +
+        '<tbody>' + (itemsHtml || '<tr><td colspan="3">（无明细）</td></tr>') + '</tbody></table>' +
+        '<div class="sign">' +
+          '<div>领取人/经办人<div class="line">签名</div></div>' +
+          '<div>仓管员<div class="line">签名</div></div>' +
+          '<div>审批人<div class="line">签名</div></div>' +
+        '</div>' +
+        '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>' +
+        '</body></html>'
+      );
+      win.document.close();
     }
 
     /** 编辑：出库→落地页编辑（保留照片等全字段），入库→入库模块内编辑 */

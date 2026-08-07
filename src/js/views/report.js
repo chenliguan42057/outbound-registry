@@ -1,6 +1,7 @@
 /**
  * report.js — 报表统计模块
  * 出/入库汇总卡片 + 库存排行 TOP10 + 近 7/30 天出入库趋势（纯前端，基于 State.list + getStock）
+ * v2 增强：日期范围筛选（本周/本月/全部/自定义）+ 筛选区间出入库明细表 + CSV 导出
  */
 (function () {
   'use strict';
@@ -10,13 +11,29 @@
   var Config = window.App.Config;
   var State = window.App.State;
   var Stock = window.App.Stock;
+  var Records = window.App.Records;
 
   var container = null;
+  var range = { start: "", end: "" };   // 日期范围（YYYY-MM-DD），空=不限制
 
   function render(el) {
     container = el;
     el.innerHTML =
       '<div class="report">' +
+        '<div class="card">' +
+          '<div class="actions" style="justify-content:space-between;flex-wrap:wrap;">' +
+            '<div class="report-range">' +
+              '<button type="button" class="btn ghost sm active" data-range="week">本周</button>' +
+              '<button type="button" class="btn ghost sm" data-range="month">本月</button>' +
+              '<button type="button" class="btn ghost sm" data-range="all">全部</button>' +
+              '<input type="date" id="reportStart" style="width:130px;" />' +
+              '<span class="muted">至</span>' +
+              '<input type="date" id="reportEnd" style="width:130px;" />' +
+              '<button type="button" class="btn sm" id="reportApply">筛选</button>' +
+            '</div>' +
+            '<button type="button" class="btn ghost sm" id="reportExport">&#11015; 导出 CSV</button>' +
+          '</div>' +
+        '</div>' +
         '<div class="report-cards" id="reportCards"></div>' +
         '<div class="grid2">' +
           '<div class="card">' +
@@ -32,7 +49,38 @@
             '<div id="reportTrend"></div>' +
           '</div>' +
         '</div>' +
+        '<div class="card">' +
+          '<h2>区间出入库明细 <span class="badge" id="reportRangeLabel"></span></h2>' +
+          '<div id="reportTable"></div>' +
+        '</div>' +
       '</div>';
+
+    // 日期范围快捷按钮
+    var rangeBtns = el.querySelectorAll("[data-range]");
+    for (var i = 0; i < rangeBtns.length; i++) {
+      (function (b) {
+        b.addEventListener("click", function () {
+          for (var j = 0; j < rangeBtns.length; j++) rangeBtns[j].classList.remove("active");
+          b.classList.add("active");
+          applyPreset(b.getAttribute("data-range"));
+        });
+      })(rangeBtns[i]);
+    }
+    // 自定义筛选
+    el.querySelector("#reportApply").addEventListener("click", function () {
+      var s = el.querySelector("#reportStart").value;
+      var e = el.querySelector("#reportEnd").value;
+      range = { start: s, end: e };
+      for (var j = 0; j < rangeBtns.length; j++) rangeBtns[j].classList.remove("active");
+      refresh();
+    });
+    // CSV 导出（导出当前筛选区间明细）
+    el.querySelector("#reportExport").addEventListener("click", function () {
+      var arr = filteredRecords();
+      if (!arr.length) { Util.toast("当前区间没有记录可导出", true); return; }
+      Records.exportCsv(arr);
+    });
+
     var tabs = el.querySelectorAll(".trend-tabs .btn");
     for (var i = 0; i < tabs.length; i++) {
       (function (b) {
@@ -43,22 +91,59 @@
         });
       })(tabs[i]);
     }
-    renderCards();
-    renderRank();
-    renderTrend(7);
+    applyPreset("week");
   }
 
-  /** 云端同步后刷新（保留当前 tab） */
+  /** 按当前 range 过滤记录（日期基于 time 前 10 位 YYYY-MM-DD） */
+  function filteredRecords() {
+    var list = State.list;
+    if (!range.start && !range.end) return list;
+    return list.filter(function (r) {
+      var t = String(r.time || "").slice(0, 10);
+      if (range.start && t < range.start) return false;
+      if (range.end && t > range.end) return false;
+      return true;
+    });
+  }
+
+  /** 预设快捷范围：本周/本月/全部 */
+  function applyPreset(kind) {
+    var now = new Date();
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    if (kind === "week") {
+      var day = now.getDay() || 7;   // 周一=1...周日=7
+      var monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (day - 1));
+      range = {
+        start: monday.getFullYear() + "-" + pad(monday.getMonth() + 1) + "-" + pad(monday.getDate()),
+        end: now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate())
+      };
+    } else if (kind === "month") {
+      range = {
+        start: now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-01",
+        end: now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate())
+      };
+    } else {
+      range = { start: "", end: "" };
+    }
+    if (container) {
+      container.querySelector("#reportStart").value = range.start;
+      container.querySelector("#reportEnd").value = range.end;
+    }
+    refresh();
+  }
+
+  /** 云端同步后刷新（保留当前筛选） */
   function refresh() {
     if (!container) return;
     renderCards();
     renderRank();
+    renderTable();
     var active = container.querySelector(".trend-tabs .btn.active");
     renderTrend(active ? Number(active.getAttribute("data-days")) : 7);
   }
 
   function renderCards() {
-    var list = State.list;
+    var list = filteredRecords();
     var summary = Stock.summarize();
     var totalOut = 0, totalIn = 0;
     list.forEach(function (r) {
@@ -68,8 +153,8 @@
     });
     var lowCount = summary.filter(function (s) { return s.stock < Config.LOW_STOCK_THRESHOLD; }).length;
     var cards = [
-      { label: "总出库数量", value: totalOut, icon: "out" },
-      { label: "总入库数量", value: totalIn, icon: "in" },
+      { label: "区间出库数量", value: totalOut, icon: "out" },
+      { label: "区间入库数量", value: totalIn, icon: "in" },
       { label: "货品种类数", value: summary.length, icon: "box" },
       { label: "低库存数", value: lowCount, icon: "stock" }
     ];
@@ -115,6 +200,35 @@
     }).join("") + '</div>';
     html += '<div class="trend-legend"><span class="legend-dot out"></span>出库 <span class="legend-dot in"></span>入库</div>';
     container.querySelector("#reportTrend").innerHTML = html;
+  }
+
+  /** 区间出入库明细表（筛选区间内的记录，最新在前） */
+  function renderTable() {
+    var list = filteredRecords().slice().sort(function (a, b) {
+      return String(b.time || "").localeCompare(String(a.time || "")) || (b._ts || 0) - (a._ts || 0);
+    });
+    var label = range.start
+      ? (range.start + (range.end && range.end !== range.start ? " ~ " + range.end : ""))
+      : "全部";
+    container.querySelector("#reportRangeLabel").textContent = label + " · " + list.length + " 条";
+    if (!list.length) {
+      container.querySelector("#reportTable").innerHTML = '<div class="empty">该区间暂无出入库记录</div>';
+      return;
+    }
+    var rows = list.map(function (r) {
+      var items = (r.items || []).map(function (it) { return Util.esc(it.name) + " ×" + it.qty; }).join("； ");
+      return '<tr>' +
+        '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
+        '<td>' + (r.type === "in" ? "入库" : "出库") + '</td>' +
+        '<td>' + Util.esc(r.picker || "-") + '</td>' +
+        '<td>' + Util.esc(r.purpose || "-") + '</td>' +
+        '<td>' + items + '</td>' +
+      '</tr>';
+    }).join("");
+    container.querySelector("#reportTable").innerHTML =
+      '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<th>时间</th><th>类型</th><th>领取人</th><th>用途</th><th>货品</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
 
   window.App = window.App || {};
