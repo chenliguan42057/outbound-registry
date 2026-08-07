@@ -235,20 +235,21 @@ def build_tombstone_markdown(data):
 
 
 def build_pickup_new_markdown(data):
-    """新增待取货登记通知（字段：取货人/部门/用途/货品/预计取货时间/备注）。"""
+    """新增待取货登记通知（标题 → 字段 → 货品明细）。"""
     goods = goods_of(data)
-    lines = [
-        "### 📦 出入库登记 · 新待取货登记",
-        "- **取货人**：{}".format(data.get("picker", "")),
-        "- **部门/客户**：{}".format(data.get("dept", "")),
-        "- **用途**：{}".format(data.get("purpose", "")),
-        "- **货品**：{}".format(goods),
-        "- **预计取货时间**：{}".format(data.get("time", "")),
+    fields = [
+        ("取货人", data.get("picker", "") or "-"),
+        ("部门/客户", data.get("dept", "") or "-"),
+        ("用途", data.get("purpose", "") or "-"),
+        ("预计取货时间", data.get("time", "") or "-"),
     ]
-    note = (data.get("note") or "").strip()
+    md = "### 📦 出入库登记 · 新待取货登记"
+    md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
+    md += "\n\n**货品明细**：\n" + goods_lines_of(data)
+    note = str((data.get("note") or "")).strip()
     if note:
-        lines.append("- **备注**：{}".format(note))
-    return "\n".join(lines)
+        md += "\n- **备注**：{}".format(note)
+    return md
 
 
 def build_pickup_update_markdown(data, old):

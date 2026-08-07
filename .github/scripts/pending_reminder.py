@@ -122,12 +122,13 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
     MAX_SHOW = 15
 
     def lines_of(title, items, label):
-        lines = ["#### {}（{} 条）".format(title, len(items))]
-        for it in items[:MAX_SHOW]:
-            lines.append("- {}：{}｜货品：{}｜登记时间：{}".format(
-                label, it.get("picker", ""), goods_text(it), fmt_time(it)))
+        lines = ["**{}（{} 条）**".format(title, len(items))]
+        for i, it in enumerate(items[:MAX_SHOW], 1):
+            goods = goods_text(it)
+            lines.append("{}. **{}**｜货品：{}｜📅 {}".format(
+                i, it.get("picker", "") or "-", goods, fmt_time(it)))
         if len(items) > MAX_SHOW:
-            lines.append("- … 其余 {} 条已省略".format(len(items) - MAX_SHOW))
+            lines.append("⋯ 其余 {} 条已省略".format(len(items) - MAX_SHOW))
         return lines
 
     parts = []
@@ -145,7 +146,7 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
     if not parts:
         return None
     now_str = now.strftime("%Y-%m-%d %H:%M")
-    header = "### 📌 出入库登记 · 待处理提醒（实际推送 {} 北京）".format(now_str)
+    header = "### 📌 出入库登记 · 待处理提醒\n⏱ 实际推送：{}（北京时间）".format(now_str)
     return header + "\n\n" + "\n\n".join(parts)
 
 

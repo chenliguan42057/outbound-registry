@@ -151,14 +151,16 @@ def collect_due(memos_list, now, force=False):
 
 
 def build_markdown(due_list):
-    """命中列表 → 提醒 markdown；空列表返回 None（调用方跳过发送）。"""
+    """命中列表 → 提醒 markdown；空列表返回 None（调用方跳过发送）。
+    结构：标题 → 状态行 → 每条约单（序号 + 事项 + 提醒时间）。"""
     if not due_list:
         return None
     lines = ["### ⏰ 出入库登记 · 待办提醒"]
-    for m in due_list:
+    lines.append("- 到点未完成事项共 **{}** 条，请尽快处理：".format(len(due_list)))
+    for i, m in enumerate(due_list, 1):
         text = str(m.get("text") or "").strip() or "（无内容）"
         remind_at = str(m.get("remindAt") or "").replace("T", " ")
-        lines.append("- 🟡 {}（提醒时间：{}）".format(text, remind_at))
+        lines.append("{}. **{}**　⏱ {}".format(i, text, remind_at))
     return "\n".join(lines)
 
 
