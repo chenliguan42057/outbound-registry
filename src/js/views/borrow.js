@@ -83,6 +83,11 @@
 
   function isDone(r) { return r.borrowDone === true || remainingItems(r).length === 0; }
 
+  /** 是否已有归还记录（有归还则不可退回出库记录页，避免库存账目错乱） */
+  function hasReturned(r) {
+    return Object.keys(returnedMap(r)).length > 0;
+  }
+
   function renderList() {
     if (!listBox) return;
     var all = borrowList();
@@ -117,12 +122,25 @@
           : '<span class="status-pill pending static"><span class="dot"></span>借出中</span>') + '</td>' +
         '<td>' +
           (!isDone(r) ? '<button type="button" class="btn sm" data-act="return" data-id="' + r.id + '">归还</button> ' : '') +
+          (!isDone(r) && !hasReturned(r) ? '<button type="button" class="btn ghost sm" data-act="unborrow" data-id="' + r.id + '">退回</button> ' : '') +
           '<button type="button" class="btn ghost sm" data-act="detail" data-id="' + r.id + '">详细</button>' +
         '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
     listBox.innerHTML = html;
+  }
+
+  /* ---------- 列表操作 ---------- */
+
+  function onListClick(e) {
+    var btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    var act = btn.getAttribute("data-act");
+    var id = btn.getAttribute("data-id");
+    if (act === "return") openReturn(id);
+    else if (act === "unborrow") doUnborrow(id);
+    else if (act === "detail") showDetail(id);
   }
 
   /* ---------- 添加借出 ---------- */
@@ -272,6 +290,25 @@
     if (updated) { try { await Cloud.pushRecord(updated); } catch (e) { fail++; } }
     if (fail) window.App.Views.app.setSyncStatus("部分归还同步待补推", true);
     else window.App.Views.app.setSyncStatus("已同步", false);
+  }
+
+  /** 退回出库记录：仅未归还的借出可退回（有归还会打乱库存账目，禁止）。退回后库存扣减保留、未提单状态照旧。 */
+  async function doUnborrow(id) {
+    var r = State.list.find(function (x) { return x.id === id; });
+    if (!r) return;
+    if (isDone(r) || hasReturned(r)) {
+      Util.toast("该借出已归还/结清，不可退回出库记录", true);
+      return;
+    }
+    var ok = await UI.confirmDialog("将这笔借出退回出库记录页？\n退回后恢复显示为出库记录（库存扣减保留，不另行改动）。", "退回出库记录");
+    if (!ok) return;
+    var updated = Records.update(id, { borrowed: false, borrowReturned: [], borrowDone: false });
+    if (!updated) { Util.toast("记录不存在", true); return; }
+    renderList();
+    Util.toast("已退回出库记录页");
+    if (!Cloud.hasToken()) return;
+    try { await Cloud.pushRecord(updated); window.App.Views.app.setSyncStatus("已同步", false); }
+    catch (e) { window.App.Views.app.setSyncStatus("退回同步待补推", true); }
   }
 
   /* ---------- 详情 / 同步 / tab ---------- */
