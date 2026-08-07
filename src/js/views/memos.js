@@ -21,6 +21,7 @@
   var listBox = null;
   var textInput = null;
   var remindInput = null;   // 添加区「提醒时间（可选）」datetime-local
+  var photos = null;        // 添加区照片上传组件（可选，多张）
   var activeTab = "todo";   // "todo"（未完成）| "done"（已完成）
 
   function render(el) {
@@ -32,6 +33,10 @@
           '<label>待做事项<span class="req">*</span></label>' +
           '<textarea id="memoText" rows="2" placeholder="例如：补充面膜 5片装库存…"></textarea>' +
           '<div class="hint">按 Ctrl + Enter 快速提交</div>' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>照片（可选）</label>' +
+          '<div id="memoPhotoUpload"></div>' +
         '</div>' +
         '<div class="field">' +
           '<label>提醒时间（可选）</label>' +
@@ -57,10 +62,13 @@
 
     textInput = Util.$("memoText");
     remindInput = Util.$("memoRemindAt");
+    photos = new UI.PhotoUpload({});
+    photos.attach(Util.$("memoPhotoUpload"));
     Util.$("memoAdd").addEventListener("click", submit);
     Util.$("memoReset").addEventListener("click", function () {
       textInput.value = "";
       remindInput.value = "";
+      photos.setPhotos([]);
       textInput.focus();
     });
     Util.$("memoSync").addEventListener("click", doSync);
@@ -100,20 +108,40 @@
         Util.toast("提醒时间必须为未来", true); remindInput.focus(); return;
       }
     }
-    var memo = Memos.create({ text: text, time: Util.nowLocal(), remindAt: remindAt });
+    var memo = Memos.create({
+      text: text,
+      time: Util.nowLocal(),
+      remindAt: remindAt,
+      photos: photos.getPhotos()      // 可选：本地照片 dataURL（上传成功后写回 photoUrls）
+    });
     textInput.value = "";
     remindInput.value = "";
+    photos.setPhotos([]);
     renderList();
     if (Cloud.hasToken()) {
       Util.toast("已添加，正在同步到云端…");
-      Cloud.pushMemo(memo).then(function () {
-        window.App.Views.app.setSyncStatus("已同步", false);
-      }).catch(function () {
-        window.App.Views.app.setSyncStatus("云端同步失败（已存本机）", true);
-      });
+      submitPush(memo);
     } else {
       Util.toast("已添加（已存本机）");
     }
+  }
+
+  /** 异步推送：先上传照片并写回 photoUrls（跨设备可见），再推备忘录本体 */
+  async function submitPush(memo) {
+    try {
+      if (memo.photos && memo.photos.length) {
+        var urls = await Cloud.pushPhotos(memo);
+        if (urls && urls.length) {
+          var updated = Memos.update(memo.id, { photoUrls: urls });
+          if (updated) memo = updated;
+        }
+      }
+    } catch (e) { /* 照片上传失败不阻塞备忘录本体推送 */ }
+    Cloud.pushMemo(memo).then(function () {
+      window.App.Views.app.setSyncStatus("已同步", false);
+    }).catch(function () {
+      window.App.Views.app.setSyncStatus("云端同步失败（已存本机）", true);
+    });
   }
 
   /* ---------- 列表渲染 ---------- */
@@ -124,6 +152,17 @@
     var due = isRemindDue(m.remindAt);
     return '<span class="memo-remind' + (due ? " due" : "") + '">⏰ ' +
       Util.esc(String(m.remindAt).replace("T", " ")) + '</span>';
+  }
+
+  /** 备忘录照片缩略图：photoUrls（云端 URL）优先，无则用本地 photos（base64）；最多 4 张 */
+  function memoPhotosHtml(m) {
+    var urls = (m.photoUrls && m.photoUrls.length) ? m.photoUrls : (m.photos || []);
+    if (!urls.length) return "";
+    return '<div class="photos-cell">' + urls.slice(0, 4).map(function (src, pi) {
+      return '<img class="mini-photo" src="' + src + '" data-act="photo" data-src="' + src + '" alt="照片' + (pi + 1) + '" />';
+    }).join("") +
+      (urls.length > 4 ? '<span class="badge">+' + (urls.length - 4) + '</span>' : "") +
+      '</div>';
   }
 
   function renderList() {
@@ -147,7 +186,7 @@
       var remindedBadge = m.reminded === true ? ' <span class="memo-reminded-badge">已提醒</span>' : "";
       html += '<tr>' +
         '<td><div>' + (shown.length - i) + '</div></td>' +
-        '<td><div' + textCls + '>' + Util.esc(m.text || "") + '</div></td>' +
+        '<td><div' + textCls + '>' + Util.esc(m.text || "") + '</div>' + memoPhotosHtml(m) + '</td>' +
         '<td>' + Util.esc(String(m.time || "").replace("T", " ")) + '</td>' +
         '<td>' + remindCell(m) + '</td>' +
         '<td>' + statusPill(m) + remindedBadge + '</td>' +
@@ -180,6 +219,7 @@
     if (act === "done") markDone(id);
     else if (act === "remind") setReminder(id);
     else if (act === "del") doDel(id);
+    else if (act === "photo") UI.Modal.show("照片预览", '<img class="preview-img" src="' + btn.getAttribute("data-src") + '" alt="" />', { width: "fit-content" });
   }
 
   /** 设/改提醒弹窗：datetime-local（step=60）+ 清空/取消/保存；保存 → updateRemind + 推送云端 + 重建列表 */

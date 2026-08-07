@@ -106,6 +106,74 @@ def compute_stock(inventory, records):
     return stock
 
 
+def week_summary_markdown(records):
+    """本周（周一 00:00 起，北京时间）出入库汇总 → markdown 表格 + emoji 进度条。
+
+    只统计 affectsStock===true 的记录（与库存口径一致）；入库 +qty，出库 -qty。
+    返回 (markdown_text, has_data)；本周无数据时 has_data=False。
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    now_bj = _dt.utcnow() + _td(hours=8)
+    monday0 = (now_bj - _td(days=now_bj.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def parse_t(t):
+        s = str(t or "")
+        for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"):
+            try:
+                return _dt.strptime(s[:16], fmt)
+            except ValueError:
+                continue
+        return None
+
+    agg = {}   # name -> {"in": 0, "out": 0}
+    for rec in records:
+        if not rec.get("affectsStock"):
+            continue
+        t = parse_t(rec.get("time"))
+        if t is None or t < monday0:
+            continue
+        kind = str(rec.get("type", "")).lower()
+        is_in = kind == "in"
+        for it in rec.get("items") or []:
+            name = it.get("name")
+            qty = it.get("qty")
+            if not name or not isinstance(qty, (int, float)):
+                continue
+            row = agg.setdefault(name, {"in": 0, "out": 0})
+            if is_in:
+                row["in"] += int(qty)
+            else:
+                row["out"] += int(qty)
+
+    if not agg:
+        return "", False
+
+    rows = []
+    for name, row in agg.items():
+        net = row["in"] - row["out"]
+        rows.append((name, row["in"], row["out"], net))
+    rows.sort(key=lambda x: abs(x[3]), reverse=True)
+    top = rows[:10]
+    max_abs = max((abs(net) for _, _, _, net in top), default=1) or 1
+
+    lines = [
+        "**📊 本周出入库汇总（{} 至今日）：**".format(monday0.strftime("%m-%d")),
+        "",
+        "| 货品 | 入库 | 出库 | 净变化 | 趋势 |",
+        "| --- | ---: | ---: | ---: | --- |",
+    ]
+    for name, q_in, q_out, net in top:
+        bar_len = max(1, round(abs(net) / max_abs * 10)) if net else 0
+        bar = "▓" * bar_len + "░" * (10 - bar_len)
+        arrow = "▲" if net > 0 else ("▼" if net < 0 else "—")
+        lines.append("| {} | {} | {} | {}{} | {} {} |".format(
+            name, q_in, q_out, "+" if net > 0 else "", net, arrow, bar))
+    if len(rows) > 10:
+        lines.append("")
+        lines.append("_另有 {} 种货品明细省略_".format(len(rows) - 10))
+    return "\n".join(lines), True
+
+
 def build_report():
     inventory = extract_inventory()
     records = load_records()
@@ -122,6 +190,12 @@ def build_report():
         ),
         "- **货品种类**：{} 种 ｜ **库存总量**：{} 件".format(total_items, total_qty),
     ]
+
+    # 本周出入库汇总（周一 0 点至今；表格 + 进度条）
+    week_md, has_week = week_summary_markdown(records)
+    if has_week:
+        lines.append("")
+        lines.append(week_md)
 
     # 按规格分组展示（同一系列放一起；未匹配兜底「其他」）
     lines.append("")
