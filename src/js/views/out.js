@@ -426,7 +426,9 @@
 
   function pushToCloud(rec, msg) {
     if (!Cloud.hasToken()) {
-      Util.toast("登记成功（已存本机）");
+      // 令牌缺失＝只存在本机浏览器，换设备看不到、也不会进金山台账。必须醒目告警，否则用户会误以为已同步。
+      Util.toast("⚠️ 仅存本机，未上传云端！请联系管理员检查同步令牌", true);
+      window.App.Views.app.setSyncStatus("⚠️ 未配置云端令牌，本条只存在本机，换设备看不到", true);
       return;
     }
     Util.toast(msg);

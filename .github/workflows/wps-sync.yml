@@ -5,6 +5,9 @@ on:
     branches: [ main ]
     paths:
       - 'data/records/*.json'
+  # 兜底扫描：每小时补同步「因并发被取消/网络失败」而漏掉的记录（已同步的靠标记跳过，不会重复写）
+  schedule:
+    - cron: '20 * * * *'
   workflow_dispatch:
     inputs:
       backfill:
@@ -15,6 +18,12 @@ on:
 # 需要写权限来回写同步标记文件 .wps_synced.json（该提交路径非 data/records，不会再次触发本 workflow）
 permissions:
   contents: write
+
+# 串行执行：金山脚本靠「读上一行库存」来算新库存，并发会读到同一个旧值导致库存算错。
+# cancel-in-progress:false 让后来的排队等待而非插队；万一排队被挤掉，上面的每小时兜底扫描会补上。
+concurrency:
+  group: wps-sync
+  cancel-in-progress: false
 
 jobs:
   sync:
@@ -28,8 +37,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             FILES=$(git diff-tree --no-commit-id --name-status -r ${{ github.sha }} -- 'data/records/*.json' || true)
-          elif [ "${{ inputs.backfill }}" = "true" ]; then
-            # 全量回填：列出所有记录文件，标记为新增
+          elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.backfill }}" = "true" ]; then
+            # 全量扫描：列出所有记录文件标记为新增；已同步的会被 .wps_synced.json 跳过，不会重复写
             FILES=$(git ls-tree -r --name-only HEAD -- 'data/records/*.json' | sed 's/^/A\t/' || true)
           else
             FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data/records/*.json' || true)
@@ -42,19 +51,41 @@ jobs:
           WEBHOOK: ${{ secrets.WPS_AIRSCRIPT_WEBHOOK }}
           AIRSCRIPT_TOKEN: ${{ secrets.WPS_AIRSCRIPT_TOKEN }}
           FILES: ${{ steps.changed.outputs.files }}
-          BACKFILL: ${{ inputs.backfill }}
+          BACKFILL: ${{ github.event_name == 'schedule' && 'true' || inputs.backfill }}
         run: python3 .github/scripts/wps_sync.py
       - name: Commit sync marker
         if: always()
         run: |
-          if [ -f .wps_synced.json ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add -f .wps_synced.json
-            if ! git diff --cached --quiet; then
-              git commit -m "chore: update wps sync marker"
-              git push
-            else
-              echo "标记无变化，跳过提交"
-            fi
+          if [ ! -f .wps_synced.json ]; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f .wps_synced.json
+          if git diff --cached --quiet; then
+            echo "标记无变化，跳过提交"; exit 0
           fi
+          git commit -m "chore: update wps sync marker"
+          # 并发时别的 run 可能已推过 → 冲突要「两边取并集」，不能二选一，否则标记丢失会重复写金山
+          for i in 1 2 3 4 5; do
+            if git push; then echo "标记已提交(第 $i 次尝试)"; exit 0; fi
+            echo "推送冲突，第 $i 次合并重试…"
+            cp .wps_synced.json /tmp/mine.json
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          import json, os
+          mine = json.load(open('/tmp/mine.json', encoding='utf-8'))
+          try:
+              theirs = json.load(open('.wps_synced.json', encoding='utf-8'))
+          except Exception:
+              theirs = {}
+          merged = dict(theirs); merged.update(mine)
+          json.dump(merged, open('.wps_synced.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+          print('合并标记: 本地%d + 远程%d -> %d' % (len(mine), len(theirs), len(merged)))
+          PY
+            git add -f .wps_synced.json
+            git diff --cached --quiet && { echo "合并后无差异，无需提交"; exit 0; }
+            git commit -m "chore: update wps sync marker (merged)"
+            sleep $((i * 2))
+          done
+          echo "::warning::标记提交失败，已同步的记录可能被重复写入，请检查金山是否有重复行"
+          exit 0
