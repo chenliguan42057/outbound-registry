@@ -21,7 +21,10 @@ jobs:
         run: |
           # name-status 输出形如 "A\tpath"（新增）/ "M\tpath"（修改），脚本据此区分登记/提单/删除
           if [ "${{ github.event_name }}" = "push" ]; then
-            FILES=$(git diff-tree --no-commit-id --name-status -r ${{ github.sha }} -- 'data/records/*.json' 'data/deleted/*.json' 'data/pickups/*.json' 'data/memos/*.json' || true)
+            # 用 event.before..sha 全范围 diff：GitHub 会把 ~15s 内多次推送合并为一个 push 事件，
+            # 若只 diff 最新 commit（git diff-tree -r $sha），批量操作（删除2提交/借还3提交/确认出库2提交）
+            # 前面 commit 的变更会被吞掉导致通知漏发。
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data/records/*.json' 'data/deleted/*.json' 'data/pickups/*.json' 'data/memos/*.json' || true)
           else
             FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data/records/*.json' 'data/deleted/*.json' 'data/pickups/*.json' 'data/memos/*.json' || true)
           fi

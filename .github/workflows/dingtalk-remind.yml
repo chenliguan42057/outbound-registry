@@ -18,7 +18,8 @@ jobs:
         run: |
           # name-status 输出形如 "A\tpath"（新增）/ "M\tpath"（修改）
           if [ "${{ github.event_name }}" = "push" ]; then
-            FILES=$(git diff-tree --no-commit-id --name-status -r ${{ github.sha }} -- 'data/notify/*.json' || true)
+            # 用 event.before..sha 全范围 diff（理由同 dingtalk-notify.yml：合并 push 会吞前序 commit 变更）
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data/notify/*.json' || true)
           else
             FILES=$(git ls-tree -r --name-only HEAD -- data/notify | grep '\.json$' | tail -3 | sed 's|^|A\t|' || true)
           fi

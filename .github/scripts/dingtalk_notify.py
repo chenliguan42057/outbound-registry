@@ -94,6 +94,41 @@ def goods_lines_of(data):
     )
 
 
+# 低库存阈值（与前端 Config.LOW_STOCK_THRESHOLD 一致）
+LOW_STOCK_THRESHOLD = 95
+
+
+def stock_snapshot_lines(data):
+    """出库后库存快照：遍历 items[].stock（该笔出库后的库存），每项一行；无快照字段返回空串。"""
+    items = data.get("items") or []
+    lines = []
+    for it in items:
+        name = it.get("name", "")
+        stock = it.get("stock")
+        if name and isinstance(stock, (int, float)):
+            lines.append("  - {} → **{}** 件".format(name, int(stock)))
+    return "\n".join(lines)
+
+
+def post_stock_lines(data):
+    """出库后库存预警：取 items[].stock（该笔出库后的库存快照），低于阈值的货品输出红色预警行。
+
+    数据由前端写回（out.js 出库时记录每项出库后库存），无该字段则跳过。
+    返回字符串（多行，无预警时为空串）。
+    """
+    items = data.get("items") or []
+    warns = []
+    for it in items:
+        name = it.get("name", "")
+        stock = it.get("stock")
+        if not name or not isinstance(stock, (int, float)):
+            continue
+        if stock < LOW_STOCK_THRESHOLD:
+            warns.append("- 🔴 **{}** 出库后仅剩 **{}** 件（低于 {} 件）".format(
+                name, int(stock), LOW_STOCK_THRESHOLD))
+    return "\n".join(warns)
+
+
 def status_text_of(data):
     status = data.get("status", "submitted")
     return "未提单" if status == "pending" else "已提单"
@@ -124,7 +159,7 @@ def entity_line(data):
 
 
 def _layout_record(title, fields, data, status_label=None):
-    """统一布局：标题 → 照片（顶部）→ 字段（每行一项）→ 货品明细（每行一项）→ 备注。
+    """统一布局：标题 → 照片（顶部）→ 字段（每行一项）→ 货品明细（每行一项）→ 出库后库存 → 预警 → 备注。
 
     fields: [(k, v), ...] 顺序即展示顺序。
     status_label: 标题里附加的状态角标（"未提单"/"已提单" 等），可空。
@@ -138,6 +173,14 @@ def _layout_record(title, fields, data, status_label=None):
     if fields:
         md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
     md += "\n\n**货品明细**：\n" + goods_lines_of(data)
+    # 出库记录：附加「出库后库存」快照 + 低库存预警（P1-5/P1-6）
+    if str((data or {}).get("type", "")).lower() != "in":
+        snaps = stock_snapshot_lines(data)
+        if snaps:
+            md += "\n\n**出库后库存**：\n" + snaps
+        warns = post_stock_lines(data)
+        if warns:
+            md += "\n\n**⚠️ 库存预警**：\n" + warns
     note = str((data or {}).get("note") or "").strip()
     if note:
         md += "\n- **备注**：{}".format(note)
@@ -253,21 +296,21 @@ def build_pickup_new_markdown(data):
 
 
 def build_pickup_update_markdown(data, old):
-    """修改待取货：识别「确认出库」「确认提单」等状态变化。统一：标题→字段→货品明细。"""
+    """修改待取货：识别「确认出库」「确认提单」等状态变化。统一：标题→字段→货品明细。
+
+    双链去重（P1-6）：「已出库」「已确认提单」两个动作由其它链路发消息，本函数返回 None 抑制：
+      - 已出库（shipped）→ 生成出库记录走 notify 链路「新出库登记」，本处不发；
+      - 已确认提单（confirmed）→ 前端写 pickup-confirm 走 remind 链路「提单确认」，本处不发。
+    仅「其他修改」（编辑待取货信息）仍由本函数发「信息已更新」。
+    """
     goods_lines = goods_lines_of(data)
     old = old or {}
-    # 出库动作：出库状态从非已出库变为已出库
+    # 出库动作：出库状态从非已出库变为已出库（由「新出库登记」通知覆盖，抑制避免重复）
     if old.get("shipped") is not True and data.get("shipped") is True:
-        return "### 🚚 出入库登记 · 待取货已出库\n- **取货人**：{}\n- **出库时间**：{}\n\n**货品明细**：\n{}\n- **说明**：已生成出库记录".format(
-            data.get("picker", "") or "-",
-            data.get("time", "") or datetime.now(CST).strftime("%Y-%m-%d %H:%M"),
-            goods_lines,
-        )
-    # 确认提单动作：提单状态从非已确认变为已确认
+        return None
+    # 确认提单动作：提单状态从非已确认变为已确认（由 remind 链路「提单确认」覆盖，抑制避免重复）
     if old.get("confirmed") is not True and data.get("confirmed") is True:
-        return "### ✅ 出入库登记 · 待取货已确认提单\n- **取货人**：{}\n- **登记时间**：{}\n\n**货品明细**：\n{}".format(
-            data.get("picker", "") or "-", data.get("time", "") or "-", goods_lines
-        )
+        return None
     # 其他修改
     return "### 📝 出入库登记 · 待取货信息已更新\n- **取货人**：{}\n- **时间**：{}\n\n**货品明细**：\n{}".format(
         data.get("picker", "") or "-", data.get("time", "") or "-", goods_lines

@@ -36,7 +36,8 @@ jobs:
         id: changed
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            FILES=$(git diff-tree --no-commit-id --name-status -r ${{ github.sha }} -- 'data/records/*.json' || true)
+            # 用 event.before..sha 全范围 diff（合并 push 会吞前序 commit 变更，导致漏同步）
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data/records/*.json' || true)
           elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.backfill }}" = "true" ]; then
             # 全量扫描：列出所有记录文件标记为新增；已同步的会被 .wps_synced.json 跳过，不会重复写
             FILES=$(git ls-tree -r --name-only HEAD -- 'data/records/*.json' | sed 's/^/A\t/' || true)
