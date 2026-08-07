@@ -10,8 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Python + fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk
+          pip install --quiet matplotlib
       - name: Send stock report to DingTalk
         env:
           WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           SECRET: ${{ secrets.DINGTALK_SECRET }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python3 .github/scripts/stock_report.py

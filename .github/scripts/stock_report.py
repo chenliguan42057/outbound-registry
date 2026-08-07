@@ -2,13 +2,19 @@
 # -*- coding: utf-8 -*-
 """每周五 17:55 库存情况推送（钉钉群机器人）。
 
+周报包含：
+  1. 本周出入库汇总图（matplotlib 横向分组条形图：蓝=入库、橙=出库）—— PNG 上传到
+     data/reports/stock_week_<日期>.png（每日新文件名避免 CDN 缓存），markdown 引用图 URL。
+  2. 库存明细（按规格分组文字）+ 低库存预警（文字）。
+
 计算逻辑与前端一致：
   getStock(name) = INVENTORY[name] + Σ(affectsStock===true && type==='in' ? +qty : -qty)
   即：入库 +数量，出库/其他 -数量（仅 affectsStock=true 的记录参与，避免旧记录重复扣减）。
 
 读取环境变量：
-  WEBHOOK: 钉钉群机器人 Webhook 地址
-  SECRET : 钉钉安全设置「加签」密钥
+  WEBHOOK   : 钉钉群机器人 Webhook 地址
+  SECRET    : 钉钉安全设置「加签」密钥
+  GH_TOKEN  : 仓库令牌（上传周报图片到 data/reports/）
 """
 import base64
 import hashlib
@@ -18,15 +24,20 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
+GH_TOKEN = os.environ.get("GH_TOKEN", "").strip()
 
 LOW_STOCK_THRESHOLD = 95  # 与前端 Config.LOW_STOCK_THRESHOLD 一致
 CONFIG_PATH = "src/js/core/config.js"
 RECORDS_DIR = "data/records"
+REPORTS_DIR = "data/reports"
+GH_REPO = "chenliguan42057/outbound-registry"
+GH_BRANCH = "main"
 
 # 规格归组（与前端 Config.CATEGORY_MAP 一致）：同一系列的货品放一起展示
 CATEGORY_MAP = {
@@ -106,11 +117,11 @@ def compute_stock(inventory, records):
     return stock
 
 
-def week_summary_markdown(records):
-    """本周（周一 00:00 起，北京时间）出入库汇总 → markdown 表格 + emoji 进度条。
+def week_summary(records):
+    """本周（周一 00:00 起，北京时间）出入库聚合数据。
 
     只统计 affectsStock===true 的记录（与库存口径一致）；入库 +qty，出库 -qty。
-    返回 (markdown_text, has_data)；本周无数据时 has_data=False。
+    返回 (rows, monday_str, has_data)；rows = [(name, in_qty, out_qty, net), ...] 按净变化绝对值降序。
     """
     from datetime import datetime as _dt, timedelta as _td
     now_bj = _dt.utcnow() + _td(hours=8)
@@ -146,32 +157,135 @@ def week_summary_markdown(records):
                 row["out"] += int(qty)
 
     if not agg:
-        return "", False
+        return [], monday0.strftime("%Y-%m-%d"), False
 
     rows = []
     for name, row in agg.items():
         net = row["in"] - row["out"]
         rows.append((name, row["in"], row["out"], net))
     rows.sort(key=lambda x: abs(x[3]), reverse=True)
-    top = rows[:10]
-    max_abs = max((abs(net) for _, _, _, net in top), default=1) or 1
+    return rows, monday0.strftime("%Y-%m-%d"), True
 
-    lines = [
-        "**📊 本周出入库汇总（{} 至今日）：**".format(monday0.strftime("%m-%d")),
-        "",
-        "| 货品 | 入库 | 出库 | 净变化 | 趋势 |",
-        "| --- | ---: | ---: | ---: | --- |",
-    ]
-    for name, q_in, q_out, net in top:
-        bar_len = max(1, round(abs(net) / max_abs * 10)) if net else 0
-        bar = "▓" * bar_len + "░" * (10 - bar_len)
-        arrow = "▲" if net > 0 else ("▼" if net < 0 else "—")
-        lines.append("| {} | {} | {} | {}{} | {} {} |".format(
-            name, q_in, q_out, "+" if net > 0 else "", net, arrow, bar))
-    if len(rows) > 10:
-        lines.append("")
-        lines.append("_另有 {} 种货品明细省略_".format(len(rows) - 10))
-    return "\n".join(lines), True
+
+def _setup_cjk_font():
+    """配置 matplotlib 中文字体（找不到时返回 False，中文可能显示为方块但不报错）。"""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.font_manager as fm
+    import matplotlib.pyplot as plt
+    candidates = ["Noto Sans CJK SC", "WenQuanYi Zen Hei", "Microsoft YaHei", "SimHei", "SimSun"]
+    try:
+        avail = {f.name for f in fm.fontManager.ttflist}
+    except Exception:
+        avail = set()
+    chosen = next((f for f in candidates if f in avail), None)
+    if chosen:
+        plt.rcParams["font.sans-serif"] = [chosen]
+        plt.rcParams["axes.unicode_minus"] = False
+        return True
+    return False
+
+
+def generate_week_chart(rows, monday_str, out_path):
+    """生成本周出入库汇总横向分组条形图（蓝=入库、橙=出库），保存到 out_path。
+
+    rows 由 week_summary() 提供，取 Top 10。返回 True/False。
+    """
+    try:
+        _setup_cjk_font()
+        import matplotlib.pyplot as plt
+
+        top = rows[:10]
+        names = [r[0] for r in top][::-1]
+        ins = [r[1] for r in top][::-1]
+        outs = [r[2] for r in top][::-1]
+
+        fig, ax = plt.subplots(figsize=(10, 7))
+        y = range(len(names))
+        bar_h = 0.38
+        ax.barh([i + bar_h / 2 for i in y], ins, height=bar_h, color="#2f80ed", label="入库")
+        ax.barh([i - bar_h / 2 for i in y], outs, height=bar_h, color="#f2994a", label="出库")
+
+        # 数据标签
+        for rect, v in zip(ax.patches[:len(names)], ins):
+            if v:
+                ax.text(rect.get_width() + 3, rect.get_y() + rect.get_height() / 2, str(v),
+                        va="center", fontsize=9, color="#2f80ed")
+        for rect, v in zip(ax.patches[len(names):], outs):
+            if v:
+                ax.text(rect.get_width() + 3, rect.get_y() + rect.get_height() / 2, str(v),
+                        va="center", fontsize=9, color="#f2994a")
+
+        ax.set_yticks(list(y))
+        ax.set_yticklabels(names, fontsize=10)
+        ax.set_xlabel("数量（件）")
+        ax.set_title("本周出入库汇总（{} 起）".format(monday_str[5:]), fontsize=14, fontweight="bold")
+        ax.legend(loc="lower right")
+        ax.grid(axis="x", alpha=0.3)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        plt.tight_layout()
+        plt.savefig(out_path, dpi=150)
+        plt.close()
+        return True
+    except Exception as exc:
+        print("生成图表失败: {}".format(exc), file=sys.stderr)
+        return False
+
+
+def upload_chart(out_path):
+    """把周报图上传到 data/reports/stock_week_<date>.png，返回公网 URL；失败返回 None。
+
+    每日新文件名避免 CDN 缓存旧图。返回 jsdelivr CDN URL（与照片一致）。
+    """
+    if not GH_TOKEN:
+        print("GH_TOKEN 为空，跳过周报图上传", file=sys.stderr)
+        return None
+    if not os.path.exists(out_path):
+        return None
+    fname = os.path.basename(out_path)
+    path = "{}/{}".format(REPORTS_DIR, fname)
+    url = "https://api.github.com/repos/{}/contents/{}".format(GH_REPO, path)
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": "Bearer {}".format(GH_TOKEN),
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    # 读取现有 sha（存在则覆盖）
+    sha = None
+    try:
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            remote = json.loads(resp.read().decode("utf-8"))
+        sha = remote.get("sha")
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            print("WARN 查询周报图 {} 失败：{}".format(path, exc), file=sys.stderr)
+    except Exception as exc:
+        print("WARN 查询周报图失败：{}".format(exc), file=sys.stderr)
+
+    with open(out_path, "rb") as f:
+        content = base64.b64encode(f.read()).decode("utf-8")
+    body = {
+        "message": "weekly chart {}".format(fname),
+        "content": content,
+        "branch": GH_BRANCH,
+    }
+    if sha:
+        body["sha"] = sha
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            headers=dict(headers, **{"Content-Type": "application/json"}),
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp.read()
+        return "https://cdn.jsdelivr.net/gh/{}@{}/{}/{}".format(GH_REPO, GH_BRANCH, REPORTS_DIR, fname)
+    except Exception as exc:
+        print("WARN 上传周报图 {} 失败：{}".format(path, exc), file=sys.stderr)
+        return None
 
 
 def build_report():
@@ -191,24 +305,34 @@ def build_report():
         "- **货品种类**：{} 种 ｜ **库存总量**：{} 件".format(total_items, total_qty),
     ]
 
-    # 本周出入库汇总（周一 0 点至今；表格 + 进度条）
-    week_md, has_week = week_summary_markdown(records)
+    # 本周出入库汇总图（图 1：横向分组条形图）
+    rows, monday_str, has_week = week_summary(records)
     if has_week:
-        lines.append("")
-        lines.append(week_md)
+        fname = "stock_week_{}.png".format(time.strftime("%Y%m%d", time.localtime(time.time() + 8 * 3600)))
+        out_path = os.path.join("/tmp", fname)
+        if generate_week_chart(rows, monday_str, out_path):
+            chart_url = upload_chart(out_path)
+            if chart_url:
+                lines.append("")
+                lines.append("**📊 本周出入库汇总（{} 起）：**".format(monday_str[5:]))
+                lines.append("![本周出入库汇总]({})".format(chart_url))
+            else:
+                # 上传失败降级为文字表格
+                lines.append("")
+                lines.append(week_summary_fallback(rows, monday_str))
 
     # 按规格分组展示（同一系列放一起；未匹配兜底「其他」）
     lines.append("")
     lines.append("**📦 库存明细（按规格分组）：**")
     grouped = False
     for cat, specs in CATEGORY_MAP.items():
-        rows = [(s, stock.get(s)) for s in specs if s in stock]
-        if not rows:
+        srows = [(s, stock.get(s)) for s in specs if s in stock]
+        if not srows:
             continue
         grouped = True
         lines.append("")
-        lines.append("**▸ {}（{} 个规格）**".format(cat, len(rows)))
-        for name, v in rows:
+        lines.append("**▸ {}（{} 个规格）**".format(cat, len(srows)))
+        for name, v in srows:
             mark = " 🔴" if v < LOW_STOCK_THRESHOLD else ""
             lines.append("- {}{}：**{}** 件".format(name, mark, v))
     # 兜底未匹配的货品
@@ -239,6 +363,22 @@ def build_report():
 
     lines.append("")
     lines.append("— 每周五自动推送 · 数据实时来自云端登记")
+    return "\n".join(lines)
+
+
+def week_summary_fallback(rows, monday_str):
+    """上传失败时的降级文字表格（原样保留，避免丢数据）。"""
+    top = rows[:10]
+    lines = [
+        "**📊 本周出入库汇总（{} 至今日）：**".format(monday_str[5:]),
+        "| 货品 | 入库 | 出库 | 净变化 |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for name, q_in, q_out, net in top:
+        lines.append("| {} | {} | {} | {}{} |".format(name, q_in, q_out, "+" if net > 0 else "", net))
+    if len(rows) > 10:
+        lines.append("")
+        lines.append("_另有 {} 种货品明细省略_".format(len(rows) - 10))
     return "\n".join(lines)
 
 
