@@ -266,20 +266,36 @@ def main():
     log("待处理文件数：%d" % len(paths))
     ok_total = 0
     fail_total = 0
+    skip_total = 0
+    # 隔离区：记录「解析失败」的文件路径。作用：
+    #  1) 单个坏文件不再让整次同步变红（不影响其它记录照常入库金山）；
+    #  2) 避免每小时 schedule 反复重试同一个坏文件、反复把 run 标成 failure。
+    bad_files = synced.get("__bad__") if isinstance(synced.get("__bad__"), dict) else {}
+
     for path in paths:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 rec = json.load(f)
         except Exception as e:
-            log("读取失败 %s: %s" % (path, e))
-            fail_total += 1
+            if path in bad_files:
+                log("⏭️ 跳过已知无法解析的文件（已隔离，不影响其它记录）: %s" % path)
+            else:
+                log("⚠️ 跳过无法解析的记录（已隔离，不影响其它记录同步）: %s: %s" % (path, e))
+                bad_files[path] = True
+            skip_total += 1
             continue
+        # 解析成功：若之前被隔离过，移出隔离区，恢复正常处理
+        if path in bad_files:
+            del bad_files[path]
         ok, fail = process_record(rec, synced)
         ok_total += ok
         fail_total += fail
 
+    synced["__bad__"] = bad_files
     save_synced(synced)
-    log("完成：成功 %d，失败 %d，已标记 %d 条" % (ok_total, fail_total, len(synced)))
+    marked = len(synced) - (1 if "__bad__" in synced else 0)
+    log("完成：成功 %d，同步失败 %d，隔离坏文件 %d，已标记 %d 条" % (ok_total, fail_total, skip_total, marked))
+    # 只有「金山 webhook 真正报错」才算失败；个别坏文件已被隔离，不再拖累整条链路
     sys.exit(0 if fail_total == 0 else 1)
 
 
