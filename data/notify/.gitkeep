@@ -1,0 +1,2 @@
+# 订单提醒推送目录：前端勾选订单后写入 data/notify/<id>.json，
+# GitHub Action「DingTalk Remind」监听该目录变更并推送钉钉。本文件仅为占位，确保目录存在。

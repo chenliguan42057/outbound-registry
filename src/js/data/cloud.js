@@ -377,6 +377,23 @@
     return { ok: ok, remain: remain };
   }
 
+  /* ================= 订单提醒推送（data/notify） =================
+     前端勾选订单 → 写 data/notify/<id>.json（仅订单紧凑摘要，不含照片）→
+     GitHub Action「DingTalk Remind」读取并推送钉钉。文件名唯一，每次发送独立，幂等。 */
+
+  /** 推送「提醒」请求；返回文件名。失败抛错（调用方自行提示/重试）。 */
+  async function pushRemind(obj) {
+    if (!obj || !obj.orders || !obj.orders.length) throw new Error("empty remind payload");
+    var id = "r" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+    var path = "data/notify/" + id + ".json";
+    var content = Util.b64enc(JSON.stringify(obj));
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "PUT", headers: ghHeaders(),
+      body: JSON.stringify({ message: "remind " + id, content: content, branch: Config.GH.branch })
+    });
+    return id;
+  }
+
   /**
    * 拉取 + 合并 + 应用墓碑 + 落盘
    * 墓碑机制：云端 data/deleted/ 中的墓碑会删除本地对应 id 的残留记录（解决"删除不同步"）。
@@ -429,6 +446,7 @@
     pushRecord: pushRecord,
     pushWithRetry: pushWithRetry,
     flushQueue: flushQueue,
+    pushRemind: pushRemind,
     syncPull: syncPull,
     pushTombstone: pushTombstone,
     delWithTombstone: delWithTombstone,

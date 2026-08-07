@@ -33,6 +33,7 @@
           '<div class="actions rec-actions">' +
             '<button type="button" class="btn ghost sm" id="recExport">&#11015; 导出 CSV</button>' +
             '<button type="button" class="btn ghost sm" id="recSync">&#128260; 立即同步</button>' +
+            '<button type="button" class="btn ghost sm" id="recRemind">&#128276; 提醒推送</button>' +
             '<button type="button" class="btn danger sm" id="recClearAll">清空全部记录</button>' +
           '</div>' +
           '<div class="rec-filters">' +
@@ -72,6 +73,9 @@
         Records.exportCsv(filter());
       });
       Util.$("recSync").addEventListener("click", function () { doSync(); });
+      Util.$("recRemind").addEventListener("click", function () {
+        Router.navigate("/app/" + (isIn ? "in-remind" : "out-remind"));
+      });
       Util.$("recClearAll").addEventListener("click", async function () {
         var r = await UI.promptDialog("将清空全部记录（含云端），且不可恢复。请填写清空原因：", "例如：年度归档 / 数据迁移…", "清空全部记录", "确认清空");
         if (!r.ok) return;
