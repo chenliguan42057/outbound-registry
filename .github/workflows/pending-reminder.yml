@@ -1,8 +1,9 @@
 name: Pending Reminder
 on:
   schedule:
-    - cron: '0 8 * * *'   # UTC 08:00 = 北京时间 16:00（提前 1 小时给 Actions 调度队列留余量）
-  workflow_dispatch:      # 支持手动触发测试
+    # UTC 08:00 = 北京时间 16:00（期望推送时刻；schedule 仅作兜底——实测 GitHub 可能延迟数小时）
+    - cron: '0 8 * * *'
+  workflow_dispatch:      # 支持手动触发测试 + 外部 cron（cron-job.org）主触发（即时、无延迟）
 
 jobs:
   remind:
