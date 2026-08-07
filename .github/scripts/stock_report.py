@@ -321,20 +321,30 @@ def build_report():
                 lines.append("")
                 lines.append(week_summary_fallback(rows, monday_str))
 
-    # 按规格分组展示（同一系列放一起；未匹配兜底「其他」）
+    # 按规格分组展示（同一系列放一起；未匹配兜底「其他」）—— 表格 + 状态色点
     lines.append("")
-    lines.append("**📦 库存明细（按规格分组）：**")
+    lines.append("**📦 库存明细（{} 种）：**".format(total_items))
     grouped = False
+
+    def status_emoji(v):
+        """库存状态：< 阈值 红低库存；< 2×阈值 黄偏紧；否则 绿充足。"""
+        if v < LOW_STOCK_THRESHOLD:
+            return "🔴 低库存"
+        if v < LOW_STOCK_THRESHOLD * 2:
+            return "🟡 偏紧"
+        return "🟢 充足"
+
     for cat, specs in CATEGORY_MAP.items():
         srows = [(s, stock.get(s)) for s in specs if s in stock]
         if not srows:
             continue
         grouped = True
         lines.append("")
-        lines.append("**▸ {}（{} 个规格）**".format(cat, len(srows)))
+        lines.append("**▸ {}（{}）**".format(cat, len(srows)))
+        lines.append("| 货品 | 库存 | 状态 |")
+        lines.append("| --- | ---: | --- |")
         for name, v in srows:
-            mark = " 🔴" if v < LOW_STOCK_THRESHOLD else ""
-            lines.append("- {}{}：**{}** 件".format(name, mark, v))
+            lines.append("| {} | **{}** 件 | {} |".format(name, v, status_emoji(v)))
     # 兜底未匹配的货品
     known = set()
     for specs in CATEGORY_MAP.values():
@@ -343,10 +353,11 @@ def build_report():
     if others:
         grouped = True
         lines.append("")
-        lines.append("**▸ 其他（{} 个）**".format(len(others)))
+        lines.append("**▸ 其他（{}）**".format(len(others)))
+        lines.append("| 货品 | 库存 | 状态 |")
+        lines.append("| --- | ---: | --- |")
         for name, v in sorted(others, key=lambda x: x[1], reverse=True):
-            mark = " 🔴" if v < LOW_STOCK_THRESHOLD else ""
-            lines.append("- {}{}：**{}** 件".format(name, mark, v))
+            lines.append("| {} | **{}** 件 | {} |".format(name, v, status_emoji(v)))
     if not grouped:
         lines.append("")
         lines.append("- 暂无库存数据")
