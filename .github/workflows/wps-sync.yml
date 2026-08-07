@@ -1,11 +1,20 @@
 name: WPS 轻维表同步 (鹿茸)
-# 链接提交 → 写 GitHub → 本 Action 自动把记录推送到金山轻维表（照台账格式追加一行）
+# 链接提交 → 写 GitHub → 本 Action 自动把鹿茸记录推送到金山轻维表（照台账格式追加一行）
 on:
   push:
     branches: [ main ]
     paths:
       - 'data/records/*.json'
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: '全量回填：处理 data/records/ 下所有历史记录（一次性补漏）'
+        required: false
+        default: 'false'
+
+# 需要写权限来回写同步标记文件 .wps_synced.json（该提交路径非 data/records，不会再次触发本 workflow）
+permissions:
+  contents: write
 
 jobs:
   sync:
@@ -19,6 +28,9 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             FILES=$(git diff-tree --no-commit-id --name-status -r ${{ github.sha }} -- 'data/records/*.json' || true)
+          elif [ "${{ inputs.backfill }}" = "true" ]; then
+            # 全量回填：列出所有记录文件，标记为新增
+            FILES=$(git ls-tree -r --name-only HEAD -- 'data/records/*.json' | sed 's/^/A\t/' || true)
           else
             FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data/records/*.json' || true)
           fi
@@ -30,4 +42,19 @@ jobs:
           WEBHOOK: ${{ secrets.WPS_AIRSCRIPT_WEBHOOK }}
           AIRSCRIPT_TOKEN: ${{ secrets.WPS_AIRSCRIPT_TOKEN }}
           FILES: ${{ steps.changed.outputs.files }}
+          BACKFILL: ${{ inputs.backfill }}
         run: python3 .github/scripts/wps_sync.py
+      - name: Commit sync marker
+        if: always()
+        run: |
+          if [ -f .wps_synced.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -f .wps_synced.json
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: update wps sync marker"
+              git push
+            else
+              echo "标记无变化，跳过提交"
+            fi
+          fi
