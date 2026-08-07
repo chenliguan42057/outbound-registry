@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""每日 17:00 定时推送钉钉提醒：列出当日登记但尚未手动确认的单据。
+"""每日定时推送钉钉提醒：列出当日登记但尚未手动确认的单据。
 
 覆盖三类（当日登记 = 北京时间今天 0 点后登记）：
   1. 出库记录未提单   data/records/  下 type 非 "in" 且 status === "pending"
@@ -12,6 +12,10 @@
   SECRET  : 钉钉安全设置「加签」密钥
 
 三类均无待处理项时不发送任何消息（避免每日无意义打扰）。
+
+备注：消息标题不再写死「17:00」，改为显示脚本实际运行时刻（北京时间），
+避免「标题时间与真实送达时间不一致」造成误解。实际发送时间受 GitHub
+Actions schedule 队列影响，可能晚于 cron 设定时间（8/7 曾延迟约 2.5h）。
 """
 import base64
 import glob
@@ -136,7 +140,8 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
 
     if not parts:
         return None
-    header = "### 📌 出入库登记 · 今日待处理提醒（17:00）"
+    now_str = now.strftime("%Y-%m-%d %H:%M")
+    header = "### 📌 出入库登记 · 今日待处理提醒（实际推送 {} 北京）".format(now_str)
     return header + "\n\n" + "\n\n".join(parts)
 
 
