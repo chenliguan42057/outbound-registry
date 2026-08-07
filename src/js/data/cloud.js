@@ -395,6 +395,19 @@
     return id;
   }
 
+  /** 推送任意 notify 载荷到 data/notify/<prefix>-<id>.json，供 Actions 脚本消费；返回文件名。失败抛错。 */
+  async function pushNotifyFile(prefix, payload) {
+    if (!payload) throw new Error("empty notify payload");
+    var id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+    var path = "data/notify/" + prefix + "-" + id + ".json";
+    var content = Util.b64enc(JSON.stringify(payload));
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "PUT", headers: ghHeaders(),
+      body: JSON.stringify({ message: prefix + " " + id, content: content, branch: Config.GH.branch })
+    });
+    return id;
+  }
+
   /**
    * 拉取 + 合并 + 应用墓碑 + 落盘
    * 墓碑机制：云端 data/deleted/ 中的墓碑会删除本地对应 id 的残留记录（解决"删除不同步"）。
@@ -448,6 +461,7 @@
     pushWithRetry: pushWithRetry,
     flushQueue: flushQueue,
     pushRemind: pushRemind,
+    pushNotifyFile: pushNotifyFile,
     syncPull: syncPull,
     pushTombstone: pushTombstone,
     delWithTombstone: delWithTombstone,

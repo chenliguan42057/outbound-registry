@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""每日定时推送钉钉提醒：列出当日登记但尚未手动确认的单据。
+"""每日定时推送钉钉提醒：列出所有尚未处理完成的单据（不限登记日期）。
 
-覆盖三类（当日登记 = 北京时间今天 0 点后登记）：
-  1. 出库记录未提单   data/records/  下 type 非 "in" 且 status === "pending"
-  2. 待取货未确认提单 data/pickups/  下 confirmed !== true
-  3. 待取货未出库     data/pickups/  下 shipped !== true
+覆盖五类（全部历史，不限当日登记，避免跨天未处理项被漏提醒）：
+  1. 出库记录未提单   data/records/  下 type 非 "in" 且 status === "pending"（不含借还差额单）
+  2. 借还差额未提单   data/records/  下 type === "out" 且 status === "pending" 且带 fromBorrowId
+  3. 待取货未确认提单 data/pickups/  下 confirmed !== true
+  4. 待取货未出库     data/pickups/  下 shipped !== true
+  5. 借出未归还       data/records/  下 borrowed === true 且 borrowDone !== true
 
 读取环境变量：
   WEBHOOK : 钉钉群机器人 Webhook 地址
   SECRET  : 钉钉安全设置「加签」密钥
 
-三类均无待处理项时不发送任何消息（避免每日无意义打扰）。
+所有类目均无待处理项时不发送任何消息（避免每日无意义打扰）。
 
-备注：消息标题不再写死「17:00」，改为显示脚本实际运行时刻（北京时间），
-避免「标题时间与真实送达时间不一致」造成误解。实际发送时间受 GitHub
-Actions schedule 队列影响，可能晚于 cron 设定时间（8/7 曾延迟约 2.5h）。
+备注：
+- 消息标题不再写死「17:00」，改为显示脚本实际运行时刻（北京时间），
+  避免「标题时间与真实送达时间不一致」造成误解。实际发送时间受 GitHub
+  Actions schedule 队列影响，可能晚于 cron 设定时间（8/7 曾延迟约 2.5h）。
+- 2026-08-07 起按用户要求：所有未完成项都要提醒（不再限定"当日登记"）。
 """
 import base64
 import glob
@@ -80,68 +84,68 @@ def load_dir(pattern):
 
 
 def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickups", now=None):
-    """扫描当日未处理单据，组装提醒 markdown；三类均空时返回 None。
+    """扫描所有未处理完成的单据，组装提醒 markdown；五类均空时返回 None。
 
     now 仅用于测试注入固定北京时间；线上默认取当前北京时间。
+    2026-08-07 起不再限定「当日登记」：所有未完成项（含历史跨天）都要提醒。
     """
     now = now or datetime.now(CST)
-    start_ms = int(datetime(now.year, now.month, now.day, tzinfo=CST).timestamp() * 1000)
-    end_ms = start_ms + 86400000
-    today_str = now.strftime("%Y-%m-%d")
 
-    def is_today(rec):
-        """当日判定：优先 _ts（毫秒时间戳）；无 _ts 的旧记录按 time 日期兜底。"""
-        ts = rec.get("_ts")
-        if isinstance(ts, (int, float)) and ts > 0:
-            return start_ms <= ts < end_ms
-        t = str(rec.get("time", ""))[:10]
-        return t == today_str
-
-    pending_out = []
-    for rec in load_dir(os.path.join(records_dir, "*.json")):
-        if not is_today(rec):
-            continue
-        if str(rec.get("type", "")).lower() != "in" and rec.get("status", "submitted") == "pending" \
-                and rec.get("borrowed") is not True:  # 已转入先借后还的借出单不参与未提单提醒
-            pending_out.append(rec)
-
+    pending_out = []          # 普通出库待提单（不含借还差额单）
+    borrow_diff = []          # 借还差额未提单（fromBorrowId 且 pending）
+    borrowed_open = []        # 借出未归还（borrowed 且未结清）
     unconfirmed = []
     unshipped = []
-    for p in load_dir(os.path.join(pickups_dir, "*.json")):
-        if not is_today(p):
+
+    for rec in load_dir(os.path.join(records_dir, "*.json")):
+        kind = str(rec.get("type", "")).lower()
+        status = str(rec.get("status", "submitted"))
+        if rec.get("borrowed") is True and rec.get("borrowDone") is not True:
+            borrowed_open.append(rec)                       # 5. 借出未归还
             continue
+        if kind != "in" and status == "pending":
+            if rec.get("fromBorrowId"):
+                borrow_diff.append(rec)                     # 2. 借还差额未提单
+            else:
+                pending_out.append(rec)                     # 1. 普通出库未提单
+
+    for p in load_dir(os.path.join(pickups_dir, "*.json")):
         if p.get("confirmed") is not True:
-            unconfirmed.append(p)
+            unconfirmed.append(p)                           # 3. 待取货未确认提单
         if p.get("shipped") is not True:
-            unshipped.append(p)
+            unshipped.append(p)                             # 4. 待取货未出库
 
     def fmt_time(rec):
         return str(rec.get("time", "")).replace("T", " ")
 
+    # 每类最多展示条数，超出折叠提示，避免长消息刷屏
+    MAX_SHOW = 15
+
+    def lines_of(title, items, label):
+        lines = ["#### {}（{} 条）".format(title, len(items))]
+        for it in items[:MAX_SHOW]:
+            lines.append("- {}：{}｜货品：{}｜登记时间：{}".format(
+                label, it.get("picker", ""), goods_text(it), fmt_time(it)))
+        if len(items) > MAX_SHOW:
+            lines.append("- … 其余 {} 条已省略".format(len(items) - MAX_SHOW))
+        return lines
+
     parts = []
     if pending_out:
-        lines = ["#### ⏳ 出库记录未提单（{} 条）".format(len(pending_out))]
-        for r in pending_out:
-            lines.append("- 领取人：{}｜货品：{}｜登记时间：{}".format(
-                r.get("picker", ""), goods_text(r), fmt_time(r)))
-        parts.append("\n".join(lines))
+        parts.append("\n".join(lines_of("⏳ 出库记录未提单", pending_out, "领取人")))
+    if borrow_diff:
+        parts.append("\n".join(lines_of("🔄 借还差额未提单", borrow_diff, "领取人")))
     if unconfirmed:
-        lines = ["#### 🧾 待取货未确认提单（{} 条）".format(len(unconfirmed))]
-        for p in unconfirmed:
-            lines.append("- 取货人：{}｜货品：{}｜登记时间：{}".format(
-                p.get("picker", ""), goods_text(p), fmt_time(p)))
-        parts.append("\n".join(lines))
+        parts.append("\n".join(lines_of("🧾 待取货未确认提单", unconfirmed, "取货人")))
     if unshipped:
-        lines = ["#### 📦 待取货未出库（{} 条）".format(len(unshipped))]
-        for p in unshipped:
-            lines.append("- 取货人：{}｜货品：{}｜登记时间：{}".format(
-                p.get("picker", ""), goods_text(p), fmt_time(p)))
-        parts.append("\n".join(lines))
+        parts.append("\n".join(lines_of("📦 待取货未出库", unshipped, "取货人")))
+    if borrowed_open:
+        parts.append("\n".join(lines_of("📤 借出未归还", borrowed_open, "借出人")))
 
     if not parts:
         return None
     now_str = now.strftime("%Y-%m-%d %H:%M")
-    header = "### 📌 出入库登记 · 今日待处理提醒（实际推送 {} 北京）".format(now_str)
+    header = "### 📌 出入库登记 · 待处理提醒（实际推送 {} 北京）".format(now_str)
     return header + "\n\n" + "\n\n".join(parts)
 
 

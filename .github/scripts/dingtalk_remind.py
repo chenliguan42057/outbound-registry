@@ -5,6 +5,10 @@
 由 GitHub Actions「DingTalk Remind」在 data/notify/*.json 变更时触发。
 消息标题/正文均含关键词「出入库登记」，满足钉钉自定义机器人安全设置（防 errcode 310000）。
 
+支持两种载荷（按 data.type 区分）：
+  remind          : 勾选订单提醒（orders 数组，紧凑摘要）
+  pickup-confirm  : 待取货「确认提单」对比消息（pickup 对象，含登记时间与提单时间）
+
 读取环境变量：
   WEBHOOK  : 钉钉群机器人 Webhook 地址
   SECRET   : 钉钉安全设置「加签」密钥
@@ -130,6 +134,43 @@ def build_order_lines(payload):
     return lines
 
 
+def build_pickup_confirm_markdown(payload):
+    """「确认提单」对比消息：登记时间 vs 提单时间 + 间隔。返回 markdown 文本。"""
+    p = payload.get("pickup") or {}
+    if not p.get("id"):
+        return None
+    goods = goods_of(p)
+    reg = str(p.get("time") or "").strip().replace("T", " ") or "-"
+    conf = str(p.get("confirmedAt") or "").strip().replace("T", " ")[:16] or "-"
+    gap = ""
+    # 计算间隔（登记→提单）
+    try:
+        from datetime import datetime as _dt
+        t0 = _dt.fromisoformat((p.get("time") or "").replace("Z", "+00:00"))
+        t1 = _dt.fromisoformat((p.get("confirmedAt") or "").replace("Z", "+00:00"))
+        # 统一为北京时间
+        t0 = t0.astimezone()
+        t1 = t1.astimezone()
+        if t1 > t0:
+            secs = int((t1 - t0).total_seconds())
+            h, m = divmod(secs // 60, 60)
+            gap = " ｜间隔：{}".format("{} 小时 {} 分钟".format(h, m) if h else "{} 分钟".format(m))
+    except Exception:
+        gap = ""
+    lines = [
+        "### ✅ 出入库登记 · 提单确认",
+        "",
+        "- **取货人：** {}".format(p.get("picker", "") or "-"),
+        "- **货品：** {}".format(goods),
+        "- **登记时间：** {}".format(reg),
+        "- **提单时间：** {}".format(conf + gap),
+    ]
+    dept = str(p.get("dept") or "").strip()
+    if dept:
+        lines.insert(4, "- **部门/客户：** {}".format(dept))
+    return "\n".join(lines)
+
+
 def main():
     payloads = []
     for line in (FILES or "").splitlines():
@@ -144,28 +185,50 @@ def main():
         if data and data.get("type") == "remind" and data.get("orders"):
             payloads.append(data)
 
-    if not payloads:
+    pickup_confirm = []
+    for line in (FILES or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("\t")
+        path = parts[-1].strip() if len(parts) > 1 else ""
+        if not path or not path.startswith("data/notify/") or not path.endswith(".json"):
+            continue
+        data = load_json(path)
+        if data and data.get("type") == "pickup-confirm":
+            pickup_confirm.append(data)
+
+    if not payloads and not pickup_confirm:
         print("没有可解析的提醒请求，跳过发送（不报错）")
         return 0
 
+    # 1) 订单提醒
     blocks = []
     total = 0
     for p in payloads:
         lines = build_order_lines(p)
         total += len(lines)
         blocks.extend(lines)
+    if blocks:
+        text = "### 🔔 出入库登记 · 订单提醒（共 {} 条）\n\n{}".format(total, "\n".join(blocks))
+        ok, err = send(text, title="出入库登记 · 订单提醒")
+        if not ok:
+            print("订单提醒发送失败: {}".format(err), file=sys.stderr)
+            return 1
 
-    if not blocks:
-        print("提醒请求中没有有效订单，跳过发送")
-        return 0
+    # 2) 提单确认对比
+    for pc in pickup_confirm:
+        text = build_pickup_confirm_markdown(pc)
+        if not text:
+            continue
+        ok, err = send(text, title="出入库登记 · 提单确认")
+        if ok:
+            print("提单确认对比已发送")
+        else:
+            print("提单确认发送失败: {}".format(err), file=sys.stderr)
+            return 1
 
-    text = "### 🔔 出入库登记 · 订单提醒（共 {} 条）\n\n{}".format(total, "\n".join(blocks))
-    ok, err = send(text, title="出入库登记 · 订单提醒")
-    if ok:
-        print("提醒已发送 {} 条订单".format(total))
-        return 0
-    print("发送失败: {}".format(err), file=sys.stderr)
-    return 1
+    return 0
 
 
 if __name__ == "__main__":

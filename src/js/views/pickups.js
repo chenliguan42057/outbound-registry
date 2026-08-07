@@ -355,11 +355,23 @@
     listBox.innerHTML = html;
   }
 
-  /** 提单状态徽章：未确认=红（可点击确认）；已确认=绿；已出库后静态不可点 */
+  /** 提单状态徽章：未确认=红（可点击确认）；已确认=绿（带提单时间）；已出库后静态不可点 */
   function confirmedPill(p) {
     var ok = p.confirmed === true;
     var label = ok ? "已确认提单" : "未确认提单";
     var cls = "status-pill " + (ok ? "submitted" : "pending");
+    if (ok) {
+      // 显示提单时间（confirmedAt，本地 ISO → 北京时间 HH:MM）
+      var t = p.confirmedAt || "";
+      if (t) {
+        var d = new Date(t);
+        if (!isNaN(d.getTime())) {
+          var hh = ("0" + d.getHours()).slice(-2);
+          var mm = ("0" + d.getMinutes()).slice(-2);
+          label += " " + hh + ":" + mm;
+        }
+      }
+    }
     if (p.shipped === true) {
       return '<span class="' + cls + ' static"><span class="dot"></span>' + label + '</span>';
     }
@@ -387,23 +399,41 @@
     else if (act === "del") doDel(id);
   }
 
-  /** 确认提单：confirmed false→true，本地保存 + 推送云端 */
+  /** 确认提单：confirmed false→true（记录 confirmedAt），本地保存 + 推送云端 + 推送钉钉对比 */
   async function toggleConfirmed(id) {
     var pk = State.pickups.find(function (x) { return x.id === id; });
     if (!pk) return;
     if (pk.shipped === true) return;   // 已出库的记录提单徽章不可点击
     var ok = await UI.confirmDialog("标记为已确认提单？", "确认提单");
     if (!ok) return;
-    var updated = Pickups.update(id, { confirmed: true });
+    var confirmedAt = new Date().toISOString();
+    var updated = Pickups.update(id, { confirmed: true, confirmedAt: confirmedAt });
     if (!updated) { Util.toast("记录不存在", true); return; }
     renderList();
     Util.toast("已确认提单");
     if (Cloud.hasToken()) {
-      Cloud.pushPickup(updated).then(function () {
+      try {
+        await Cloud.pushPickup(updated);
         window.App.Views.app.setSyncStatus("已同步", false);
-      }).catch(function () {
+      } catch (e) {
         window.App.Views.app.setSyncStatus("云端同步失败", true);
-      });
+      }
+      // 推送钉钉「提单对比」消息（登记时间 vs 提单时间），失败不阻塞主流程
+      try {
+        await Cloud.pushNotifyFile("pickup-confirm", {
+          type: "pickup-confirm",
+          pickup: {
+            id: updated.id,
+            picker: updated.picker || "",
+            dept: updated.dept || "",
+            items: updated.items || [],
+            time: updated.time || "",
+            confirmedAt: confirmedAt
+          }
+        });
+      } catch (e) {
+        Util.toast("对比消息推送失败（可稍后重试）", true);
+      }
     }
   }
 
