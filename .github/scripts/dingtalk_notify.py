@@ -137,6 +137,13 @@ def build_new_markdown(data):
 
 def build_update_markdown(data, old):
     """修改记录：识别「提单」（status pending→submitted）等状态变化。"""
+    # 元字段写回抑制：仅涉及先借后还账目/照片缓存的系统内部变更不发通知
+    # （转入 borrowed、归还账目 borrowReturned/borrowDone、追溯 fromBorrowId、photoUrls 缓存回写）
+    old = old or {}
+    BORROW_META = {"borrowed", "borrowReturned", "borrowDone", "fromBorrowId", "photoUrls"}
+    changed = {k for k in set(data) | set(old) if k != "_ts" and data.get(k) != old.get(k)}
+    if changed and changed.issubset(BORROW_META):
+        return None
     goods = goods_of(data)
     photos = photos_markdown(data)
     new_st = data.get("status", "submitted")

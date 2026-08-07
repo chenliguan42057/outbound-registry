@@ -97,7 +97,8 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
     for rec in load_dir(os.path.join(records_dir, "*.json")):
         if not is_today(rec):
             continue
-        if str(rec.get("type", "")).lower() != "in" and rec.get("status", "submitted") == "pending":
+        if str(rec.get("type", "")).lower() != "in" and rec.get("status", "submitted") == "pending" \
+                and rec.get("borrowed") is not True:  # 已转入先借后还的借出单不参与未提单提醒
             pending_out.append(rec)
 
     unconfirmed = []

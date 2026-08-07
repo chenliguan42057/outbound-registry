@@ -23,6 +23,7 @@
     { id: "out-records", icon: "records", label: "出库记录" },
     { id: "in-records", icon: "records", label: "入库记录" },
     { id: "report", icon: "report", label: "报表统计" },
+    { id: "borrow", icon: "box", label: "先借后还" },
     { id: "memos", icon: "edit", label: "备忘录" },
     { id: "ai", icon: "box", label: "AI 助手" }
   ];
@@ -39,6 +40,7 @@
     "out-records": "outRecords",
     "in-remind": "remind",
     "out-remind": "remind",
+    borrow: "borrow",
     report: "report",
     ai: "ai"
   };
@@ -46,6 +48,7 @@
   var MODULE_TITLES = {
     dashboard: "仪表盘", stock: "库存查询", in: "入库管理", pickups: "待取货", memos: "备忘录", sync: "云端同步",
     "in-records": "入库记录", "out-records": "出库记录", report: "报表统计", ai: "AI 助手",
+    borrow: "先借后还",
     "in-remind": "入库提醒", "out-remind": "出库提醒"
   };
 

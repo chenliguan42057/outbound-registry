@@ -109,6 +109,7 @@
       return State.list.filter(function (r) {
         var recType = r.type || "out";
         if (isIn ? recType !== "in" : recType === "in") return false;
+        if (r.borrowed === true) return false;   // 已转入先借后还的出库单，不在普通出库记录列表显示
         if (searchState.dept && !(r.dept || "").toLowerCase().includes(searchState.dept.toLowerCase())) return false;
         if (searchState.picker && !(r.picker || "").toLowerCase().includes(searchState.picker.toLowerCase())) return false;
         if (q) {

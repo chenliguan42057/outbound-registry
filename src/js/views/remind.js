@@ -59,17 +59,23 @@
     renderList();
   }
 
-  /** 过滤当前类型订单（与记录页 filter 口径一致） */
+  /** 过滤当前类型订单（与记录页 filter 口径一致）；未提单优先排序 */
   function filter() {
     var q = (Util.$("rmQ").value || "").trim().toLowerCase();
     return State.list.filter(function (r) {
       var recType = r.type || "out";
       if (isIn ? recType !== "in" : recType === "in") return false;
+      if (r.borrowed === true) return false;   // 借出单在「先借后还」管理，不参与普通提醒
       if (!q) return true;
       var hay = (r.dept || "") + " " + (r.picker || "") + " " + (r.purpose || "") + " " +
         (r.entity || "") + " " + (r.note || "") + " " +
         (r.items || []).map(function (it) { return it.name; }).join(" ");
       return hay.toLowerCase().indexOf(q) !== -1;
+    }).sort(function (a, b) {
+      // 未提单(pending)优先；同状态按时间倒序
+      var pa = Records.getStatus(a) === "pending" ? 0 : 1;
+      var pb = Records.getStatus(b) === "pending" ? 0 : 1;
+      return pa - pb || String(b.time || "").localeCompare(String(a.time || ""));
     });
   }
 
@@ -134,14 +140,33 @@
     Util.$("rmPicked").textContent = "已选 " + Object.keys(checked).length + " 条";
   }
 
-  /** 发送：勾选订单 → 紧凑摘要 → data/notify/<id>.json → Actions 推钉钉 */
-  function send() {
+  /** 解析订单照片 URL：优先复用缓存 photoUrls（≤3 张）；无则上传前 3 张并回写缓存（下次复用）。失败返回空数组不阻塞。 */
+  async function resolvePhotoUrls(r) {
+    if (!Cloud.hasToken()) return [];
+    if (r.photoUrls && r.photoUrls.length) return r.photoUrls.slice(0, 3);
+    if (!(r.photos || []).length) return [];
+    var urls = [];
+    try { urls = await Cloud.pushPhotos(r, 3); } catch (e) { return []; }
+    if (urls.length && Cloud.hasToken()) {
+      var updated = Records.update(r.id, { photoUrls: urls });
+      if (updated) { try { await Cloud.pushRecord(updated); } catch (e) {} }
+    }
+    return urls.slice(0, 3);
+  }
+
+  /** 发送：勾选订单（带照片 ≤3 张）→ 紧凑摘要 → data/notify/<id>.json → Actions 推钉钉 */
+  async function send() {
     var ids = Object.keys(checked);
     if (!ids.length) return Util.toast("请先勾选要推送的订单", true);
-    var orders = ids.map(function (id) {
-      var r = State.list.find(function (x) { return x.id === id; });
-      if (!r) return null;
-      return {
+    var btn = Util.$("rmSend");
+    btn.disabled = true;
+    btn.textContent = "发送中…";
+    var orders = [];
+    for (var i = 0; i < ids.length; i++) {
+      var r = State.list.find(function (x) { return x.id === ids[i]; });
+      if (!r) continue;
+      var photoUrls = await resolvePhotoUrls(r);
+      orders.push({
         id: r.id,
         type: r.type || "out",
         time: r.time || "",
@@ -151,14 +176,15 @@
         entity: r.entity || "",
         note: r.note || "",
         status: r.status || "submitted",
-        items: (r.items || []).map(function (it) { return { name: it.name, qty: it.qty }; })
-      };
-    }).filter(Boolean);
-    if (!orders.length) return Util.toast("所选记录不存在，请刷新后重试", true);
-
-    var btn = Util.$("rmSend");
-    btn.disabled = true;
-    btn.textContent = "发送中…";
+        items: (r.items || []).map(function (it) { return { name: it.name, qty: it.qty }; }),
+        photoUrls: photoUrls
+      });
+    }
+    if (!orders.length) {
+      btn.disabled = false;
+      btn.textContent = SEND_LABEL;
+      return Util.toast("所选记录不存在，请刷新后重试", true);
+    }
     var payload = { _ts: Date.now(), type: "remind", kind: isIn ? "in" : "out", orders: orders };
 
     var attempt = 0;

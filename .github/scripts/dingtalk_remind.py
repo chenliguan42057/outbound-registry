@@ -89,6 +89,14 @@ def status_text_of(order):
     return "未提单" if order.get("status") == "pending" else "已提单"
 
 
+def photos_lines(o):
+    """订单照片 markdown（最多 3 张，缩进与续行一致）；无则空串。"""
+    return "".join(
+        "\n   ![照片{}]({})".format(j, u)
+        for j, u in enumerate((o.get("photoUrls") or [])[:3], 1)
+    )
+
+
 def build_order_lines(payload):
     """把提醒请求中的订单摘要转成 markdown 行列表；无效订单跳过。"""
     lines = []
@@ -100,8 +108,8 @@ def build_order_lines(payload):
         kind = str(o.get("type") or "").lower()
         if kind == "in":
             lines.append(
-                "- **#{} 入库**　{}\n  用途/来源：{}　货品：{}".format(
-                    i, t, o.get("purpose", "") or "-", goods
+                "- **#{} 入库**　{}\n  用途/来源：{}　货品：{}{}".format(
+                    i, t, o.get("purpose", "") or "-", goods, photos_lines(o)
                 )
             )
             continue
@@ -117,6 +125,7 @@ def build_order_lines(payload):
         note = str(o.get("note") or "").strip()
         if note:
             body += "　备注：{}".format(note)
+        body += photos_lines(o)
         lines.append(head + "\n" + body)
     return lines
 

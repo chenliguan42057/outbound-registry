@@ -1,0 +1,326 @@
+/**
+ * borrow.js — 先借后还模块
+ * 从出库记录「借出」转入 → 借出中列表（库存保持扣减）→ 归还时输入数量：
+ *   - 归还>0 的货品 → 生成入库记录（type:"in", affectsStock:true）加回库存，推钉钉「新入库登记」；
+ *   - 差额>0 的货品 → 生成差额出库记录（type:"out", status:"pending", affectsStock:false 不重复扣），
+ *     以「未提单」出现在出库记录页，推钉钉「新出库登记」；
+ *   - 全部还清 → 原单标记 borrowDone，移入「已完成」tab 保留回查。
+ * 纯追加字段：borrowed / borrowReturned / borrowDone / fromBorrowId，不破坏既有 schema。
+ */
+(function () {
+  'use strict';
+
+  var Util = window.App.Util;
+  var UI = window.App.UI;
+  var State = window.App.State;
+  var Records = window.App.Records;
+  var Cloud = window.App.Cloud;
+
+  var container = null;
+  var listBox = null;
+  var activeTab = "ongoing";   // "ongoing"（借出中）| "done"（已完成）
+
+  function render(el) {
+    container = el;
+    el.innerHTML =
+      '<div class="card">' +
+        '<h2>先借后还 <span class="badge" id="borrowCount">0 单</span></h2>' +
+        '<div class="actions rec-actions">' +
+          '<button type="button" class="btn sm" id="borrowAdd">&#43; 添加借出</button>' +
+          '<button type="button" class="btn ghost sm" id="borrowSync">&#128260; 立即同步</button>' +
+        '</div>' +
+        '<div class="pickups-tabs">' +
+          '<button type="button" class="pickups-tab active" data-tab="ongoing">借出中</button>' +
+          '<button type="button" class="pickups-tab" data-tab="done">已完成</button>' +
+        '</div>' +
+        '<div id="borrowListBox"></div>' +
+      '</div>';
+
+    Util.$("borrowAdd").addEventListener("click", openAddBorrow);
+    Util.$("borrowSync").addEventListener("click", doSync);
+    listBox = Util.$("borrowListBox");
+    bindTabs();
+    listBox.addEventListener("click", onListClick);
+    renderList();
+  }
+
+  /** 可转入先借后还的出库记录：出库单 + affectsStock===true + 未转入 + 非差额单；未提单优先，再按时间倒序 */
+  function eligibleOutRecords() {
+    return State.list.filter(function (r) {
+      if ((r.type || "out") === "in") return false;   // 仅出库
+      if (r.affectsStock !== true) return false;      // 不参与库存（差额单/旧快照）不可借出
+      if (r.borrowed === true) return false;          // 已转入
+      if (r.fromBorrowId) return false;               // 差额单/归还单不可再转
+      return true;
+    }).sort(function (a, b) {
+      var pa = Records.getStatus(a) === "pending" ? 0 : 1;
+      var pb = Records.getStatus(b) === "pending" ? 0 : 1;
+      return pa - pb || String(b.time || "").localeCompare(String(a.time || ""));
+    });
+  }
+
+  /** 借出记录（含借出中+已完成） */
+  function borrowList() {
+    return State.list.filter(function (r) { return r.borrowed === true; });
+  }
+
+  /** 每货品累计已还数量：{name: qty} */
+  function returnedMap(r) {
+    var map = {};
+    (r.borrowReturned || []).forEach(function (it) {
+      if (it && it.name) map[it.name] = (map[it.name] || 0) + (Number(it.qty) || 0);
+    });
+    return map;
+  }
+
+  /** 每货品剩余应还：[{name, qty}]，qty>0 才保留 */
+  function remainingItems(r) {
+    var ret = returnedMap(r);
+    return (r.items || []).map(function (it) {
+      return { name: it.name, qty: Math.max(0, (Number(it.qty) || 0) - (ret[it.name] || 0)) };
+    }).filter(function (x) { return x.qty > 0; });
+  }
+
+  function isDone(r) { return r.borrowDone === true || remainingItems(r).length === 0; }
+
+  function renderList() {
+    if (!listBox) return;
+    var all = borrowList();
+    var ongoing = all.filter(function (r) { return !isDone(r); });
+    var done = all.filter(function (r) { return isDone(r); });
+    var shown = activeTab === "done" ? done : ongoing;
+    Util.$("borrowCount").textContent = ongoing.length + " 单";
+    if (!shown.length) {
+      listBox.innerHTML = '<div class="empty">' +
+        (activeTab === "done" ? "暂无已结清的借出记录。" : "暂无借出中的记录，点「添加借出」从出库记录转入。") + '</div>';
+      return;
+    }
+    var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<th>序号</th><th>时间</th><th>领取人</th><th>部门</th><th>货品明细（借出｜已还｜剩余）</th><th>状态</th><th>操作</th>' +
+      '</tr></thead><tbody>';
+    shown.forEach(function (r, i) {
+      var ret = returnedMap(r);
+      var lines = (r.items || []).map(function (it) {
+        var out = Number(it.qty) || 0;
+        var back = ret[it.name] || 0;
+        var rem = Math.max(0, out - back);
+        return '<div class="item-line">' + Util.esc(it.name) + '：借出' + out + '｜已还' + back + '｜剩余' + rem + '</div>';
+      }).join("");
+      html += '<tr>' +
+        '<td><div>' + (shown.length - i) + '</div></td>' +
+        '<td>' + Util.esc(r.time || "-") + '</td>' +
+        '<td>' + Util.esc(r.picker || "-") + '</td>' +
+        '<td>' + Util.esc(r.dept || "-") + '</td>' +
+        '<td class="items-cell">' + lines + '</td>' +
+        '<td>' + (isDone(r)
+          ? '<span class="status-pill submitted static"><span class="dot"></span>已完成</span>'
+          : '<span class="status-pill pending static"><span class="dot"></span>借出中</span>') + '</td>' +
+        '<td>' +
+          (!isDone(r) ? '<button type="button" class="btn sm" data-act="return" data-id="' + r.id + '">归还</button> ' : '') +
+          '<button type="button" class="btn ghost sm" data-act="detail" data-id="' + r.id + '">详细</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+    listBox.innerHTML = html;
+  }
+
+  /* ---------- 添加借出 ---------- */
+
+  async function openAddBorrow() {
+    var eligible = eligibleOutRecords();
+    if (!eligible.length) { Util.toast("暂无可借出的出库记录", true); return; }
+    var rows = eligible.map(function (r, i) {
+      var st = Records.getStatus(r) === "pending" ? "未提单" : "已提单";
+      var goods = (r.items || []).map(function (it) { return Util.esc(it.name) + "×" + it.qty; }).join("，");
+      return '<tr>' +
+        '<td><input type="checkbox" class="borrow-check" value="' + r.id + '" /></td>' +
+        '<td>' + (eligible.length - i) + '</td>' +
+        '<td>' + Util.esc(r.time || "-") + '</td>' +
+        '<td>' + Util.esc(r.picker || "-") + '</td>' +
+        '<td>' + st + '</td>' +
+        '<td>' + Util.esc(r.dept || "-") + '</td>' +
+        '<td class="items-cell">' + goods + '</td>' +
+      '</tr>';
+    }).join("");
+    var body =
+      '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<th style="width:34px;"><input type="checkbox" id="borrowAll" /></th><th>序号</th><th>时间</th><th>领取人</th><th>状态</th><th>部门</th><th>货品</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="modal-actions"><button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+      '<button type="button" class="btn sm" data-act="ok">确认借出</button></div>';
+    UI.Modal.show("选择要转入先借后还的出库记录（未提单优先）", body, { width: "720px" });
+    var mBody = UI.Modal.body();
+    mBody.querySelector("#borrowAll").addEventListener("change", function () {
+      mBody.querySelectorAll(".borrow-check").forEach(function (c) { c.checked = mBody.querySelector("#borrowAll").checked; });
+    });
+    mBody.querySelector('[data-act="cancel"]').onclick = function () { UI.Modal.hide(); };
+    mBody.querySelector('[data-act="ok"]').onclick = async function () {
+      var ids = Array.from(mBody.querySelectorAll(".borrow-check")).filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
+      if (!ids.length) { Util.toast("请至少勾选一条记录", true); return; }
+      var ok = await UI.confirmDialog("将所选 " + ids.length + " 条记录转入先借后还？\n转入后将从出库记录页隐藏，库存扣减保留。", "确认借出");
+      if (!ok) return;
+      UI.Modal.hide();
+      var fail = 0;
+      for (var i = 0; i < ids.length; i++) {
+        var rec = Records.update(ids[i], { borrowed: true });
+        if (rec) {
+          if (Cloud.hasToken()) {
+            try { await Cloud.pushRecord(rec); } catch (e) { fail++; }
+          }
+        } else fail++;
+      }
+      renderList();
+      Util.toast(fail ? "已转入 " + (ids.length - fail) + " 单（" + fail + " 条待补推）" : "已转入 " + ids.length + " 单");
+      if (fail) window.App.Views.app.setSyncStatus("部分转入待补推", true);
+      else window.App.Views.app.setSyncStatus("已同步", false);
+    };
+  }
+
+  /* ---------- 归还 ---------- */
+
+  function openReturn(id) {
+    var r = State.list.find(function (x) { return x.id === id; });
+    if (!r) return;
+    var ret = returnedMap(r);
+    var rem = remainingItems(r);
+    if (!rem.length) { Util.toast("该借出已全部归还", true); return; }
+    var rows = rem.map(function (it) {
+      var orig = (r.items || []).find(function (x) { return x.name === it.name; });
+      var outQty = orig ? (Number(orig.qty) || 0) : 0;
+      return '<tr>' +
+        '<td>' + Util.esc(it.name) + '</td>' +
+        '<td>' + outQty + '</td>' +
+        '<td>' + (ret[it.name] || 0) + '</td>' +
+        '<td style="color:#E11D48;font-weight:600;">' + it.qty + '</td>' +
+        '<td><input type="number" class="return-input" data-name="' + Util.esc(it.name) + '" min="0" max="' + it.qty + '" step="any" value="0" style="width:96px;" /></td>' +
+      '</tr>';
+    }).join("");
+    var body =
+      '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<th>货品</th><th>借出</th><th>已还</th><th>剩余应还</th><th>本次归还</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="hint" style="margin-top:8px;">未归还的差额将自动生成「未提单」出库记录。</div>' +
+      '<div class="modal-actions"><button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+      '<button type="button" class="btn sm" data-act="ok">确认归还</button></div>';
+    UI.Modal.show("归还 — " + (r.picker || "借出单"), body, { width: "640px" });
+    var mBody = UI.Modal.body();
+    mBody.querySelector('[data-act="cancel"]').onclick = function () { UI.Modal.hide(); };
+    mBody.querySelector('[data-act="ok"]').onclick = async function () {
+      var inputs = Array.from(mBody.querySelectorAll(".return-input"));
+      var returns = [];
+      var bad = false;
+      inputs.forEach(function (inp) {
+        var v = Number(inp.value);
+        if (!inp.value || isNaN(v)) v = 0;
+        var max = Number(inp.max) || 0;
+        if (v < 0 || v > max) { bad = true; return; }
+        if (v > 0) returns.push({ name: inp.getAttribute("data-name"), qty: v });
+      });
+      if (bad) { Util.toast("归还数量不能超过剩余应还", true); return; }
+      if (!returns.length) { Util.toast("请至少归还一项", true); return; }
+      var ok = await UI.confirmDialog("确认归还？系统将自动处理差额并生成未提单出库记录。", "确认归还");
+      if (!ok) return;
+      UI.Modal.hide();
+      await doReturn(r, returns);
+    };
+  }
+
+  /** 归还核心：生成归还入库 + 差额出库 + 更新原单（本地保存 + 云端推送，全部幂等） */
+  async function doReturn(r, returns) {
+    var ret = returnedMap(r);
+    // 1) 归还>0 → 入库记录（加回库存）
+    var inRec = null;
+    if (returns.length) {
+      inRec = Records.create({
+        type: "in", affectsStock: true, purpose: "先借后还归还",
+        note: "归还借出单 " + r.id, time: Util.nowLocal(),
+        picker: r.picker || "", dept: r.dept || "",
+        items: returns.map(function (x) { return { name: x.name, qty: x.qty }; }),
+        fromBorrowId: r.id
+      });
+    }
+    // 2) 计算新累计已还 + 剩余
+    var newRet = {};
+    Object.keys(ret).forEach(function (k) { newRet[k] = ret[k]; });
+    returns.forEach(function (x) { newRet[x.name] = (newRet[x.name] || 0) + x.qty; });
+    var borrowReturned = Object.keys(newRet).map(function (k) { return { name: k, qty: newRet[k] }; });
+    var diffItems = (r.items || []).map(function (it) {
+      return { name: it.name, qty: Math.max(0, (Number(it.qty) || 0) - (newRet[it.name] || 0)) };
+    }).filter(function (x) { return x.qty > 0; });
+    // 3) 差额>0 → 差额出库记录（未提单，affectsStock:false 不重复扣）
+    var diffRec = null;
+    if (diffItems.length) {
+      diffRec = Records.create({
+        type: "out", status: "pending", affectsStock: false, fromBorrowId: r.id,
+        time: Util.nowLocal(), picker: r.picker || "", dept: r.dept || "",
+        purpose: r.purpose || "", entity: r.entity || "",
+        note: ((r.note || "").trim() ? (r.note + "；") : "") + "先借后还差额单（原 " + r.id + "）",
+        items: diffItems.map(function (x) { return { name: x.name, qty: x.qty }; })
+      });
+    }
+    // 4) 更新原单
+    var done = diffItems.length === 0;
+    var updated = Records.update(r.id, { borrowReturned: borrowReturned, borrowDone: done });
+    renderList();
+    Util.toast(done ? "已全部归还，借出结清" : "已归还，剩余差额已生成未提单出库记录");
+    // 5) 云端推送
+    if (!Cloud.hasToken()) return;
+    var fail = 0;
+    if (inRec) { try { await Cloud.pushRecord(inRec); } catch (e) { fail++; } }
+    if (diffRec) { try { await Cloud.pushRecord(diffRec); } catch (e) { fail++; } }
+    if (updated) { try { await Cloud.pushRecord(updated); } catch (e) { fail++; } }
+    if (fail) window.App.Views.app.setSyncStatus("部分归还同步待补推", true);
+    else window.App.Views.app.setSyncStatus("已同步", false);
+  }
+
+  /* ---------- 详情 / 同步 / tab ---------- */
+
+  function showDetail(id) {
+    var r = State.list.find(function (x) { return x.id === id; });
+    if (!r) return;
+    var ret = returnedMap(r);
+    var lines = (r.items || []).map(function (it) {
+      return '<div class="detail-item"><span>' + Util.esc(it.name) + '</span>' +
+        '<span style="color:var(--muted);">借出 ' + (Number(it.qty) || 0) + '｜已还 ' + (ret[it.name] || 0) +
+        '｜剩余 ' + Math.max(0, (Number(it.qty) || 0) - (ret[it.name] || 0)) + '</span></div>';
+    }).join("");
+    var rows = "";
+    rows += '<div class="detail-row"><span class="k">状态</span><span class="v">' +
+      (isDone(r) ? '<span class="status-pill submitted static"><span class="dot"></span>已完成</span>'
+                 : '<span class="status-pill pending static"><span class="dot"></span>借出中</span>') + '</span></div>';
+    rows += '<div class="detail-row"><span class="k">出库时间</span><span class="v">' + Util.esc(r.time || "-") + '</span></div>';
+    rows += '<div class="detail-row"><span class="k">领取人</span><span class="v">' + Util.esc(r.picker || "-") + '</span></div>';
+    rows += '<div class="detail-row"><span class="k">部门/客户</span><span class="v">' + Util.esc(r.dept || "-") + '</span></div>';
+    if (r.entity) rows += '<div class="detail-row"><span class="k">结算法人单位</span><span class="v">' + Util.esc(r.entity) + '</span></div>';
+    rows += '<div class="detail-row"><span class="k">用途</span><span class="v">' + Util.esc(r.purpose || "-") + '</span></div>';
+    if (r.note) rows += '<div class="detail-row"><span class="k">备注</span><span class="v">' + Util.esc(r.note) + '</span></div>';
+    rows += '<div class="detail-row"><span class="k">货品归还</span><span class="v detail-items">' + (lines || "-") + '</span></div>';
+    UI.Modal.show("借出详情", rows, { width: "560px" });
+  }
+
+  function doSync() {
+    if (!Cloud.hasToken()) { Util.toast("未配置云端令牌，无法同步", true); return; }
+    Util.toast("正在同步…");
+    Cloud.syncPull({ onStatus: function (text, isErr) {
+      window.App.Views.app.setSyncStatus(text, isErr);
+    } }).then(function () { renderList(); });
+  }
+
+  function bindTabs() {
+    var tabs = container.querySelectorAll(".pickups-tab");
+    tabs.forEach(function (t) {
+      t.addEventListener("click", function () {
+        activeTab = t.getAttribute("data-tab");
+        tabs.forEach(function (x) { x.classList.toggle("active", x === t); });
+        renderList();
+      });
+    });
+  }
+
+  function refresh() { if (container && listBox) renderList(); }
+
+  window.App = window.App || {};
+  window.App.Views = window.App.Views || {};
+  window.App.Views.borrow = { render: render, refresh: refresh, doSync: doSync };
+})();

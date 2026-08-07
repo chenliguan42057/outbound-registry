@@ -291,13 +291,14 @@
     return "https://cdn.jsdelivr.net/gh/" + Config.GH.repo + "@" + Config.GH.branch + "/" + path;
   }
 
-  /** 批量上传记录照片，返回 photoUrls 数组（失败跳过） */
-  async function pushPhotos(rec) {
+  /** 批量上传记录照片，返回 photoUrls 数组（失败跳过）；limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖） */
+  async function pushPhotos(rec, limit) {
     var urls = [];
     var photos = (rec && rec.photos) || [];
-    for (var i = 0; i < photos.length; i++) {
+    var slice = limit ? photos.slice(0, limit) : photos;
+    for (var i = 0; i < slice.length; i++) {
       try {
-        var u = await pushPhoto(rec.id, i + 1, photos[i]);
+        var u = await pushPhoto(rec.id, i + 1, slice[i]);
         if (u) urls.push(u);
       } catch (e) {}
     }
