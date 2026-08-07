@@ -122,11 +122,23 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
     MAX_SHOW = 15
 
     def lines_of(title, items, label):
+        """每条记录：序号 + 领取人/取货人 + 时间 各占一行；货品明细逐项缩进一行。
+        钉钉 markdown 对超长单行会强制换行导致堆在一起，逐项分行更整齐。"""
         lines = ["**{}（{} 条）**".format(title, len(items))]
         for i, it in enumerate(items[:MAX_SHOW], 1):
-            goods = goods_text(it)
-            lines.append("{}. **{}**｜货品：{}｜📅 {}".format(
-                i, it.get("picker", "") or "-", goods, fmt_time(it)))
+            picker = it.get("picker", "") or "-"
+            time_str = fmt_time(it)
+            lines.append("{}. **{}**　📅 {}".format(i, picker, time_str))
+            # 货品明细逐项缩进（每项一行）
+            sub = it.get("items") or []
+            if sub:
+                for g in sub:
+                    name = g.get("name", "")
+                    qty = g.get("qty", "")
+                    if name:
+                        lines.append("    - {} × {}".format(name, qty))
+            else:
+                lines.append("    - {}".format(goods_text(it)))
         if len(items) > MAX_SHOW:
             lines.append("⋯ 其余 {} 条已省略".format(len(items) - MAX_SHOW))
         return lines
