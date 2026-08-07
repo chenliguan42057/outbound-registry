@@ -288,33 +288,54 @@ def fmt_ts(ts):
 
 
 def build_memo_new_markdown(data):
-    """新增备忘录通知（字段：事项内容/添加时间/状态）。"""
-    return "### 📝 出入库登记 · 新备忘录\n- **事项内容**：{}\n- **添加时间**：{}\n- **状态**：⏳ 未完成".format(
-        data.get("text", ""), data.get("time", "")
-    )
+    """新增备忘录通知（标题 → 照片 → 字段：事项内容/添加时间/状态）。"""
+    title = "### 📝 出入库登记 · 新备忘录"
+    photos = photos_markdown(data)
+    fields = [
+        ("事项内容", data.get("text", "")),
+        ("添加时间", data.get("time", "")),
+        ("状态", "⏳ 未完成"),
+    ]
+    md = title
+    if photos:
+        md += "\n" + photos
+    md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
+    return md
 
 
 def build_memo_update_markdown(data, old):
-    """修改备忘录：识别「已完成」「改回未完成」等状态变化。"""
+    """修改备忘录：识别「已完成」「改回未完成」等状态变化。
+    每个分支都带上照片（若有 photoUrls）。结构：标题 → 照片 → 字段。
+    """
     old = old or {}
     # 系统内部标记：reminded false→true 是提醒推送后的写回动作（write_reminded），
     # 非用户真实修改，不发通知（main() 中 md 为空自然跳过）。
     if old.get("reminded") is not True and data.get("reminded") is True:
         return None
+    photos = photos_markdown(data)
+    photo_block = ("\n" + photos) if photos else ""
+
+    def join_fields(items):
+        return "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in items)
+
     # 完成动作：done 从非 true 变为 true（前端 update 仅此动作刷新 _ts，_ts 即完成时刻）
     if old.get("done") is not True and data.get("done") is True:
-        return "### ✅ 出入库登记 · 备忘录已完成\n- **事项内容**：{}\n- **完成时间**：{}\n- **添加时间**：{}".format(
-            data.get("text", ""),
-            fmt_ts(data.get("_ts")) or data.get("time", "") or datetime.now(CST).strftime("%Y-%m-%d %H:%M"),
-            data.get("time", ""),
-        )
+        fields = [
+            ("事项内容", data.get("text", "")),
+            ("完成时间", fmt_ts(data.get("_ts")) or data.get("time", "") or datetime.now(CST).strftime("%Y-%m-%d %H:%M")),
+            ("添加时间", data.get("time", "")),
+        ]
+        return "### ✅ 出入库登记 · 备忘录已完成" + photo_block + "\n" + join_fields(fields)
     # 改回未完成：done 从 true 变为非 true
     if old.get("done") is True and data.get("done") is not True:
-        return "### ↩️ 出入库登记 · 备忘录改回未完成\n- **事项内容**：{}".format(data.get("text", ""))
+        fields = [("事项内容", data.get("text", ""))]
+        return "### ↩️ 出入库登记 · 备忘录改回未完成" + photo_block + "\n" + join_fields(fields)
     # 其他修改
-    return "### 📝 出入库登记 · 备忘录已更新\n- **事项内容**：{}\n- **时间**：{}".format(
-        data.get("text", ""), data.get("time", "")
-    )
+    fields = [
+        ("事项内容", data.get("text", "")),
+        ("时间", data.get("time", "")),
+    ]
+    return "### 📝 出入库登记 · 备忘录已更新" + photo_block + "\n" + join_fields(fields)
 
 
 def send(text, title="新登记通知"):
