@@ -28,5 +28,8 @@
   "msic4aoneocqv": true,
   "msiil762rsgar": true,
   "msilipriychy8": true,
-  "test-verify-20260807": true
+  "test-verify-20260807": true,
+  "__bad__": {
+    "data/records/_harden_test_bad.json": true
+  }
 }
