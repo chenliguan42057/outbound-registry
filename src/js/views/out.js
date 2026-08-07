@@ -406,22 +406,31 @@
     resetForm();
     // 提交成功滚顶（落地页表单较长，便于看到成功反馈）
     window.scrollTo({ top: 0, behavior: "smooth" });
-    pushPhotosToCloud(rec);
+    // 先上传照片并写回 photoUrls（首推即含图）；再统一推送
+    submitPush(rec, wasEditing);
+  }
+
+  /** 异步推送：先写回 photoUrls，再推记录，确保通知含图 */
+  async function submitPush(rec, wasEditing) {
+    rec = await pushPhotosToCloud(rec);
     pushToCloud(rec, wasEditing ? "修改已保存，正在同步到云端…" : "登记成功，正在同步到云端…");
   }
 
-  /** 照片上传云端（可选）：成功后记录 photoUrls，供钉钉通知渲染图片；失败不阻塞 */
-  function pushPhotosToCloud(rec) {
-    if (!Cloud.hasToken()) return;
-    var photos = (rec && rec.photos) || [];
-    if (!photos.length) return;
-    Cloud.pushPhotos(rec).then(function (urls) {
-      if (!urls || !urls.length) return;
-      var updated = Records.update(rec.id, { photoUrls: urls });
-      if (updated && Cloud.hasToken()) {
-        Cloud.push(updated).catch(function () {});
+  /** 照片上传云端（可选）：将 photos 上传到 data/photos/ 并把 photoUrls 写回本地记录；不推送记录本身。
+      返回更新后的记录（含 photoUrls），无照片或失败时返回原记录。
+      由 submitPush 先 await 此函数再调 pushToCloud，确保首推已含 photoUrls。 */
+  async function pushPhotosToCloud(rec) {
+    if (!Cloud.hasToken() || !rec) return rec;
+    var photos = (rec.photos || []);
+    if (!photos.length) return rec;
+    try {
+      var urls = await Cloud.pushPhotos(rec);
+      if (urls && urls.length) {
+        var updated = Records.update(rec.id, { photoUrls: urls });
+        return updated || rec;
       }
-    }).catch(function () {});
+    } catch (e) {}
+    return rec;
   }
 
   function pushToCloud(rec, msg) {
