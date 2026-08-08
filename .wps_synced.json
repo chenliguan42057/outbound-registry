@@ -52,6 +52,40 @@
           "recalced": 0
         }
       }
+    },
+    "mse1xn4k1herb": {
+      "ok": 0,
+      "note": "never_in_wps",
+      "at": "2026-08-08T03:57:42Z"
+    },
+    "msec95htigo4s": {
+      "ok": 0,
+      "note": "never_in_wps",
+      "at": "2026-08-08T03:57:42Z"
+    },
+    "msgyq76evpwbl": {
+      "ok": 0,
+      "note": "never_in_wps",
+      "at": "2026-08-08T03:57:42Z"
+    },
+    "msj634plrf8ms": {
+      "ok": 1,
+      "at": "2026-08-08T03:57:44Z",
+      "detail": {
+        "2026时空鹿茸库存": "notFound"
+      }
+    },
+    "test-order-cross-20260808": {
+      "ok": 0,
+      "note": "never_in_wps",
+      "at": "2026-08-08T03:57:44Z"
+    },
+    "test-verify-20260807": {
+      "ok": 1,
+      "at": "2026-08-08T03:57:46Z",
+      "detail": {
+        "2026时空鹿茸库存": "notFound"
+      }
     }
   }
 }
