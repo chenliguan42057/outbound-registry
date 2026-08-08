@@ -367,6 +367,18 @@
 
   function clearDraft() { Store.clearDraft("out"); }
 
+  /** 出库单自动编号：ORD-YYYYMMDD-NNN（当日序号；纯追加字段 orderNo，不影响既有 schema） */
+  function genOrderNo() {
+    var d = new Date();
+    var p = function (n) { return (n < 10 ? "0" : "") + n; };
+    var today = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+    var count = (State.list || []).filter(function (r) {
+      return (r.type || "out") !== "in" && (r.time || "").indexOf(today) === 0;
+    }).length;
+    var seq = count + 1;
+    return "ORD-" + today.replace(/-/g, "") + "-" + (seq >= 1000 ? String(seq) : ("00" + seq).slice(-3));
+  }
+
   function submit() {
     var time = els.time.value;
     var pickerVal = els.picker.value.trim();
@@ -393,7 +405,10 @@
       photos: photos.getPhotos(),
       affectsStock: true  // 新记录才参与库存计算
     };
-    if (!wasEditing) payload.status = "pending";   // 新建出库记录默认「未提单」；编辑不携带 → 合并保留原值
+    if (!wasEditing) {
+      payload.status = "pending";      // 新建出库记录默认「未提单」；编辑不携带 → 合并保留原值
+      payload.orderNo = genOrderNo();   // 出库单自动编号（纯追加字段）
+    }
     var rec;
     if (editingId) {
       rec = Records.update(editingId, payload);
@@ -404,10 +419,13 @@
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
     resetForm();
-    // 提交成功滚顶（落地页表单较长，便于看到成功反馈）
-    window.scrollTo({ top: 0, behavior: "smooth" });
     // 先上传照片并写回 photoUrls（首推即含图）；再统一推送
     submitPush(rec, wasEditing);
+    // D1 成功动效：刷新最近提交 + 打勾涟漪（含出库单号）并滚动定位
+    if (window.App.Views.landing && window.App.Views.landing.renderRecent) {
+      window.App.Views.landing.renderRecent();
+    }
+    UI.celebrate({ orderNo: rec.orderNo || "" });
   }
 
   /** 异步推送：先写回 photoUrls，再推记录，确保通知含图 */

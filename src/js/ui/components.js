@@ -451,6 +451,66 @@
     this.render();
   };
 
+
+  /* ================= 提交成功动效（D1，2026-08-08 新增） ================= */
+  var fxStyleInjected = false;
+  /** 注入动效与单号标签样式（一次性；沿用青屿主题变量，无自定义文件） */
+  function ensureFxStyle() {
+    if (fxStyleInjected) return;
+    fxStyleInjected = true;
+    var st = document.createElement("style");
+    st.textContent =
+      ".fx-celebrate{position:fixed;inset:0;z-index:85;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .25s;}" +
+      ".fx-celebrate.show{opacity:1;}" +
+      ".fx-celebrate .fx-box{position:relative;width:120px;height:120px;display:flex;align-items:center;justify-content:center;}" +
+      ".fx-celebrate .fx-ring{position:absolute;inset:0;border-radius:50%;border:2.5px solid rgba(111,169,138,.55);opacity:0;}" +
+      ".fx-celebrate.show .fx-ring{animation:fx-ripple 1.1s ease-out .05s forwards;}" +
+      ".fx-celebrate .fx-ring.r2{border-color:rgba(150,138,190,.5);animation-delay:.22s;}" +
+      ".fx-celebrate .fx-ring.r3{border-color:rgba(111,163,168,.45);animation-delay:.4s;}" +
+      "@keyframes fx-ripple{0%{transform:scale(.35);opacity:0;}30%{opacity:.9;}100%{transform:scale(1.35);opacity:0;}}" +
+      ".fx-celebrate .fx-check{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#7FB08E,#5E9A79);display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(87,130,111,.45);}" +
+      ".fx-celebrate .fx-check svg{width:30px;height:30px;}" +
+      ".fx-celebrate .fx-check path{stroke:#fff;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;fill:none;stroke-dasharray:40;stroke-dashoffset:40;}" +
+      ".fx-celebrate.show .fx-check path{animation:fx-draw .5s ease-out .15s forwards;}" +
+      "@keyframes fx-draw{to{stroke-dashoffset:0;}}" +
+      ".fx-celebrate .fx-note{position:absolute;top:132px;left:50%;transform:translateX(-50%);width:max-content;max-width:86vw;text-align:center;font-size:13px;font-weight:600;color:var(--ink-900,#3C4845);background:rgba(253,252,249,.95);border:1px solid rgba(220,230,224,.9);border-radius:999px;padding:8px 18px;box-shadow:0 10px 26px rgba(87,130,111,.25);opacity:0;}" +
+      ".fx-celebrate.show .fx-note{animation:fx-rise .4s ease-out .5s forwards;}" +
+      "@keyframes fx-rise{from{opacity:0;transform:translateX(-50%) translateY(8px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}" +
+      ".recent-item-no{display:inline-block;font-size:11px;font-weight:600;color:var(--mint-600,#57826F);background:var(--mint-100,#EAF4EF);border:1px solid rgba(185,214,199,.7);border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:1px;white-space:nowrap;}";
+    document.head.appendChild(st);
+  }
+
+  /** 提交成功动效：三层涟漪 + 打勾描边 + 单号胶囊，随后滚动到最近提交/顶部。
+      opts: { orderNo?, note?, target? } */
+  function celebrate(opts) {
+    opts = opts || {};
+    ensureFxStyle();
+    var old = document.querySelector(".fx-celebrate");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var note = opts.orderNo ? ("出库单 " + Util.esc(opts.orderNo) + " 已提交") : (opts.note || "提交成功");
+    var el = document.createElement("div");
+    el.className = "fx-celebrate";
+    el.innerHTML =
+      '<div class="fx-box">' +
+        '<span class="fx-ring"></span><span class="fx-ring r2"></span><span class="fx-ring r3"></span>' +
+        '<span class="fx-check"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg></span>' +
+        '<span class="fx-note">' + note + '</span>' +
+      '</div>';
+    document.body.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add("show"); });
+    setTimeout(function () {
+      el.classList.remove("show");
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+      var target = opts.target;
+      if (!target) target = document.getElementById("recentBox");   // 落地页最近提交区
+      if (target && typeof target.scrollIntoView === "function") {
+        try { target.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
+      } else {
+        try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
+      }
+    }, 1500);
+  }
+
   window.App = window.App || {};
   window.App.UI = {
     icon: icon,
@@ -461,6 +521,7 @@
     collapseSection: collapseSection,
     bindCollapse: bindCollapse,
     ProductPicker: ProductPicker,
-    PhotoUpload: PhotoUpload
+    PhotoUpload: PhotoUpload,
+    celebrate: celebrate
   };
 })();

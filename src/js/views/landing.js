@@ -75,6 +75,7 @@
         '<div class="recent-item-main">' +
           '<div class="recent-item-top">' +
             '<span class="recent-item-time">' + Util.esc(fmtRecentTime(rec.time)) + '</span>' +
+            (rec.orderNo ? '<span class="recent-item-no">' + Util.esc(rec.orderNo) + '</span>' : '') +
             '<span class="recent-item-who">' + whoHtml + '</span>' +
           '</div>' +
           '<div class="recent-item-items">' + Util.esc(fmtItems(rec)) + '</div>' +
