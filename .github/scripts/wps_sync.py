@@ -138,19 +138,23 @@ def post_to_wps(payload):
 
 
 def collect_jobs(rec):
-    """返回 [(sheet_name, product, type, qty), ...] 待写金山的任务列表"""
-    jobs = []
+    """返回 {sheet_name: [(product, qty), ...]} —— 同一订单按子表分组。
+
+    目的：把「一个订单的多商品」聚到对应子表，便于在金山里「一个订单一行」
+    （同一子表内的多个商品填在同一行的不同列）。
+    """
+    by_sheet = {}
     lurong = rec.get("lurong")
-    rtype = "in" if rec.get("type") == "in" else "out"
     items = rec.get("items") or []
 
     if lurong:
-        # 旧 lurong.html 路径
+        # 旧 lurong.html 路径：单商品
         sheet = lurong.get("sheet_name", "")
         product = lurong.get("product", "")
         qty = rec.get("qty") or (items[0].get("qty", 0) if items else 0)
-        jobs.append((sheet, product, rtype, qty))
-        return jobs
+        if sheet and product:
+            by_sheet.setdefault(sheet, []).append((product, qty))
+        return by_sheet
 
     for it in items:
         name = it.get("name", "")
@@ -159,8 +163,8 @@ def collect_jobs(rec):
             continue  # 非鹿茸商品（如手提袋）跳过
         sheet, product = mp
         qty = it.get("qty", 0)
-        jobs.append((sheet, product, rtype, qty))
-    return jobs
+        by_sheet.setdefault(sheet, []).append((product, qty))
+    return by_sheet
 
 
 def process_record(rec, synced):
@@ -170,8 +174,8 @@ def process_record(rec, synced):
     if rid in synced:
         return 0, 0
 
-    jobs = collect_jobs(rec)
-    if not jobs:
+    by_sheet = collect_jobs(rec)
+    if not by_sheet:
         # 没有可同步的鹿茸商品，也标记已处理，避免每次重新扫描
         synced[rid] = True
         return 0, 0
@@ -182,40 +186,50 @@ def process_record(rec, synced):
     purpose = rec.get("purpose", "") or ""
     dept = rec.get("dept", "") or ""
     entity = rec.get("entity", "") or ""
-    if entity and "赛迪斯" in entity and purpose:
-        purpose = "赛迪斯·" + purpose
+    if entity and "赛迪斯" in entity and purpose and not purpose.startswith("赛迪斯·"):
+        # 用途本身已含「赛迪斯」开头时先归一化，避免变成「赛迪斯·赛迪斯项目」重复前缀
+        p = purpose
+        if p.startswith("赛迪斯"):
+            p = p[len("赛迪斯"):]
+        p = p.lstrip("·").strip()
+        purpose = ("赛迪斯·" + p) if p else purpose
 
     ok = 0
     fail = 0
-    for (sheet, product, jtype, qty) in jobs:
-        if not sheet or not product or not qty or qty <= 0:
+    # 每个子表 = 一次 webhook 调用（带该子表的全部商品）；订单碰到的每个子表各写「一行」
+    for sheet, itemlist in by_sheet.items():
+        # 过滤无效项（无名称 / 数量<=0）
+        valid = [(p, q) for (p, q) in itemlist if p and q and q > 0]
+        if not valid:
             continue
         payload = {
             "Context": {
                 "argv": {
+                    "mode": "append_order",   # 金山脚本：多商品合并追加一行
                     "sheet_name": sheet,
-                    "product": product,
-                    "type": jtype,
+                    "type": rtype,
                     "date": date,
                     "picker": picker,
                     "sender": "陈利冠",
-                    "qty": qty,
                     "purpose": purpose,
                     "dept": dept,
+                    "items": [{"product": p, "qty": q} for (p, q) in valid],
                 }
             }
         }
         try:
             body = post_to_wps(payload)
-            log("✅ 同步成功 %s/%s/%s ×%s：%s" % (sheet, product, jtype, qty, body[:120]))
+            log("✅ 同步成功 %s/订单一行 ×%d 商品：%s" % (sheet, len(valid), body[:120]))
             ok += 1
         except Exception as e:
-            log("❌ 同步失败 %s/%s/%s ×%s：%s" % (sheet, product, jtype, qty, e))
+            log("❌ 同步失败 %s/订单(共%d商品)：%s" % (sheet, len(valid), e))
             fail += 1
 
+    # 标记整个订单为已同步（保证幂等、不重复写）。
+    # 说明：单子表订单=一次调用全有或全无，完全准确；
+    # 跨子表订单若某子表调用失败，已成功的子表行不补写（与旧逻辑一致，优先避免重复行）。
     if ok > 0:
         synced[rid] = True
-    # 若全部失败则不标记，下次可重试
     return ok, fail
 
 
