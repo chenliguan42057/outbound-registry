@@ -59,9 +59,20 @@
     return "";
   }
 
+  // 部门后缀（中文组织结构常见）。启发式匹配"销售部/研发组/技术科"等
+  var DEPT_SUFFIX = ["部", "组", "科", "室", "中心", "队", "处", "课"];
+
   function extractDept(text) {
-    var m = text.match(/(?:部门|单位)[：:]\s*([^\s，,。；;]+)/);
-    return m ? m[1] : "";
+    // 模式1：显式标注「部门：xxx」/「单位：xxx」/「客户：xxx」/「公司：xxx」
+    var m = text.match(/(?:部门|单位|客户|公司)[：:]\s*([^\s，,。；;]+)/);
+    if (m) return m[1];
+    // 模式2：文本开头是 2-5 字纯中文 + 部门后缀（销售部、研发组、技术科 等）
+    var first = (text.match(/^\s*([^\s，,。；:：]+)/) || [])[1] || "";
+    if (first && /^[\u4e00-\u9fa5]{2,5}$/.test(first)) {
+      var lastCh = first.charAt(first.length - 1);
+      if (DEPT_SUFFIX.indexOf(lastCh) !== -1) return first;
+    }
+    return "";
   }
 
   function extractPicker(rest) {
@@ -81,7 +92,15 @@
     var purpose = extractPurpose(items.rest + text);
     var entity = extractEntity(text);
     var dept = extractDept(text);
-    var picker = extractPicker(items.rest);
+    // 修复：识别到部门后从原文剥离，避免污染领取人字段（例：「销售部 陈利冠」→ 部门=销售部 / 领取人=陈利冠）
+    var stripped = text;
+    if (dept && dept.length >= 2) {
+      try {
+        var re = new RegExp("^\\s*" + dept.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\s*");
+        stripped = text.replace(re, "");
+      } catch (e) {}
+    }
+    var picker = extractPicker(stripped);
     return { items: items.items, purpose: purpose, entity: entity, dept: dept, picker: picker };
   }
 
