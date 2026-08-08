@@ -83,7 +83,7 @@
           '<button type="button" class="win-topbar-menu" id="winMenu" title="菜单">' + UI.icon("menu", 20) + '</button>' +
           '<span class="win-topbar-title">' + Util.esc(Config.BRAND_TITLE) + '</span>' +
           '<div class="win-topbar-search">' +
-            '<input type="text" id="winGlobalQ" placeholder="全局搜索：领取人 / 货品 / 用途…" autocomplete="off" />' +
+            '<!-- 全局搜索已移除（2026-08-08 用户要求） -->' +
           '</div>' +
           '<div class="win-topbar-right">' +
             '<button type="button" class="win-topbar-sync" id="winSync" title="云端同步">' + UI.icon("sync", 18) + '</button>' +
@@ -143,24 +143,6 @@
       Util.$("winImportFile").click();
     });
     Util.$("winImportFile").addEventListener("change", handleImport);
-    // 全局搜索：回车 → 跳转到「出库记录」页并填入搜索词（跨出入库由各页搜索框覆盖）
-    var gq = Util.$("winGlobalQ");
-    gq.addEventListener("keydown", function (e) {
-      if (e.key !== "Enter") return;
-      var q = gq.value.trim();
-      if (!q) return;
-      gq.value = "";
-      var target = stateHasMatch(q, "in") ? "in-records" : "out-records";
-      Router.navigate("/app/" + target);
-      // 等待目标视图渲染后写入搜索框（搜索关键词按领取人/货品/用途，两页都会命中）
-      setTimeout(function () {
-        var qEl = document.getElementById("recQ");
-        if (qEl) {
-          qEl.value = q;
-          qEl.dispatchEvent(new Event("input"));
-        }
-      }, 120);
-    });
   }
 
   /** 全局搜索辅助：判断入库/出库哪边更容易命中（先看出库，再看入库） */

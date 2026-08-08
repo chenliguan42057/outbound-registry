@@ -38,7 +38,6 @@
             '<button type="button" class="btn danger sm" id="recClearAll">清空全部记录</button>' +
           '</div>' +
           '<div class="rec-filters">' +
-            '<input type="text" id="recQ" class="search" placeholder="搜索：部门 / 领取人 / 货品名" autocomplete="off" />' +
             '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "来源" : "部门/客户") + '" autocomplete="off" />' +
             '<input type="text" id="recPicker" class="search" placeholder="' + (isIn ? "经办人" : "领取人") + '" autocomplete="off" />' +
             '<input type="date" id="recFrom" class="search" title="开始日期" />' +
@@ -48,16 +47,14 @@
         '</div>';
 
       listBox = Util.$("recListBox");
-      var qEl = Util.$("recQ"), deptEl = Util.$("recDept"), pickerEl = Util.$("recPicker"),
+      var deptEl = Util.$("recDept"), pickerEl = Util.$("recPicker"),
           fromEl = Util.$("recFrom"), toEl = Util.$("recTo");
-      qEl.value = searchState.q;
       deptEl.value = searchState.dept;
       pickerEl.value = searchState.picker;
       fromEl.value = searchState.from;
       toEl.value = searchState.to;
 
       function save() {
-        searchState.q = qEl.value.trim();
         searchState.dept = deptEl.value.trim();
         searchState.picker = pickerEl.value.trim();
         searchState.from = fromEl.value;
@@ -65,7 +62,7 @@
         Store.saveSearch(searchState);
         renderList();
       }
-      [qEl, deptEl, pickerEl, fromEl, toEl].forEach(function (input) {
+      [deptEl, pickerEl, fromEl, toEl].forEach(function (input) {
         input.addEventListener("input", save);
         input.addEventListener("change", save);
       });
@@ -108,7 +105,6 @@
 
     /** 按搜索条件过滤记录（类型已由模块固定） */
     function filter() {
-      var q = searchState.q.toLowerCase();
       var from = searchState.from ? new Date(searchState.from + "T00:00:00").getTime() : null;
       var to = searchState.to ? new Date(searchState.to + "T23:59:59").getTime() : null;
       return State.list.filter(function (r) {
@@ -117,12 +113,6 @@
         if (r.borrowed === true) return false;   // 已转入先借后还的出库单，不在普通出库记录列表显示
         if (searchState.dept && !(r.dept || "").toLowerCase().includes(searchState.dept.toLowerCase())) return false;
         if (searchState.picker && !(r.picker || "").toLowerCase().includes(searchState.picker.toLowerCase())) return false;
-        if (q) {
-          var hay = (r.dept || "") + " " + (r.picker || "") + " " + (r.purpose || "") + " " +
-            (r.entity || "") + " " + (r.note || "") + " " +
-            (r.items || []).map(function (it) { return it.name; }).join(" ");
-          if (!hay.toLowerCase().includes(q)) return false;
-        }
         if (from !== null) {
           var t1 = new Date(r.time || 0).getTime();
           if (isNaN(t1) || t1 < from) return false;

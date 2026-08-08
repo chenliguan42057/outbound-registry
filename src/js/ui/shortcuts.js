@@ -1,6 +1,6 @@
 /**
  * shortcuts.js — 全局快捷键（青屿体验优化 A1，2026-08-08 新增）
- * Ctrl/Cmd+Enter 提交 · Ctrl/Cmd+K 聚焦全局搜索 · g+字母 快速跳转模块 · Ctrl/Cmd+/ 快捷键面板
+ * Ctrl/Cmd+Enter 提交 · g+字母 快速跳转模块 · Ctrl/Cmd+/ 快捷键面板
  * 加载方式：src/index.html 末尾 main.js 之后引入（IIFE 自启动，零依赖）。
  * 纯新增文件，不改动任何既有模块逻辑；编辑控件内不触发 g 序列，避免干扰输入。
  */
@@ -45,14 +45,6 @@
     btn.click();
   }
 
-  /** 聚焦顶栏全局搜索框（#winGlobalQ，仅管理后台存在） */
-  function focusGlobalSearch() {
-    var q = document.getElementById("winGlobalQ");
-    if (!q) { Util.toast("请先进入管理后台再使用全局搜索", true); return; }
-    q.focus();
-    q.select();
-  }
-
   /* ---------- g 序列悬浮提示（独立小卡片，不占用 toast 通道） ---------- */
   var hintEl = null;
   function ensureHint() {
@@ -83,7 +75,6 @@
   function showHelp() {
     var rows = [
       ["Ctrl / Cmd + Enter", "提交当前出库单"],
-      ["Ctrl / Cmd + K", "聚焦全局搜索"],
       ["g + 字母", "快速跳转模块（如 g+s 进库存）"],
       ["Ctrl / Cmd + /", "本快捷键面板"]
     ];
@@ -104,12 +95,6 @@
     if (mod && e.key === "Enter") {
       e.preventDefault();
       triggerSubmit();
-      return;
-    }
-    // Ctrl/Cmd + K：全局搜索
-    if (mod && (e.key === "k" || e.key === "K")) {
-      e.preventDefault();
-      focusGlobalSearch();
       return;
     }
     // Ctrl/Cmd + /：快捷键面板
