@@ -34,9 +34,15 @@
     return { base: "landing" };
   }
 
-  /** 跳转（写入 location.hash，触发 hashchange） */
+  /** 跳转（写入 location.hash，触发 hashchange）。
+      修复 2026-08-08：若 hash 未变（如钉钉 ?goto=app 已设 hash 后再调 navigate 同值），
+      浏览器不会触发 hashchange，需手动调用 handle() 强制路由处理。 */
   function navigate(hash) {
-    location.hash = hash;
+    if (location.hash === hash) {
+      handle();
+    } else {
+      location.hash = hash;
+    }
   }
 
   /** 切换容器显示 */
