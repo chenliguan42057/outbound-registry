@@ -205,9 +205,8 @@
             }).join("") + (photos.length > 4 ? '<span class="badge">+' + (photos.length - 4) + '</span>' : "")
           : '<span class="badge">无</span>';
         var inMark = r.type === "in" ? '<span class="in-tag">入库</span>' : "";
-        html += '<tr>' +
-          '<td><div>' + (list.length - i) + inMark + '</div>' +
-            '<button type="button" class="btn ghost sm detail-btn" data-act="detail" data-id="' + r.id + '">详细</button></td>' +
+        html += '<tr data-act="detail" data-id="' + r.id + '">' +
+          '<td><div>' + (list.length - i) + inMark + '</div></td>' +
           '<td>' + Util.esc(r.time || "-") + '</td>' +
           '<td>' + Util.esc(r.picker || "-") + '</td>' +
           (!isIn ? '<td>' + statusPill(r) + '</td>' : '') +
@@ -218,11 +217,6 @@
           '<td>' + qtySum + '</td>' +
           '<td class="items-cell">' + stocks + '</td>' +
           '<td><div class="photos-cell">' + photoHtml + '</div></td>' +
-          '<td>' +
-            '<button type="button" class="btn ghost sm" data-act="print" data-id="' + r.id + '">🖨 打印</button> ' +
-            '<button type="button" class="btn ghost sm" data-act="edit" data-id="' + r.id + '">编辑</button> ' +
-            '<button type="button" class="btn danger sm" data-act="del" data-id="' + r.id + '">删除</button>' +
-          '</td>' +
         '</tr>';
       });
       html += '</tbody></table></div>';
@@ -259,7 +253,26 @@
       }
       rows += '<div class="detail-row"><span class="k">货品明细</span><span class="v detail-items">' + (itemsHtml || "-") + '</span></div>';
       rows += '<div class="detail-row"><span class="k">照片</span><span class="v">' + photosHtml + '</span></div>';
+      // 2026-08-08：操作按钮（打印/编辑/删除）从列表行移入详情弹窗，列表行只展示数据
+      rows += '<div class="detail-row" style="display:block;border-bottom:none;padding-top:16px">' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn ghost sm" data-detail-act="print">🖨 打印</button> ' +
+          '<button type="button" class="btn sm" data-detail-act="edit">编辑</button> ' +
+          '<button type="button" class="btn danger sm" data-detail-act="del">删除</button>' +
+        '</div></div>';
       UI.Modal.show(isRecIn ? "入库详情" : "出库详情", rows, { width: "560px" });
+      // 绑定详情弹窗内的操作按钮（Modal 内事件不会冒泡到 listBox）
+      var actions = UI.Modal.body();
+      if (actions) {
+        actions.querySelectorAll("[data-detail-act]").forEach(function (b) {
+          b.addEventListener("click", function () {
+            var act = b.getAttribute("data-detail-act");
+            if (act === "print") doPrint(id);
+            else if (act === "edit") doEdit(id);
+            else if (act === "del") doDel(id);
+          });
+        });
+      }
     }
 
     function showPhoto(src) {

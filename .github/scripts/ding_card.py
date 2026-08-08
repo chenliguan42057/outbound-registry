@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ding_card.py — 青屿主题·钉钉结构化卡片（actionCard）共享工具（2026-08-08 新增；2026-08-08 修复钉钉内置浏览器 hash 兼容）
+"""ding_card.py — 钉钉卡片双端格式统一（2026-08-08）
 
-修复说明：钉钉内置浏览器对带 hash（#）的 URL 处理偶尔失效（如 /#/app/out-records），导致点击「管理后台」按钮后页面空白。
-  改为：管理后台按钮 URL 改用 query 形式 `?goto=app`，由前端 `dingtalk.js` 监听 query 并触发 `location.hash = '#/app/out-records'` 跳转。
-  其他按钮（打开出库登记 / 落地点位跳转）保持原 URL 不变。
+修复：钉钉手机客户端对 actionCard markdown 中的 <font color='...'> 标签渲染失败（可能原样显示尖括号），
+导致手机端与电脑端显示不一致。改为移除 <font color> 标签，仅依赖标准 markdown（加粗、列表、emoji、空行）保证两端一致。
 """
 import base64
 import hashlib
@@ -17,7 +16,7 @@ import urllib.request
 
 REG_URL = "https://chenliguan42057.github.io/outbound-registry/"
 
-# 青屿主题色板
+# 注：主题色板常量保留，decorate() 不再注入 <font color> 标签（避免钉钉手机端乱码）
 C_LAV = "#7A6DA3"
 C_MINT = "#57826F"
 C_CYAN = "#7FB3A5"
@@ -38,11 +37,15 @@ def sign_url(webhook, secret):
 
 
 def decorate(text):
+    """2026-08-08 修复：移除 <font color> 标签（钉钉手机端不渲染该私有标签会原样显示尖括号）。
+    视觉层级改为依赖：标准 markdown（**加粗**、- 列表、空行）+ emoji + 【】包裹关键数字。
+    这样手机端/电脑端显示一致、清晰直观。"""
     if not text:
         return text
-    t = re.sub(r"^(#{1,3}\s+)(.+)$", "<font color='%s'><b>\\2</b></font>" % C_LAV, text, flags=re.M)
-    t = re.sub(r"\*\*(.+?)\*\*", "<font color='%s'><b>\\1</b></font>" % C_MINT, t)
-    return t
+    # 移除所有 <font color='...'> 与 </font> 标签
+    text = re.sub(r"<font color=['\"]#[0-9A-Fa-f]+['\"]>", "", text)
+    text = re.sub(r"</font>", "", text)
+    return text
 
 
 def btn_landing():
@@ -50,7 +53,6 @@ def btn_landing():
 
 
 def btn_manage():
-    """管理后台按钮：用 ?goto=app 查询形式（避开钉钉内置浏览器 hash 路由兼容问题）"""
     return {"title": "📋 管理后台", "url": REG_URL + "?goto=app"}
 
 
@@ -72,9 +74,9 @@ def build_card_payload(text, title, btns=None, btn_orientation="0", decorate_tex
 
 def send_action_card(text, title, webhook, secret, btns=None, btn_orientation="0", decorate_text=True):
     if not webhook:
-        return False, "WEBHOOK 环境变量为空，无法发送（请检查 secrets.DINGTALK_WEBHOOK）"
+        return False, "WEBHOOK 环境变量为空"
     if not secret:
-        return False, "SECRET 环境变量为空，无法加签（请检查 secrets.DINGTALK_SECRET）"
+        return False, "SECRET 环境变量为空"
     payload = json.dumps(build_card_payload(text, title, btns, btn_orientation, decorate_text)).encode("utf-8")
     url = sign_url(webhook, secret)
     req = urllib.request.Request(
