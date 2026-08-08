@@ -184,7 +184,7 @@ def send(text, title="出入库登记提醒"):
         text, title, WEBHOOK, SECRET,
         btns=[
             {"title": "🌿 打开出库登记", "url": REG_URL},
-            {"title": "📋 管理后台", "url": REG_URL + "#/app/out-records"}
+            {"title": "📋 管理后台", "url": REG_URL + "?goto=app"}
         ],
         btn_orientation="0",
     )
