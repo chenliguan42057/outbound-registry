@@ -1,14 +1,23 @@
 name: Summary Notify
 on:
-  workflow_dispatch:   # 手动触发：推送优化总结到钉钉群
+  workflow_dispatch:   # 手动触发：推送优化总结 / 功能说明到钉钉群
+    inputs:
+      script:
+        description: '推送脚本（不带 .py）'
+        required: false
+        default: 'send_summary'
+        type: choice
+        options:
+          - send_summary
+          - send_borrow_explain
 
 jobs:
   summary:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Send summary card
+      - name: Send card
         env:
           WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           SECRET: ${{ secrets.DINGTALK_SECRET }}
-        run: python3 .github/scripts/send_summary.py
+        run: python3 .github/scripts/${{ inputs.script }}.py
