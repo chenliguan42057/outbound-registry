@@ -11,9 +11,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ding_card import send_action_card, btn_landing, btn_manage  # noqa: E402
 
-TITLE = "🌿 进销存系统优化总结（8/7 — 8/8）"
+TITLE = "🌿 出入库登记系统优化总结（8/7 — 8/8）"
 
-TEXT = """**这一轮我们把出库登记系统从头到脚打磨了一遍，全部已上线，打开就能用。** 手机电脑都能用，眼睛看着也更舒服了。
+TEXT = """**出入库登记系统这一轮从头到脚打磨了一遍，全部已上线，打开就能用。** 手机电脑都能用，眼睛看着也更舒服了。
 
 **1️⃣ 看着更舒服（清新护眼主题）**
 - 整套界面换成**薄荷绿 + 奶白 + 浅青 + 淡紫**的低饱和配色，长时间看不累眼
