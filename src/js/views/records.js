@@ -32,6 +32,7 @@
           '<h2>' + title + ' <span class="badge" id="recCount">0 条</span></h2>' +
           '<div class="actions rec-actions">' +
             '<button type="button" class="btn ghost sm" id="recExport">&#11015; 导出 CSV</button>' +
+            '<button type="button" class="btn ghost sm" id="recExportAcc">&#128202; 对账 CSV</button>' +
             '<button type="button" class="btn ghost sm" id="recSync">&#128260; 立即同步</button>' +
             '<button type="button" class="btn ghost sm" id="recRemind">&#128276; 提醒推送</button>' +
             '<button type="button" class="btn danger sm" id="recClearAll">清空全部记录</button>' +
@@ -71,6 +72,9 @@
 
       Util.$("recExport").addEventListener("click", function () {
         Records.exportCsv(filter());
+      });
+      Util.$("recExportAcc").addEventListener("click", function () {
+        Records.exportReconCsv(filter());
       });
       Util.$("recSync").addEventListener("click", function () { doSync(); });
       Util.$("recRemind").addEventListener("click", function () {
@@ -291,7 +295,7 @@
           '@media print{body{margin:8mm;}}' +
         '</style></head><body>' +
         '<h1>出入库登记 · ' + kindLabel + '</h1>' +
-        '<div class="sub">单号：' + Util.esc(r.id) + '　|　时间：' + Util.esc(String(r.time || "").replace("T", " ")) + '</div>' +
+        '<div class="sub">单号：' + Util.esc(r.orderNo || r.id) + '　|　时间：' + Util.esc(String(r.time || "").replace("T", " ")) + '</div>' +
         '<div class="field">' +
           '<b>' + (isRecIn ? "经办人" : "领取人") + '：</b>' + Util.esc(r.picker || "-") + '<br>' +
           (isRecIn ? '' : '<b>部门/客户：</b>' + Util.esc(r.dept || "-") + '<br>') +

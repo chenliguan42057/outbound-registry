@@ -45,6 +45,13 @@
     State.list.unshift(rec);
     stampStock(rec);        // 先入列再打快照：getStock 已包含本笔影响
     State.save();
+    try {
+      if (window.App.Audit) window.App.Audit.log("create", {
+        id: rec.id,
+        summary: ((rec.picker || "") + " " + (rec.purpose || "") + " " +
+          (rec.items || []).map(function (it) { return it.name + "×" + it.qty; }).join("、")).slice(0, 200)
+      });
+    } catch (e) {}
     return rec;
   }
 
@@ -62,14 +69,23 @@
 
   /** 删除记录（本地） */
   function remove(id) {
+    var gone = null;
+    State.list.forEach(function (r) { if (r.id === id) gone = r; });
     State.list = State.list.filter(function (r) { return r.id !== id; });
     State.save();
+    try {
+      if (window.App.Audit && gone) window.App.Audit.log("delete", {
+        id: id,
+        summary: ((gone.picker || "") + " " + (gone.purpose || "")).slice(0, 200)
+      });
+    } catch (e) {}
   }
 
   /** 清空本地记录 */
   function clear() {
     State.list = [];
     State.save();
+    try { if (window.App.Audit) window.App.Audit.log("clear-all", {}); } catch (e) {}
   }
 
   /** 合并策略：同 id 云端覆盖本地；排序 = time 降序，次 _ts 降序（与现网一致） */
@@ -127,6 +143,42 @@
     Util.toast("已导出 CSV");
   }
 
+  /** 对账模板 CSV（C4）：含单号/法人/单价/金额；单价取自货品目录（未设置则为空） */
+  function toReconCsv(list) {
+    var catalog = null;
+    try { catalog = window.App.Catalog && window.App.Catalog.get(); } catch (e) {}
+    var priceOf = function (name) {
+      if (!catalog || !catalog.products) return null;
+      for (var i = 0; i < catalog.products.length; i++) {
+        if (catalog.products[i].name === name) return Number(catalog.products[i].price) || 0;
+      }
+      return null;
+    };
+    var head = ["单号", "时间", "结算法人单位", "领取人", "部门", "用途/项目", "货品名称", "数量", "单价", "金额"];
+    var rows = [];
+    (list || []).forEach(function (r) {
+      var base = [r.orderNo || r.id, r.time || "", r.entity || "", r.picker || "", r.dept || "", r.purpose || ""];
+      (r.items || []).forEach(function (it) {
+        var price = priceOf(it.name);
+        var amt = (price === null || price === undefined || price === 0) ? "" : Math.round(price * (Number(it.qty) || 0) * 100) / 100;
+        rows.push(base.concat([it.name, it.qty, price === null ? "" : price, amt === "" ? "" : amt]));
+      });
+      if (!(r.items || []).length) rows.push(base.concat(["", "", "", ""]));
+    });
+    var escCsv = function (v) {
+      var s = String(v == null ? "" : v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    return [head].concat(rows).map(function (row) { return row.map(escCsv).join(","); }).join("\r\n");
+  }
+  function exportReconCsv(list) {
+    var arr = list || State.list;
+    if (!arr.length) { Util.toast("没有可导出的记录", true); return; }
+    var csv = "\ufeff" + toReconCsv(arr);
+    Util.download("对账_" + new Date().toISOString().slice(0, 10) + ".csv", csv, "text/csv;charset=utf-8");
+    Util.toast("已导出对账 CSV");
+  }
+
   window.App = window.App || {};
   window.App.Records = {
     create: create,
@@ -137,6 +189,8 @@
     applyTombstones: applyTombstones,
     getStatus: getStatus,
     toCsv: toCsv,
-    exportCsv: exportCsv
+    exportCsv: exportCsv,
+    toReconCsv: toReconCsv,
+    exportReconCsv: exportReconCsv
   };
 })();

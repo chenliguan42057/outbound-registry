@@ -86,6 +86,16 @@
           '令牌仅保存在本机 localStorage（gh_token），不会写入记录数据。</div>' +
       '</div>' +
       '<div class="card">' +
+        '<h2>数据备份与恢复 <span class="tag">本地文件</span></h2>' +
+        '<div class="actions">' +
+          '<button type="button" class="btn sm" id="syncBackup">&#11015; 导出备份</button>' +
+          '<button type="button" class="btn ghost sm" id="syncRestore">&#128260; 恢复备份</button>' +
+          '<button type="button" class="btn ghost sm" id="syncConflict">⚠️ 冲突检查</button>' +
+          '<input type="file" id="syncRestoreFile" accept="application/json,.json" hidden />' +
+        '</div>' +
+        '<div class="hint">备份=下载全部数据（记录/待取货/备忘录/货品目录）为单个 JSON；恢复=合并导入该文件；冲突检查=发现被云端覆盖的本地较新修改并可恢复。</div>' +
+      '</div>' +
+      '<div class="card">' +
         '<h2>页面二维码 <span class="tag">扫码打开</span></h2>' +
         '<div id="syncQr"></div>' +
         '<div class="hint">手机扫码即可打开同一网址，数据自动同步。</div>' +
@@ -101,6 +111,10 @@
     });
     Util.$("syncTokenSave").addEventListener("click", saveToken);
     Util.$("syncTokenClear").addEventListener("click", clearToken);
+    Util.$("syncBackup").addEventListener("click", doBackup);
+    Util.$("syncRestore").addEventListener("click", function () { Util.$("syncRestoreFile").click(); });
+    Util.$("syncRestoreFile").addEventListener("change", doRestore);
+    Util.$("syncConflict").addEventListener("click", showConflicts);
     renderQr();
     startCountdown();
   }
@@ -225,6 +239,111 @@
       if (!res.ok && err) {
         err.textContent = "同步失败：" + (res.error && res.error.message ? res.error.message : "未知错误");
       }
+    });
+  }
+
+  /* ================= C1 一键备份/恢复 ================= */
+  function doBackup() {
+    var pkg = {
+      exportedAt: new Date().toISOString(),
+      records: State.list,
+      pickups: State.pickups || [],
+      memos: State.memos || [],
+      catalog: (window.App.Catalog && window.App.Catalog.get()) || null
+    };
+    Util.download("进销存备份_" + new Date().toISOString().slice(0, 10) + ".json",
+      JSON.stringify(pkg, null, 1), "application/json;charset=utf-8");
+    Util.toast("备份已下载");
+  }
+  function doRestore() {
+    var input = Util.$("syncRestoreFile");
+    var file = input.files && input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = async function () {
+      input.value = "";
+      var data;
+      try { data = JSON.parse(reader.result); } catch (e) { Util.toast("备份文件解析失败", true); return; }
+      var hasRecords = Array.isArray(data.records);
+      var hasPickups = Array.isArray(data.pickups);
+      var hasMemos = Array.isArray(data.memos);
+      if (!hasRecords && !hasPickups && !hasMemos) { Util.toast("未识别到备份数据（需含 records/pickups/memos 数组）", true); return; }
+      var ok = await UI.confirmDialog(
+        "将合并导入备份：记录 " + (data.records || []).length + " 条、待取货 " + (data.pickups || []).length +
+        " 条、备忘录 " + (data.memos || []).length + " 条。同 id 以备份覆盖本地。继续？", "恢复备份");
+      if (!ok) return;
+      if (hasRecords) {
+        State.list = window.App.Records.mergeAndSort(State.list, data.records);
+        Store.saveRecords(State.list);
+      }
+      if (hasPickups) {
+        State.pickups = window.App.Pickups.mergeAndSort(State.pickups, data.pickups);
+        Store.savePickups(State.pickups);
+      }
+      if (hasMemos) {
+        State.memos = window.App.Memos.mergeAndSort(State.memos, data.memos);
+        Store.saveMemos(State.memos);
+      }
+      if (data.catalog && window.App.Catalog && window.App.Catalog.save) {
+        await window.App.Catalog.save(data.catalog, function () {});
+      }
+      if (Cloud.hasToken()) {
+        try {
+          await Cloud.pushAllLocal();
+          await Cloud.pushAllPickups();
+          await Cloud.pushAllMemos();
+        } catch (e) {}
+      }
+      Util.toast("备份已恢复并合并");
+      if (window.App.Views.app && window.App.Views.app.updateStatusBar) window.App.Views.app.updateStatusBar();
+      refresh();
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  /* ================= C2 同步冲突可视化 ================= */
+  async function showConflicts() {
+    if (!Cloud.hasToken()) { Util.toast("未配置云端令牌，无法检查", true); return; }
+    var lastSync = State.lastSync ? State.lastSync.getTime() : 0;
+    var before = {};
+    State.list.forEach(function (r) { if ((r._ts || 0) > lastSync) before[r.id] = r; });
+    var res = await Cloud.syncPull({ onStatus: function () {} });
+    if (!res.ok) { Util.toast("同步失败，无法检查冲突", true); return; }
+    var now = {};
+    State.list.forEach(function (r) { now[r.id] = r; });
+    var conflicts = [];
+    Object.keys(before).forEach(function (id) {
+      var b = before[id];
+      var n = now[id];
+      if (n && JSON.stringify(b) !== JSON.stringify(n)) conflicts.push({ id: id, local: b, remote: n });
+    });
+    if (!conflicts.length) { Util.toast("未发现冲突：本地修改均已同步"); return; }
+    var rows = conflicts.map(function (c) {
+      var fmt = function (r) {
+        return String(r.time || "").replace("T", " ") + "　" + (r.picker || "") + "　" +
+          (r.items || []).map(function (it) { return it.name + "×" + it.qty; }).join("、");
+      };
+      return '<div style="border:1px solid var(--line-soft,#DCE6E0);border-radius:12px;padding:10px 12px;margin-bottom:10px">' +
+        '<div style="font-size:13px;font-weight:600;color:var(--err,#C9877F)">' + Util.esc(c.id.slice(0, 12)) + ' · 本地较新却被云端覆盖</div>' +
+        '<div class="hint" style="margin:6px 0">本地：' + Util.esc(fmt(c.local)) + '</div>' +
+        '<div class="hint" style="margin-bottom:8px">云端：' + Util.esc(fmt(c.remote)) + '</div>' +
+        '<button type="button" class="btn sm" data-restore="' + Util.esc(c.id) + '">恢复本地版本</button>' +
+      '</div>';
+    }).join("");
+    UI.Modal.show("⚠️ 同步冲突（" + conflicts.length + " 处）", rows, { width: "560px" });
+    var mBody = UI.Modal.body();
+    mBody.addEventListener("click", async function (e) {
+      var b = e.target.closest("[data-restore]");
+      if (!b) return;
+      var id = b.getAttribute("data-restore");
+      var local = null;
+      conflicts.forEach(function (c) { if (c.id === id) local = c.local; });
+      if (!local) return;
+      b.disabled = true; b.textContent = "恢复中…";
+      var rec = window.App.Records.update(id, local);
+      try { await Cloud.pushRecord(rec); } catch (e) {}
+      Util.toast("已恢复本地版本并推送云端");
+      b.textContent = "✓ 已恢复";
     });
   }
 
