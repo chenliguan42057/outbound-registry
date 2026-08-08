@@ -243,3 +243,114 @@ html[data-theme="dark"] .kiosk-bar button:hover { background: #24332C; }
   html[data-theme="dark"] .modal-card,
   html[data-theme="dark"] .toast { background: #1C2823; }
 }
+
+/* ============================================================
+   体验微调（2026-08-08，第三轮）：
+   一句话快速登记条竖排两行 / 商品数量stepper / 全屏提交成功页
+   ============================================================ */
+
+/* ---------- 快速登记条：竖排两行 ---------- */
+.quick-reg { flex-direction: column; align-items: stretch; gap: 8px; }
+.quick-reg .qr-row { display: flex; gap: 8px; align-items: center; position: relative; }
+.quick-reg .qr-row input { flex: 1; min-width: 0; }
+.quick-reg .voice-btn.qr-mic { position: static; transform: none; }
+.quick-reg .qr-row2 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.quick-reg .qr-row2 .btn { flex: 0 0 auto; }
+.quick-reg .qr-hint { font-size: 11.5px; color: var(--ink-400, #8F9D97); flex: 1 1 100%; }
+.quick-reg .qr-hint b { color: var(--ink-700, #55635F); font-weight: 600; margin: 0 1px; }
+
+/* ---------- 商品数量 stepper（让数字明显可调） ---------- */
+.qty-stepper {
+  display: inline-flex; align-items: stretch;
+  border: 1px solid var(--input-line, #C6DAD1);
+  border-radius: 10px; background: var(--input-bg, #FBFCFA); overflow: hidden;
+  flex: 0 0 auto; min-width: 108px; height: 32px;
+}
+.qty-stepper .qty-btn {
+  width: 28px; height: 100%; border: none; background: transparent;
+  color: var(--ink-700, #55635F); font-size: 16px; font-weight: 700; cursor: pointer;
+  transition: background .15s;
+}
+.qty-stepper .qty-btn:hover { background: var(--mint-100, #EAF4EF); }
+.qty-stepper .qty-btn:active { background: var(--mint-200, #D9EADF); }
+.qty-stepper input {
+  width: 48px; padding: 0; border: none;
+  border-left: 1px solid var(--input-line, #C6DAD1);
+  border-right: 1px solid var(--input-line, #C6DAD1);
+  border-radius: 0; background: transparent;
+  text-align: center; font-size: 14px; font-weight: 600; color: var(--ink-900, #3C4845);
+  height: 100%;
+}
+.qty-stepper input:focus { outline: none; box-shadow: none; background: #FDFEFC; }
+
+/* ---------- 全屏提交成功页 ---------- */
+.fx-success {
+  position: fixed; inset: 0; z-index: 95;
+  background: rgba(253, 252, 249, .82);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .35s; pointer-events: none;
+}
+.fx-success.show { opacity: 1; pointer-events: auto; }
+.fx-success .fx-success-card {
+  position: relative; width: min(420px, 90vw);
+  background: rgba(253, 252, 249, .98);
+  border: 1px solid rgba(220, 230, 224, .9);
+  border-radius: 24px; padding: 38px 32px 26px;
+  box-shadow: 0 24px 60px rgba(87, 130, 111, .22);
+  text-align: center;
+  transform: translateY(20px) scale(.94);
+  transition: transform .35s cubic-bezier(.2, .9, .3, 1.2);
+}
+.fx-success.show .fx-success-card { transform: translateY(0) scale(1); }
+.fx-success .rings { position: relative; width: 120px; height: 120px; margin: 0 auto 14px; }
+.fx-success .ring { position: absolute; inset: 0; border-radius: 50%;
+  border: 2.5px solid rgba(111, 169, 138, .5); opacity: 0; }
+.fx-success.show .ring { animation: fx-rings 1.6s ease-out infinite; }
+.fx-success.show .ring.r2 { animation-delay: .3s; }
+.fx-success.show .ring.r3 { animation-delay: .6s; border-color: rgba(150, 138, 190, .45); }
+@keyframes fx-rings { 0% { transform: scale(.4); opacity: 0; } 30% { opacity: .7; } 100% { transform: scale(1.3); opacity: 0; } }
+.fx-success .check {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 76px; height: 76px; border-radius: 50%;
+  background: linear-gradient(135deg, #7FB08E, #5E9A79);
+  box-shadow: 0 14px 36px rgba(87, 130, 111, .40);
+  display: flex; align-items: center; justify-content: center;
+}
+.fx-success .check svg { width: 42px; height: 42px; }
+.fx-success .check path { stroke: #fff; stroke-width: 4;
+  stroke-linecap: round; stroke-linejoin: round; fill: none;
+  stroke-dasharray: 50; stroke-dashoffset: 50; }
+.fx-success.show .check path { animation: fx-draw .55s ease-out .15s forwards; }
+@keyframes fx-draw { to { stroke-dashoffset: 0; } }
+.fx-success h3 { font-size: 22px; color: var(--ink-900, #3C4845); margin: 4px 0 10px; font-weight: 700; }
+.fx-success .order-no {
+  display: inline-block; font-family: "SF Mono", Consolas, monospace;
+  font-size: 13px; font-weight: 600; color: var(--mint-600, #57826F);
+  background: var(--mint-100, #EAF4EF);
+  border: 1px solid rgba(185, 214, 199, .7);
+  padding: 4px 14px; border-radius: 999px; margin: 0 0 12px;
+}
+.fx-success .warm { font-size: 14.5px; color: var(--ink-700, #55635F);
+  line-height: 1.75; margin-bottom: 18px; }
+.fx-success .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.fx-success .actions button {
+  border: 1px solid var(--line-soft, #DCE6E0);
+  background: var(--input-bg, #FBFCFA); color: var(--ink-700, #55635F);
+  border-radius: 999px; padding: 9px 22px; font-size: 14px; cursor: pointer;
+  transition: all .15s;
+}
+.fx-success .actions button:hover { background: #fff; }
+.fx-success .actions button.primary {
+  background: var(--grad-primary); color: #fff;
+  border-color: transparent;
+  box-shadow: 0 8px 22px rgba(111, 160, 138, .28);
+}
+.fx-success .actions button.primary:hover { filter: brightness(1.05); }
+html[data-theme="dark"] .fx-success { background: rgba(20, 28, 24, .82); }
+html[data-theme="dark"] .fx-success .fx-success-card {
+  background: rgba(28, 40, 35, .98); border-color: rgba(51, 70, 61, .9);
+}
+html[data-theme="dark"] .fx-success .actions button {
+  background: var(--input-bg, #1E2B25); border-color: var(--line-soft, #33463D); color: var(--ink-700, #C6D2CC);
+}

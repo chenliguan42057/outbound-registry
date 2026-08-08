@@ -178,9 +178,9 @@
     setTimeout(doneProgress, 700);
   });
 
-  // 提交成功音效：检测 .fx-celebrate 出现（D1 动效已存在）→ 响一声
+  // 提交成功音效：检测 .fx-success 出现（升级后的全屏暖心页）→ 响一声
   var fxObs = new MutationObserver(function () {
-    if (document.querySelector(".fx-celebrate")) beep(true);
+    if (document.querySelector(".fx-success")) beep(true);
   });
   fxObs.observe(document.body, { childList: true, subtree: true });
 

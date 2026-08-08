@@ -253,6 +253,16 @@
         self.selected.splice(Number(x.getAttribute("data-i")), 1);
         self.render();
         self.emit();
+        return;
+      }
+      var qb = e.target.closest(".qty-btn");
+      if (qb) {
+        var i = Number(qb.getAttribute("data-i"));
+        var cur = Number(self.selected[i].qty) || 0;
+        var next = qb.getAttribute("data-act") === "inc" ? cur + 1 : Math.max(0, cur - 1);
+        self.selected[i].qty = next;
+        self.render();
+        self.emit();
       }
     });
     this.listEl.addEventListener("input", function (e) {
@@ -309,7 +319,11 @@
       row.innerHTML =
         '<span class="name">' + Util.esc(it.name) + '</span>' +
         stockHtml +
-        '<input type="number" min="0" step="any" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
+        '<div class="qty-stepper">' +
+          '<button type="button" class="qty-btn" data-act="dec" data-i="' + i + '" aria-label="减少">−</button>' +
+          '<input type="number" min="0" step="any" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
+          '<button type="button" class="qty-btn" data-act="inc" data-i="' + i + '" aria-label="增加">+</button>' +
+        '</div>' +
         '<span class="x" data-i="' + i + '">&times;</span>';
       self.listEl.appendChild(row);
     });
@@ -454,6 +468,22 @@
 
   /* ================= 提交成功动效（D1，2026-08-08 新增） ================= */
   var fxStyleInjected = false;
+  /** 提交成功页随机暖心话（每次随机一条，长期可扩展） */
+  var WARM_LINES = [
+    "每一份登记，都是你为出库流程多节省的一分钟。",
+    "今日的每一单，都会被明天记得。",
+    "数据已入云，随时随地可以查看。",
+    "你的认真，让库存更可靠。",
+    "让每一支货品都去到它该去的地方。",
+    "慢慢的，记录会成为你最可靠的助手。",
+    "记录完成，可以短暂休息一下眼睛。",
+    "今天你又为系统贡献了一条干净的数据。",
+    "每一次确认，都让团队少一点疑问。",
+    "做事有度，登记有数——你已经在路上了。",
+    "把繁琐留给系统，把清爽留给自己。",
+    "你的细心，是这家公司最便宜的资产。"
+  ];
+
   /** 注入动效与单号标签样式（一次性；沿用青屿主题变量，无自定义文件） */
   function ensureFxStyle() {
     if (fxStyleInjected) return;
@@ -480,35 +510,52 @@
     document.head.appendChild(st);
   }
 
-  /** 提交成功动效：三层涟漪 + 打勾描边 + 单号胶囊，随后滚动到最近提交/顶部。
-      opts: { orderNo?, note?, target? } */
+  /** 提交成功全屏页面（体验升级）：双层涟漪 + 打勾描边 + 单号胶囊 + 随机暖心话 + 自动关闭。
+      opts: { orderNo?, target? } */
   function celebrate(opts) {
     opts = opts || {};
     ensureFxStyle();
-    var old = document.querySelector(".fx-celebrate");
+    var old = document.querySelector(".fx-success");
     if (old && old.parentNode) old.parentNode.removeChild(old);
-    var note = opts.orderNo ? ("出库单 " + Util.esc(opts.orderNo) + " 已提交") : (opts.note || "提交成功");
+    var orderNo = opts.orderNo || "";
+    var warm = WARM_LINES[Math.floor(Math.random() * WARM_LINES.length)];
     var el = document.createElement("div");
-    el.className = "fx-celebrate";
+    el.className = "fx-success";
     el.innerHTML =
-      '<div class="fx-box">' +
-        '<span class="fx-ring"></span><span class="fx-ring r2"></span><span class="fx-ring r3"></span>' +
-        '<span class="fx-check"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg></span>' +
-        '<span class="fx-note">' + note + '</span>' +
+      '<div class="fx-success-card">' +
+        '<div class="rings"><span class="ring"></span><span class="ring r2"></span><span class="ring r3"></span>' +
+        '<span class="check"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg></span></div>' +
+        (orderNo ? '<span class="order-no">' + Util.esc(orderNo) + '</span>' : '') +
+        '<h3>提交成功</h3>' +
+        '<div class="warm">' + Util.esc(warm) + '</div>' +
+        '<div class="actions">' +
+          '<button type="button" data-act="view">查看最新记录</button>' +
+          '<button type="button" class="primary" data-act="close">知道了</button>' +
+        '</div>' +
       '</div>';
     document.body.appendChild(el);
     requestAnimationFrame(function () { el.classList.add("show"); });
-    setTimeout(function () {
+    function close() {
       el.classList.remove("show");
-      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
-      var target = opts.target;
-      if (!target) target = document.getElementById("recentBox");   // 落地页最近提交区
-      if (target && typeof target.scrollIntoView === "function") {
-        try { target.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
-      } else {
-        try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 320);
+    }
+    el.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-act]");
+      if (!b) { if (e.target === el) close(); return; }
+      var act = b.getAttribute("data-act");
+      if (act === "close") close();
+      else if (act === "view") {
+        close();
+        var target = opts.target || document.getElementById("recentBox") || document.getElementById("recListBox");
+        if (target && typeof target.scrollIntoView === "function") {
+          try { target.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
+        } else {
+          try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
+        }
       }
-    }, 1500);
+    });
+    // 4.5 秒自动关闭（不强制，可点「知道了」立即关）
+    setTimeout(function () { if (document.body.contains(el)) close(); }, 4500);
   }
 
   window.App = window.App || {};
