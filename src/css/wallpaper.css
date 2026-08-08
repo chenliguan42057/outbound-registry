@@ -1,0 +1,102 @@
+/* ============================================================
+   wallpaper.css — 全系统清新壁纸换肤（2026-08-08 新增）
+   集中覆盖 body / 落地页 / 管理页内容区，不动既有 base/layout/views。
+   壁纸：薄荷色梦幻仙境（src/img/wallpaper.jpg，996×742，64KB）
+   风格：浅薄荷绿+蒲公英光尘，清新梦幻放松。
+   回滚：删 src/index.html 中 <link href="css/wallpaper.css"> 即可。
+   ============================================================ */
+
+body,
+.landing,
+.win-content {
+  background:
+    linear-gradient(rgba(255,255,255,.62), rgba(255,255,255,.62)),
+    url("../img/wallpaper.jpg") center/cover fixed no-repeat;
+}
+
+/* 管理页外壳：让壁纸透过来；原本不透明 #fff 会盖住壁纸 */
+.win-shell { background: transparent; }
+
+/* 顶栏：半透明白+毛玻璃，柔化原深紫渐变 */
+.win-topbar {
+  background: rgba(255,255,255,.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(99,102,241,.18);
+}
+.win-topbar-title { color: #2c3e50; }
+.win-topbar-menu { color: #2c3e50; }
+.win-topbar-menu:hover { background: rgba(99,102,241,.08); }
+.win-topbar-sync { background: rgba(99,102,241,.10); color: var(--primary-dark); }
+.win-topbar-sync:hover { background: rgba(99,102,241,.20); }
+
+/* 顶栏全局搜索框：与毛玻璃融合 */
+.win-topbar-search input { background: rgba(255,255,255,.85); }
+
+/* 侧边栏：半透明浅白毛玻璃，原深色 #202733 改通透 */
+.win-sidebar {
+  background: rgba(255,255,255,.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(99,102,241,.18);
+  color: #2c3e50;
+}
+.win-sidebar-item { color: #2c3e50; }
+.win-sidebar-item:hover { background: rgba(99,102,241,.08); color: var(--primary-dark); }
+.win-sidebar-item.active {
+  background: rgba(255,255,255,.85);
+  color: var(--primary-dark);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(99,102,241,.12);
+}
+.win-sidebar-foot { border-top: 1px solid rgba(99,102,241,.18); }
+.win-sidebar-foot .win-status { color: var(--muted); }
+.win-import-btn {
+  background: rgba(255,255,255,.7);
+  color: var(--primary-dark);
+  border: 1px solid rgba(99,102,241,.3);
+}
+.win-import-btn:hover { background: rgba(255,255,255,.9); }
+
+/* 卡片/表单：加半透明层保证文字可读 + 与壁纸柔和融合 */
+.card {
+  background: rgba(255,255,255,.86);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgba(99,102,241,.10);
+}
+
+/* 表格：白底更清爽 */
+.table-wrap { background: rgba(255,255,255,.6); }
+
+/* 登录弹窗背景：沿用壁纸语境，毛玻璃更通透 */
+.modal-mask { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.modal-box {
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 20px 60px rgba(99,102,241,.20);
+}
+
+/* 落地页登录盒：适配壁纸 */
+.landing .login-box,
+.landing .container {
+  background: rgba(255,255,255,.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 40px rgba(99,102,241,.15);
+}
+
+/* 报告页/库存页表格边框更柔和 */
+.table th { background: rgba(238,242,255,.6); }
+
+/* 老浏览器无 backdrop-filter 时降级：纯半透明白底 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .win-topbar, .win-sidebar, .card, .modal-box,
+  .landing .login-box, .landing .container { background: rgba(255,255,255,.92); }
+}
+
+/* 移动端微调：搜索框仍可见 */
+@media (max-width: 720px) {
+  .win-sidebar { background: rgba(255,255,255,.85); }
+}
