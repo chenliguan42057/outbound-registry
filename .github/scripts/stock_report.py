@@ -398,9 +398,12 @@ def send(text, title="库存周报"):
         print("WEBHOOK/SECRET 未配置", file=sys.stderr)
         return False
     url = sign_url(WEBHOOK, SECRET)
-    payload = json.dumps(
-        {"msgtype": "markdown", "markdown": {"title": title, "text": text}}
-    ).encode("utf-8")
+    from ding_card import send_action_card, REG_URL
+    return send_action_card(
+        text, title, WEBHOOK, SECRET,
+        btns=[{"title": "🌿 打开出库登记", "url": REG_URL}],
+        btn_orientation="0",
+    )
     req = urllib.request.Request(
         url, data=payload, headers={"Content-Type": "application/json"}, method="POST"
     )

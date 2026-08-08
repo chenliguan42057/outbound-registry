@@ -390,9 +390,15 @@ def send(text, title="新登记通知"):
         return False, "SECRET 环境变量为空，无法加签（请检查 secrets.DINGTALK_SECRET）"
 
     url = sign_url(WEBHOOK, SECRET)
-    payload = json.dumps(
-        {"msgtype": "markdown", "markdown": {"title": title, "text": text}}
-    ).encode("utf-8")
+    from ding_card import send_action_card, REG_URL
+    return send_action_card(
+        text, title, WEBHOOK, SECRET,
+        btns=[
+            {"title": "🌿 打开出库登记", "url": REG_URL},
+            {"title": "📋 管理后台", "url": REG_URL + "#/app/out-records"}
+        ],
+        btn_orientation="0",
+    )
     req = urllib.request.Request(
         url,
         data=payload,
