@@ -13,6 +13,7 @@
   var Config = window.App.Config;
   var Records = window.App.Records;
   var Cloud = window.App.Cloud;
+  var Stock = window.App.Stock;
 
   var picker = null;
   var photos = null;
@@ -392,6 +393,13 @@
     if (!entity) return Util.toast("请选择结算法人单位", true);
     var items = picker.getItems();
     if (!items.length) return Util.toast("请至少选择一项货品", true);
+    // 库存下限校验：扣减后不得为负（B7）
+    var short = items.filter(function (it) { return (Stock.getStock(it.name) - it.qty) < 0; });
+    if (short.length) {
+      return Util.toast("库存不足：" + short.map(function (it) {
+        return it.name + "（剩 " + Stock.getStock(it.name) + "）";
+      }).join("、"), true);
+    }
 
     var wasEditing = !!editingId;
     var payload = {

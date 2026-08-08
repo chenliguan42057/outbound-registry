@@ -31,6 +31,10 @@
           '<div class="card"><h2>近期活动时序</h2><div id="dashTimeline"></div></div>' +
         '</div>' +
         '<div class="grid2">' +
+          '<div class="card"><h2>📈 业绩榜 <span class="tag">本月</span></h2><div id="dashRank"></div></div>' +
+          '<div class="card"><h2>🔥 高频货品 <span class="tag">本月</span></h2><div id="dashHot"></div></div>' +
+        '</div>' +
+        '<div class="grid2">' +
           '<div class="card"><h2>低库存预警 <span class="tag">&lt;' + Config.LOW_STOCK_THRESHOLD + '</span></h2><div id="dashLow"></div></div>' +
           '<div class="card"><h2>最近出库</h2><div id="dashRecent"></div></div>' +
         '</div>' +
@@ -111,6 +115,8 @@
     renderHeatmap(agg.trend30);
     renderLowBars(agg.low);
     renderTimeline(agg.recent);
+    renderRankBoard();
+    renderHotProducts();
     renderLow();
     renderRecent();
   }
@@ -315,6 +321,67 @@
       '</div>';
     }).join("");
     Util.$("dashRecent").innerHTML = html || '<div class="empty">暂无出库记录</div>';
+  }
+
+  /* ================= B8 业绩榜 + 高频货品（本月） ================= */
+  function monthPrefix() {
+    var d = new Date();
+    var p = function (n) { return (n < 10 ? "0" : "") + n; };
+    return d.getFullYear() + "-" + p(d.getMonth() + 1);
+  }
+  function renderRankBoard() {
+    var el = Util.$("dashRank");
+    if (!el) return;
+    var mp = monthPrefix();
+    var stat = {};
+    (State.list || []).forEach(function (r) {
+      if ((r.type || "out") === "in") return;
+      if (!r.picker || String(r.time || "").slice(0, 7) !== mp) return;
+      var q = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
+      if (!stat[r.picker]) stat[r.picker] = { count: 0, qty: 0 };
+      stat[r.picker].count++;
+      stat[r.picker].qty += q;
+    });
+    var arr = Object.keys(stat).map(function (k) { return { picker: k, count: stat[k].count, qty: stat[k].qty }; })
+      .sort(function (a, b) { return b.qty - a.qty || b.count - a.count; }).slice(0, 6);
+    if (!arr.length) { el.innerHTML = '<div class="empty">本月暂无出库登记</div>'; return; }
+    var max = arr[0].qty || 1;
+    el.innerHTML = arr.map(function (s, i) {
+      var pct = Math.max(2, Math.round(s.qty / max * 100));
+      return '<div class="rank-row">' +
+        '<span class="rank-no">' + (i + 1) + '</span>' +
+        '<span class="rank-name">' + Util.esc(s.picker) + '</span>' +
+        '<div class="rank-bar"><div class="rank-bar-fill" style="width:' + pct + '%;background:linear-gradient(90deg,#7FB3A5,#A79ED0)"></div></div>' +
+        '<span class="rank-val">' + s.qty + ' 件/' + s.count + ' 单</span>' +
+      '</div>';
+    }).join("");
+  }
+  function renderHotProducts() {
+    var el = Util.$("dashHot");
+    if (!el) return;
+    var mp = monthPrefix();
+    var stat = {};
+    (State.list || []).forEach(function (r) {
+      if (String(r.time || "").slice(0, 7) !== mp) return;
+      (r.items || []).forEach(function (it) {
+        var q = Number(it.qty) || 0;
+        if (!stat[it.name]) stat[it.name] = 0;
+        stat[it.name] += q;
+      });
+    });
+    var arr = Object.keys(stat).map(function (k) { return { name: k, qty: stat[k] }; })
+      .sort(function (a, b) { return b.qty - a.qty; }).slice(0, 6);
+    if (!arr.length) { el.innerHTML = '<div class="empty">本月暂无出入记录</div>'; return; }
+    var max = arr[0].qty || 1;
+    el.innerHTML = arr.map(function (s, i) {
+      var pct = Math.max(2, Math.round(s.qty / max * 100));
+      return '<div class="rank-row">' +
+        '<span class="rank-no">' + (i + 1) + '</span>' +
+        '<span class="rank-name">' + Util.esc(s.name) + '</span>' +
+        '<div class="rank-bar"><div class="rank-bar-fill" style="width:' + pct + '%;background:linear-gradient(90deg,#7FB08E,#6FA3A8)"></div></div>' +
+        '<span class="rank-val">' + s.qty + '</span>' +
+      '</div>';
+    }).join("");
   }
 
   window.App = window.App || {};
