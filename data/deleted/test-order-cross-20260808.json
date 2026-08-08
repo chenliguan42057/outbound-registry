@@ -1,0 +1,1 @@
+{"type":"tombstone","id":"test-order-cross-20260808","deletedAt":1786155556859,"reason":"1","rec":{"id":"test-order-cross-20260808","type":"out","time":"2026-08-08T11:00","picker":"【跨表核验】","entity":"深圳细胞法人","purpose":"跨表链路自检-可删除","dept":"测试部","items":[{"name":"洁面慕斯 150ml","qty":1},{"name":"舒缓精粹水 120ml","qty":2},{"name":"冻干精华液 20支装","qty":4}]}}
