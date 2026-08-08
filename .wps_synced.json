@@ -30,5 +30,14 @@
   "msilipriychy8": true,
   "test-verify-20260807": true,
   "msj634plrf8ms": true,
-  "__bad__": {}
+  "__bad__": {},
+  "__fail__": {},
+  "pilot-1786158041698-fyebf": {
+    "ok": 1,
+    "fail": 0,
+    "at": "2026-08-08T03:00:55Z",
+    "rows": {
+      "2026时空鹿茸库存": 468
+    }
+  }
 }
