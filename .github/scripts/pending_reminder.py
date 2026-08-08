@@ -121,13 +121,17 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
     # 每类最多展示条数，超出折叠提示，避免长消息刷屏
     MAX_SHOW = 15
 
-    def lines_of(title, items, label):
+    def lines_of(title, items, label, warn_ids=None):
         """每条记录：序号 + 领取人/取货人 + 时间 各占一行；货品明细逐项缩进一行。
-        钉钉 markdown 对超长单行会强制换行导致堆在一起，逐项分行更整齐。"""
+        钉钉 markdown 对超长单行会强制换行导致堆在一起，逐项分行更整齐。
+        warn_ids：需标「已超时」的记录 id 集合（超时项加 ⚠️ 与（已超时））。"""
         lines = ["**{}（{} 条）**".format(title, len(items))]
         for i, it in enumerate(items[:MAX_SHOW], 1):
             picker = it.get("picker", "") or "-"
             time_str = fmt_time(it)
+            if warn_ids and it.get("id") in warn_ids:
+                picker = "⚠️ " + picker
+                time_str += "（已超时）"
             lines.append("{}. **{}**　📅 {}".format(i, picker, time_str))
             # 货品明细逐项缩进（每项一行）
             sub = it.get("items") or []
@@ -151,7 +155,12 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
     if unconfirmed:
         parts.append("\n".join(lines_of("🧾 待取货未确认提单", unconfirmed, "取货人")))
     if unshipped:
-        parts.append("\n".join(lines_of("📦 待取货未出库", unshipped, "取货人")))
+        now_cmp = now.strftime("%Y-%m-%dT%H:%M")
+        overdue_ids = set(
+            p.get("id") for p in unshipped
+            if str(p.get("time", "")).strip() and str(p.get("time", "")).strip() <= now_cmp
+        )
+        parts.append("\n".join(lines_of("📦 待取货未出库", unshipped, "取货人", warn_ids=overdue_ids)))
     if borrowed_open:
         parts.append("\n".join(lines_of("📤 借出未归还", borrowed_open, "借出人")))
 

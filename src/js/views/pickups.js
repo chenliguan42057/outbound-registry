@@ -319,10 +319,19 @@
   function renderList() {
     if (!listBox) return;
     var list = State.pickups;
+    var nowD = new Date();
+    var p2 = function (n) { return (n < 10 ? "0" : "") + n; };
+    var nowStr = nowD.getFullYear() + "-" + p2(nowD.getMonth() + 1) + "-" + p2(nowD.getDate()) + "T" + p2(nowD.getHours()) + ":" + p2(nowD.getMinutes());
     var todo = list.filter(function (p) { return p.shipped !== true; });
+    // A8 超时置顶：预计取货时间已过且未出库 → 置顶标红
+    todo.forEach(function (p) { p.__overdue = !!(p.time && p.time <= nowStr); });
+    todo.sort(function (a, b) {
+      return ((b.__overdue ? 1 : 0) - (a.__overdue ? 1 : 0)) || (a.time || "").localeCompare(b.time || "");
+    });
+    var overCount = todo.filter(function (p) { return p.__overdue; }).length;
     var shipped = list.filter(function (p) { return p.shipped === true; });
     var shown = activeTab === "shipped" ? shipped : todo;
-    Util.$("pkCount").textContent = shown.length + " 条";
+    Util.$("pkCount").textContent = shown.length + " 条" + (activeTab === "todo" && overCount ? "（超时 " + overCount + "）" : "");
     if (!shown.length) {
       listBox.innerHTML = '<div class="empty">' +
         (activeTab === "shipped" ? "暂无已出库记录。" : "暂无待取货登记，请先在上方登记。") +
@@ -339,9 +348,9 @@
       var qtys = (p.items || []).map(function (it, idx, arr) {
         return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + it.qty + '</div>';
       }).join("");
-      html += '<tr>' +
+      html += '<tr' + (p.__overdue ? ' style="background:rgba(201,135,127,.09)"' : '') + '>' +
         '<td><div>' + (shown.length - i) + '</div></td>' +
-        '<td>' + Util.esc(p.time || "-") + '</td>' +
+        '<td>' + Util.esc(p.time || "-") + (p.__overdue ? ' <span class="tag danger-tag">⏰ 超时</span>' : '') + '</td>' +
         '<td>' + Util.esc(p.picker || "-") + '</td>' +
         '<td>' + Util.esc(p.dept || "-") + '</td>' +
         '<td class="items-cell">' + items + '</td>' +
