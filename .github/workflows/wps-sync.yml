@@ -1,10 +1,12 @@
 name: WPS 轻维表同步 (鹿茸)
 # 链接提交 → 写 GitHub → 本 Action 自动把鹿茸记录推送到金山轻维表（照台账格式追加一行）
+# 链接删除 → 写删除墓碑 data/deleted/ → 本 Action 把金山对应那一行也删掉并重算下游库存
 on:
   push:
     branches: [ main ]
     paths:
       - 'data/records/*.json'
+      - 'data/deleted/*.json'
   # 兜底扫描：每小时补同步「因并发被取消/网络失败」而漏掉的记录（已同步的靠标记跳过，不会重复写）
   schedule:
     - cron: '20 * * * *'
@@ -35,14 +37,15 @@ jobs:
       - name: Get changed record files
         id: changed
         run: |
+          # 同时盯两个目录：records=新增行，deleted=删除行
           if [ "${{ github.event_name }}" = "push" ]; then
             # 用 event.before..sha 全范围 diff（合并 push 会吞前序 commit 变更，导致漏同步）
-            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data/records/*.json' || true)
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data/records/*.json' 'data/deleted/*.json' || true)
           elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.backfill }}" = "true" ]; then
-            # 全量扫描：列出所有记录文件标记为新增；已同步的会被 .wps_synced.json 跳过，不会重复写
-            FILES=$(git ls-tree -r --name-only HEAD -- 'data/records/*.json' | sed 's/^/A\t/' || true)
+            # 全量扫描：列出所有记录/墓碑文件标记为新增；已处理的会被 .wps_synced.json 跳过，不会重复写/重复删
+            FILES=$(git ls-tree -r --name-only HEAD -- 'data/records/*.json' 'data/deleted/*.json' | sed 's/^/A\t/' || true)
           else
-            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data/records/*.json' || true)
+            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data/records/*.json' 'data/deleted/*.json' || true)
           fi
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
@@ -79,7 +82,14 @@ jobs:
               theirs = json.load(open('.wps_synced.json', encoding='utf-8'))
           except Exception:
               theirs = {}
-          merged = dict(theirs); merged.update(mine)
+          # 两边取并集。注意 __del__/__fail__/__bad__ 是嵌套字典，
+          # 直接 update 会把对方整块覆盖掉 → 已删记录的标记丢失 → 兜底扫描会重复删。所以要下钻一层。
+          merged = dict(theirs)
+          for k, v in mine.items():
+              if isinstance(v, dict) and isinstance(merged.get(k), dict) and str(k).startswith('__'):
+                  sub = dict(merged[k]); sub.update(v); merged[k] = sub
+              else:
+                  merged[k] = v
           json.dump(merged, open('.wps_synced.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
           print('合并标记: 本地%d + 远程%d -> %d' % (len(mine), len(theirs), len(merged)))
           PY

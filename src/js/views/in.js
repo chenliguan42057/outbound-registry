@@ -164,18 +164,34 @@
     }
     Util.toast(msg);
     // 优先单条带重试推送本条；失败自动入持久化队列，下次启动/自动同步时补推（关页面也不丢）
-    Cloud.pushRecord(rec).then(function () {
-      return Cloud.flushQueue();
-    }).then(function (fres) {
+    Cloud.pushRecord(rec).then(function (pushed) {
+      return Cloud.flushQueue().then(function (fres) { return { pushed: pushed, fres: fres }; });
+    }).then(function (r) {
+      var fres = r.fres;
       State.lastSync = new Date();
       window.App.Views.app.setSyncStatus("已同步 " + State.lastSync.toLocaleString(), false);
       var remain = (fres && fres.remain) || 0;
       if (remain > 0) {
         window.App.Views.app.setSyncStatus("部分待补推（" + remain + " 条稍后自动重试）", true);
         Util.toast("已存本地，云端稍后自动补推", true);
+        return;
       }
+      if (r.pushed) watchWpsReceipt(rec);
     }).catch(function (e) {
       window.App.Views.app.setSyncStatus("云端同步失败：" + e.message + "（已存本地，稍后重试）", true);
+    });
+  }
+
+  /** 追踪金山台账回执：上云只是第一步，真正落进台账才算数，把这一步也显示给用户看 */
+  function watchWpsReceipt(rec) {
+    if (!Cloud.waitWpsReceipt) return;
+    window.App.Views.app.setSyncStatus("⏳ 已上云，正在写入金山台账…", false);
+    Cloud.waitWpsReceipt(rec.id, function (st) {
+      if (!st || st.phase === "waiting") return;
+      var d = Cloud.describeWpsReceipt(st);
+      if (!d) return;
+      window.App.Views.app.setSyncStatus(d.text, d.isErr);
+      if (d.toast) Util.toast(d.toast, d.isErr);
     });
   }
 

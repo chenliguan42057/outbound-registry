@@ -408,6 +408,84 @@
     return id;
   }
 
+  /* ================= 金山台账回执（提交后告诉用户「真的进台账了」） =================
+     链路：前端 PUT 记录 → GitHub Action(wps-sync) 调金山写行 → 回写 .wps_synced.json →
+           前端轮询这个标记文件 → 看到自己这条 id 就显示「✅已入金山台账（表名 第N行）」。
+     没有这一步，用户只知道"上云了"，不知道台账到底写没写成，出问题也无感。 */
+
+  var WPS_MARKER_PATH = ".wps_synced.json";
+
+  /** 读取金山同步标记文件；读不到返回 null（不抛错，轮询会继续重试） */
+  async function fetchWpsMarker() {
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + WPS_MARKER_PATH +
+              "?ref=" + Config.GH.branch + "&_=" + Date.now();   // 时间戳绕开 CDN/浏览器缓存
+    try {
+      var j = await apiJson(url, { cache: "no-store" });
+      return JSON.parse(Util.b64dec(j.content));
+    } catch (e) { return null; }
+  }
+
+  /** 从标记文件里读某条记录的台账状态。
+      返回 null=还没结果（继续等）；否则 {phase, rows, detail}
+      phase: done=已写入 / skip=本单无鹿茸商品不入台账 / fail=金山写入失败 */
+  function readWpsState(marker, id) {
+    if (!marker) return null;
+    var fails = marker.__fail__ || {};
+    var st = marker[id];
+    if (st === undefined || st === null) {
+      // 正式标记还没有，但失败回执先到了 → 立刻告诉用户失败，别让他干等
+      if (fails[id]) return { phase: "fail", detail: fails[id] };
+      return null;
+    }
+    if (st === true) return { phase: "done", rows: {} };          // 老格式：只知道成功
+    if (st.skip) return { phase: "skip", detail: st };
+    if (st.ok > 0) return { phase: "done", rows: st.rows || {}, detail: st };
+    return { phase: "fail", detail: st };
+  }
+
+  /** 轮询等待金山台账回执。
+      onUpdate(state) 会被调用多次：先 {phase:'waiting'}，最终 done/skip/fail/timeout 之一。
+      Action 排队 + 金山写入通常 30~90 秒，所以默认等到 3 分钟。 */
+  async function waitWpsReceipt(id, onUpdate, opts) {
+    opts = opts || {};
+    var every = opts.intervalMs || 7000;
+    var maxTries = opts.maxTries || 26;        // 7s × 26 ≈ 3 分钟
+    var cb = onUpdate || function () {};
+    if (!id || !hasToken()) return { phase: "unknown" };
+    cb({ phase: "waiting", tries: 0 });
+    for (var i = 1; i <= maxTries; i++) {
+      await new Promise(function (r) { setTimeout(r, every); });
+      var st = readWpsState(await fetchWpsMarker(), id);
+      if (st) { cb(st); return st; }
+      cb({ phase: "waiting", tries: i });
+    }
+    var t = { phase: "timeout" };
+    cb(t);
+    return t;
+  }
+
+  /** 把回执状态翻成人话（顶栏状态文案）。返回 {text, isErr, toast} */
+  function describeWpsReceipt(st) {
+    if (!st) return null;
+    if (st.phase === "done") {
+      var parts = [];
+      var rows = st.rows || {};
+      for (var k in rows) parts.push(k + " 第" + rows[k] + "行");
+      return { text: "✅ 已写入金山台账" + (parts.length ? "（" + parts.join("、") + "）" : ""),
+               isErr: false, toast: "✅ 已写入金山台账" };
+    }
+    if (st.phase === "skip") {
+      return { text: "✅ 已同步云端（本单无鹿茸商品，不进台账）", isErr: false, toast: "" };
+    }
+    if (st.phase === "fail") {
+      return { text: "⚠️ 金山台账写入失败，请联系管理员核对", isErr: true, toast: "⚠️ 金山台账写入失败" };
+    }
+    if (st.phase === "timeout") {
+      return { text: "已上云；金山台账写入较慢，稍后会自动完成", isErr: true, toast: "" };
+    }
+    return null;
+  }
+
   /**
    * 拉取 + 合并 + 应用墓碑 + 落盘
    * 墓碑机制：云端 data/deleted/ 中的墓碑会删除本地对应 id 的残留记录（解决"删除不同步"）。
@@ -462,6 +540,10 @@
     flushQueue: flushQueue,
     pushRemind: pushRemind,
     pushNotifyFile: pushNotifyFile,
+    fetchWpsMarker: fetchWpsMarker,
+    readWpsState: readWpsState,
+    waitWpsReceipt: waitWpsReceipt,
+    describeWpsReceipt: describeWpsReceipt,
     syncPull: syncPull,
     pushTombstone: pushTombstone,
     delWithTombstone: delWithTombstone,
