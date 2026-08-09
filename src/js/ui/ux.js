@@ -10,7 +10,7 @@
   var UI = window.App.UI;
 
   var KEY = "outbound_ux_v1";
-  var SETTINGS = { theme: "light", font: "md", contrast: false, accent: "mint", sound: false };
+  var SETTINGS = { theme: "auto", font: "md", contrast: false, accent: "mint", sound: false };
 
   function load() {
     try {
@@ -21,7 +21,12 @@
   function save() { try { localStorage.setItem(KEY, JSON.stringify(SETTINGS)); } catch (e) {} }
   function apply() {
     var root = document.documentElement;
-    root.setAttribute("data-theme", SETTINGS.theme);
+    var theme = SETTINGS.theme;
+    // “自动”跟随系统深色偏好（prefers-color-scheme）；不支持 matchMedia 时回退浅色
+    if (theme === "auto") {
+      theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    }
+    root.setAttribute("data-theme", theme);
     root.setAttribute("data-font", SETTINGS.font);
     root.setAttribute("data-accent", SETTINGS.accent);
     root.setAttribute("data-contrast", SETTINGS.contrast ? "high" : "");
@@ -97,6 +102,7 @@
     };
     var body =
       '<div class="ux-settings-row"><span class="k">🌙 深色模式</span><span class="v">' +
+        chip("auto", "自动", SETTINGS.theme, "theme") +
         chip("light", "浅色", SETTINGS.theme, "theme") +
         chip("dark", "深色", SETTINGS.theme, "theme") + '</span></div>' +
       '<div class="ux-settings-row"><span class="k">🔠 字号</span><span class="v">' +
@@ -165,24 +171,61 @@
   /* ================= 初始化 ================= */
   load();
   apply();
-  ensureBar();
-  injectButtons();
+  // 用户选择“自动”时，跟随系统深浅色实时切换（切换浅/深手动档则不受影响）
+  if (window.matchMedia) {
+    var _mq = window.matchMedia("(prefers-color-scheme: dark)");
+    var _onMq = function () { if (SETTINGS.theme === "auto") apply(); };
+    if (_mq.addEventListener) _mq.addEventListener("change", _onMq);
+    else if (_mq.addListener) _mq.addListener(_onMq);   // 旧版 Safari 兼容
+  }
+
+  /**
+   * 顶栏（.win-topbar-right / .landing-topbar）是路由渲染视图之后才存在的 DOM。
+   * 本文件在 index.html 里同步执行，此刻 Router 尚未 start，两个挂载点都还不存在，
+   * 于是「⚙ 显示与体验设置」按钮从未被插入 —— 深色模式、字号、音效整套设置都无从触达。
+   * 修法：DOM 就绪后先试一次，之后由下面的 MutationObserver 持续补挂（injectButtons 自身幂等）。
+   */
+  function boot() {
+    ensureBar();
+    injectButtons();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 
   // 路由/加载时进度条
   window.addEventListener("hashchange", function () {
     startProgress();
     setTimeout(doneProgress, 650);
+    injectButtons();          // 落地页 ⇄ 管理页切换会重建顶栏，需要重新补挂
   });
   window.addEventListener("load", function () {
     startProgress();
     setTimeout(doneProgress, 700);
+    boot();
   });
 
-  // 提交成功音效：检测 .fx-success 出现（升级后的全屏暖心页）→ 响一声
+  // DOM 变动观察：① 成功页出现时响一声 ② 顶栏出现时补挂设置按钮
+  // 用 rAF 合并高频变动，避免视图批量重建时反复查询。
+  var obsPending = false;
   var fxObs = new MutationObserver(function () {
-    if (document.querySelector(".fx-success")) beep(true);
+    if (obsPending) return;
+    obsPending = true;
+    requestAnimationFrame(function () {
+      obsPending = false;
+      if (document.querySelector(".fx-success")) beep(true);
+      injectButtons();
+    });
   });
-  fxObs.observe(document.body, { childList: true, subtree: true });
+  if (document.body) {
+    fxObs.observe(document.body, { childList: true, subtree: true });
+  } else {
+    document.addEventListener("DOMContentLoaded", function () {
+      fxObs.observe(document.body, { childList: true, subtree: true });
+    });
+  }
 
   window.App = window.App || {};
   window.App.UX = {

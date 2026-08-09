@@ -54,9 +54,7 @@
     var low = sum.filter(function (x) { return x.stock < Config.LOW_STOCK_THRESHOLD; });
     lines.push("【低库存货品数】" + low.length + "（阈值 " + Config.LOW_STOCK_THRESHOLD + " 件）");
 
-    var now = new Date();
-    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
-    var todayStr = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
+    var todayStr = window.App.Util.todayLocal();   // 统一走 Util（本文件未在顶部捕获 Util，用全限定名避免加载顺序依赖）
     var todayOut = 0;
     (State.list || []).forEach(function (r) {
       if (String(r.time || "").slice(0, 10) !== todayStr) return;

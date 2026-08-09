@@ -19,6 +19,8 @@
   var photos = null;
   var editingId = null;
   var els = null;
+  /** 提交互斥锁：防止移动端双击 / 快速连点产生重复出库单（编号也会随之错乱） */
+  var submitting = false;
   /** 当前选中的用途值（chip 单选，互斥高亮） */
   var selectedPurpose = "";
   /** 结算法人单位默认值：预设第一项「深圳细胞法人」，仅手动点击赛迪斯或自定义后才切换 */
@@ -31,57 +33,57 @@
       '<div class="card">' +
         '<h2>出库登记 <span class="tag">基础登记</span></h2>' +
         '<div class="field">' +
-          '<label>结算法人单位<span class="req">*</span></label>' +
-          '<div id="outEntityChips" class="chip-group"></div>' +
+          '<span class="field-label" id="outEntityLabel">结算法人单位<span class="req">*</span></span>' +
+          '<div id="outEntityChips" class="chip-group" role="group" aria-labelledby="outEntityLabel"></div>' +
           '<div class="purpose-add-row">' +
             '<button type="button" class="chip-add" id="outEntityAdd">+ 添加</button>' +
             '<span class="purpose-add-inline" id="outEntityAddInline" style="display:none;">' +
-              '<input type="text" id="outEntityInput" class="purpose-add-input" placeholder="输入自定义法人" maxlength="30" autocomplete="off" />' +
+              '<input type="text" id="outEntityInput" class="purpose-add-input" placeholder="输入自定义法人" maxlength="30" autocomplete="off" enterkeyhint="done" aria-label="自定义结算法人单位" />' +
               '<button type="button" class="btn mini" id="outEntityOk">确定</button>' +
               '<button type="button" class="btn ghost mini" id="outEntityCancel">取消</button>' +
             '</span>' +
           '</div>' +
         '</div>' +
         '<div class="field">' +
-          '<label>部门 / 领取单位<span class="req">*</span></label>' +
+          '<label for="outDept">部门 / 领取单位<span class="req">*</span></label>' +
           '<div class="search-wrap">' +
-            '<input type="text" id="outDept" placeholder="请输入部门 / 领取单位" autocomplete="off" />' +
+            '<input type="text" id="outDept" placeholder="请输入部门 / 领取单位" autocomplete="organization" inputmode="text" enterkeyhint="next" />' +
             '<div class="suggest" id="outDeptSuggest"></div>' +
           '</div>' +
         '</div>' +
         '<div class="grid2">' +
           '<div class="field">' +
-            '<label>领取时间<span class="req">*</span></label>' +
+            '<label for="outTime">领取时间<span class="req">*</span></label>' +
             '<input type="datetime-local" id="outTime" />' +
             '<div class="hint"><span class="auto" id="outFillNow">📎 自动填入当前时间</span></div>' +
           '</div>' +
           '<div class="field">' +
-            '<label>领取人 and 工号or手机<span class="req">*</span></label>' +
+            '<label for="outPicker">领取人 / 工号 / 手机<span class="req">*</span></label>' +
             '<div class="search-wrap">' +
-              '<input type="text" id="outPicker" placeholder="请输入领取人姓名、工号或手机" autocomplete="off" />' +
+              '<input type="text" id="outPicker" placeholder="请输入领取人姓名、工号或手机" autocomplete="name" inputmode="text" enterkeyhint="next" />' +
               '<div class="suggest" id="outPickerSuggest"></div>' +
             '</div>' +
           '</div>' +
         '</div>' +
         '<div class="field">' +
-          '<label>用途 / 项目<span class="req">*</span></label>' +
-          '<div id="outPurposeChips" class="chip-group"></div>' +
+          '<span class="field-label" id="outPurposeLabel">用途 / 项目<span class="req">*</span></span>' +
+          '<div id="outPurposeChips" class="chip-group" role="group" aria-labelledby="outPurposeLabel"></div>' +
           '<div class="purpose-add-row">' +
             '<button type="button" class="chip-add" id="outPurposeAdd">+ 添加</button>' +
             '<span class="purpose-add-inline" id="outPurposeAddInline" style="display:none;">' +
-              '<input type="text" id="outPurposeInput" class="purpose-add-input" placeholder="输入自定义用途" maxlength="30" autocomplete="off" />' +
+              '<input type="text" id="outPurposeInput" class="purpose-add-input" placeholder="输入自定义用途" maxlength="30" autocomplete="off" enterkeyhint="done" aria-label="自定义用途 / 项目" />' +
               '<button type="button" class="btn mini" id="outPurposeOk">确定</button>' +
               '<button type="button" class="btn ghost mini" id="outPurposeCancel">取消</button>' +
             '</span>' +
           '</div>' +
         '</div>' +
         '<div class="field">' +
-          '<label>货物名称<span class="req">*</span></label>' +
-          '<div id="outProductPicker"></div>' +
+          '<span class="field-label" id="outProductLabel">货物名称<span class="req">*</span></span>' +
+          '<div id="outProductPicker" role="group" aria-labelledby="outProductLabel"></div>' +
         '</div>' +
         '<div class="field">' +
-          '<label>备注</label>' +
-          '<textarea id="outNote" rows="2" maxlength="500" placeholder="如有任何补充说明…" autocomplete="off"></textarea>' +
+          '<label for="outNote">备注</label>' +
+          '<textarea id="outNote" rows="2" maxlength="500" placeholder="如有任何补充说明…" autocomplete="off" enterkeyhint="enter"></textarea>' +
         '</div>' +
         '<div class="field">' +
           '<label>现场照片（留存）</label>' +
@@ -126,6 +128,40 @@
     Util.$("outReset").addEventListener("click", resetForm);
     Util.$("outCancelEdit").addEventListener("click", function () { resetForm(); Util.toast("已取消编辑"); });
     Util.$("outSubmit").addEventListener("click", submit);
+
+    // Enter 键：在普通文本框内按回车 → 跳到下一个待填字段，而不是提交整单（避免误触）。
+    // 货品搜索框的 Enter 由 ProductPicker 自行处理（选中候选项，兼容扫码枪），此处放行。
+    container.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Enter" || ev.defaultPrevented) return;
+      var t = ev.target;
+      if (!t || t.tagName !== "INPUT") return;
+      if (t.type === "textarea" || t.classList.contains("search")) return;
+      if (t.classList.contains("purpose-add-input")) return;   // 已有各自的确认逻辑
+      if (t.classList.contains("qty")) { ev.preventDefault(); t.blur(); return; }
+      ev.preventDefault();
+      var focusables = container.querySelectorAll('input:not([type=hidden]):not([disabled]), textarea');
+      var arr = Array.prototype.slice.call(focusables).filter(function (n) { return n.offsetParent !== null; });
+      var i = arr.indexOf(t);
+      if (i > -1 && i < arr.length - 1) arr[i + 1].focus();
+      else t.blur();
+    });
+
+    // 用户开始修正时立即撤掉该字段的错误标注，避免「已改好但仍标红」的割裂感
+    function dismissErrorAt(target) {
+      var f = target && target.closest ? target.closest(".field.has-error") : null;
+      if (!f) return;
+      f.classList.remove("has-error");
+      var tip = f.querySelector(":scope > .field-error");
+      if (tip && tip.parentNode) tip.parentNode.removeChild(tip);
+      if (target.removeAttribute) target.removeAttribute("aria-invalid");
+    }
+    container.addEventListener("input", function (ev) { dismissErrorAt(ev.target); });
+    container.addEventListener("click", function (ev) {
+      // chip 选择、货品选择等非 input 交互
+      if (ev.target && ev.target.closest && ev.target.closest(".chip, .suggest div, .sel-item")) {
+        dismissErrorAt(ev.target);
+      }
+    });
 
     setupHistorySuggest("outDept", "outDeptSuggest", Config.DEPT_HISTORY_KEY);
     setupHistorySuggest("outPicker", "outPickerSuggest", Config.PICKER_HISTORY_KEY);
@@ -370,9 +406,7 @@
 
   /** 出库单自动编号：ORD-YYYYMMDD-NNN（当日序号；纯追加字段 orderNo，不影响既有 schema） */
   function genOrderNo() {
-    var d = new Date();
-    var p = function (n) { return (n < 10 ? "0" : "") + n; };
-    var today = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+    var today = Util.todayLocal();   // 统一走 Util，避免各文件各写一份补零逻辑
     var count = (State.list || []).filter(function (r) {
       return (r.type || "out") !== "in" && (r.time || "").indexOf(today) === 0;
     }).length;
@@ -380,27 +414,59 @@
     return "ORD-" + today.replace(/-/g, "") + "-" + (seq >= 1000 ? String(seq) : ("00" + seq).slice(-3));
   }
 
+  /** 切换提交按钮的加载态。注意不要改 textContent——resetForm() 会把它重置为「提交登记」 */
+  function setSubmitting(on) {
+    submitting = !!on;
+    if (!els || !els.submit) return;
+    els.submit.disabled = !!on;
+    els.submit.classList.toggle("loading", !!on);
+    els.submit.setAttribute("aria-busy", on ? "true" : "false");
+  }
+
   function submit() {
+    if (submitting) return;   // 连点二次直接吞掉
+
     var time = els.time.value;
     var pickerVal = els.picker.value.trim();
     var purpose = getPurposeSelected();
     var entity = getEntitySelected();
     var dept = els.dept.value.trim();
-    if (!time) return Util.toast("请填写领取时间", true);
-    if (!pickerVal) return Util.toast("请填写领取人", true);
-    if (!dept) return Util.toast("请填写部门/领取单位（必填）", true);
-    if (!purpose) return Util.toast("请选择用途/项目（必填）", true);
-    if (!entity) return Util.toast("请选择结算法人单位", true);
+
+    // 一次性收集全部缺失项，字段级标红 + 滚动定位到第一处，替代「一次只弹一条 toast」
+    var errs = [];
+    if (!entity) errs.push({ el: els.entityChips, msg: "请选择结算法人单位" });
+    if (!dept) errs.push({ el: els.dept, msg: "请填写部门 / 领取单位" });
+    if (!time) errs.push({ el: els.time, msg: "请填写领取时间" });
+    if (!pickerVal) errs.push({ el: els.picker, msg: "请填写领取人" });
+    if (!purpose) errs.push({ el: els.purposeChips, msg: "请选择用途 / 项目" });
+
     var items = picker.getItems();
-    if (!items.length) return Util.toast("请至少选择一项货品", true);
-    // 库存下限校验：扣减后不得为负（B7）
-    var short = items.filter(function (it) { return (Stock.getStock(it.name) - it.qty) < 0; });
-    if (short.length) {
-      return Util.toast("库存不足：" + short.map(function (it) {
-        return it.name + "（剩 " + Stock.getStock(it.name) + "）";
-      }).join("、"), true);
+    var qtyProblems = picker.validateItems ? picker.validateItems() : [];
+    if (!items.length) {
+      errs.push({
+        el: Util.$("outProductPicker"),
+        msg: qtyProblems.length ? ("请填写数量：" + qtyProblems.join("、")) : "请至少选择一项货品"
+      });
+    } else if (qtyProblems.length) {
+      errs.push({ el: Util.$("outProductPicker"), msg: "以下货品数量无效：" + qtyProblems.join("、") });
     }
 
+    if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) {
+      return;
+    }
+
+    // 库存下限校验：扣减后不得为负（B7）。属聚合信息，保留 toast，同时给货品区标红。
+    var short = items.filter(function (it) { return (Stock.getStock(it.name) - it.qty) < 0; });
+    if (short.length) {
+      var shortMsg = "库存不足：" + short.map(function (it) {
+        return it.name + "（剩 " + Stock.getStock(it.name) + "）";
+      }).join("、");
+      UI.reportFieldErrors([{ el: Util.$("outProductPicker"), msg: shortMsg }], els.submit.closest(".card") || document);
+      Util.toast(shortMsg, true);
+      return;
+    }
+
+    setSubmitting(true);
     var wasEditing = !!editingId;
     var payload = {
       time: time,
@@ -420,15 +486,16 @@
     var rec;
     if (editingId) {
       rec = Records.update(editingId, payload);
-      if (!rec) { Util.toast("记录不存在", true); return; }
+      if (!rec) { Util.toast("记录不存在", true); setSubmitting(false); return; }
     } else {
       rec = Records.create(payload);
     }
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
     resetForm();
-    // 先上传照片并写回 photoUrls（首推即含图）；再统一推送
-    submitPush(rec, wasEditing);
+    // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
+    // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。
+    submitPush(rec, wasEditing)["catch"](function () {})["finally"](function () { setSubmitting(false); });
     // D1 成功动效：刷新最近提交 + 打勾涟漪（含出库单号）并滚动定位
     if (window.App.Views.landing && window.App.Views.landing.renderRecent) {
       window.App.Views.landing.renderRecent();
@@ -515,6 +582,7 @@
     editingId = null;
     els.submit.textContent = "提交登记";
     els.cancelEdit.style.display = "none";
+    UI.clearFieldErrors(els.submit.closest(".card") || document);
     clearDraft();
   }
 

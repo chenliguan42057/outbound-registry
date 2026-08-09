@@ -21,6 +21,9 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  /** 两位补零：9 → "09" */
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
   /** 当前时间（本地时区），格式 datetime-local："YYYY-MM-DDTHH:mm" */
   function nowLocal() {
     var d = new Date();
@@ -28,14 +31,30 @@
     return d.toISOString().slice(0, 16);
   }
 
+  /**
+   * 本地日期串 "YYYY-MM-DD"。
+   * 统一入口：全站禁止再用 toISOString().slice(0,10)——那是 UTC，东八区 08:00 前会算成前一天。
+   * @param {Date|string|number} [d] 缺省取当前时间
+   * @returns {string} 非法输入返回 ""
+   */
+  function todayLocal(d) {
+    var date = (d == null) ? new Date() : (d instanceof Date ? d : new Date(d));
+    if (isNaN(date.getTime())) return "";
+    return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
+  }
+
+  /** 本地月份串 "YYYY-MM"（同 todayLocal 的时区口径） */
+  function monthLocal(d) {
+    var s = todayLocal(d);
+    return s ? s.slice(0, 7) : "";
+  }
+
   /** 时间显示格式化："YYYY-MM-DD HH:mm" */
   function fmtDateTime(d) {
     if (!d) return "-";
     var date = d instanceof Date ? d : new Date(d);
     if (isNaN(date.getTime())) return "-";
-    var p = function (n) { return (n < 10 ? "0" : "") + n; };
-    return date.getFullYear() + "-" + p(date.getMonth() + 1) + "-" + p(date.getDate()) +
-      " " + p(date.getHours()) + ":" + p(date.getMinutes());
+    return todayLocal(date) + " " + pad2(date.getHours()) + ":" + pad2(date.getMinutes());
   }
 
   /** Base64 编解码（UTF-8 安全，与现网一致） */
@@ -78,7 +97,10 @@
     $: $,
     esc: esc,
     genId: genId,
+    pad2: pad2,
     nowLocal: nowLocal,
+    todayLocal: todayLocal,
+    monthLocal: monthLocal,
     fmtDateTime: fmtDateTime,
     b64enc: b64enc,
     b64dec: b64dec,

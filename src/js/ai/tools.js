@@ -317,7 +317,7 @@
 
     // ③ 现在几点
     if (/(?:现在|当前)/.test(raw) && /(?:几点|时间|什么时候)/.test(raw)) {
-      var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      var pad = window.App.Util.pad2;   // 统一走 Util
       var text3 = "现在是 " + pad(now.getHours()) + ":" + pad(now.getMinutes()) + "（" + fmtDateCN(now, true) + "）";
       return {
         type: "tool",

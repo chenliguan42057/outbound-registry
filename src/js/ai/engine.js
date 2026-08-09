@@ -61,14 +61,11 @@
   /* 记录过滤时的停用词（不作为领取人/部门/用途候选） */
   var STOP_WORDS = /记录|出库|入库|最近|哪些|什么|多少|还有|那个|一些|今天|昨天|今日|昨日|给我|看看|查|一下|的|了|过|有|是|在|和|与|及|请|帮|我|你/;
 
-  /** 补零 */
-  function pad2(n) { return (n < 10 ? "0" : "") + n; }
-
-  /** 今日日期字符串 YYYY-MM-DD */
+  /** 今日日期字符串 YYYY-MM-DD（统一走 Util，口径与看板/报表一致） */
   function todayStr(offsetDays) {
     var d = new Date();
     d.setDate(d.getDate() - (offsetDays || 0));
-    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    return window.App.Util.todayLocal(d);
   }
 
   /** 去重（保持顺序） */

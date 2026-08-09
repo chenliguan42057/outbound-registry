@@ -225,6 +225,7 @@
     this.suggestEl = null;
     this.listEl = null;
     this.hintEl = null;
+    this.activeIndex = -1;            // 候选列表键盘高亮下标（-1 表示无）
   }
 
   ProductPicker.prototype.attach = function (container) {
@@ -232,7 +233,7 @@
     this.container = container;
     container.innerHTML =
       '<div class="search-wrap">' +
-        '<input type="text" class="search" placeholder="' + Util.esc(this.placeholder) + '" autocomplete="off" />' +
+        '<input type="text" class="search" placeholder="' + Util.esc(this.placeholder) + '" autocomplete="off" inputmode="search" enterkeyhint="search" role="combobox" aria-expanded="false" aria-autocomplete="list" />' +
         '<div class="suggest"></div>' +
       '</div>' +
       '<div class="selected"></div>' +
@@ -244,9 +245,46 @@
 
     this.searchEl.addEventListener("input", function () { self.renderSuggest(); });
     this.searchEl.addEventListener("focus", function () { self.renderSuggest(); });
-    document.addEventListener("click", function (e) {
-      if (!e.target.closest(".search-wrap")) self.suggestEl.style.display = "none";
+    // 键盘 / 扫码枪：↑↓ 移动候选，Enter 选中当前候选（扫码枪打完条码发 Enter 的语义是
+    // 「选中这件货品」而不是「提交整单」），Esc 收起候选列表。
+    this.searchEl.addEventListener("keydown", function (e) {
+      var key = e.key;
+      if (key === "Escape") { self.suggestEl.style.display = "none"; self.activeIndex = -1; return; }
+      var open = self.suggestEl.style.display !== "none";
+      var opts = self.suggestEl.children;
+      if (key === "ArrowDown" || key === "ArrowUp") {
+        if (!open) { self.renderSuggest(); opts = self.suggestEl.children; }
+        if (!opts.length) return;
+        e.preventDefault();
+        var dir = key === "ArrowDown" ? 1 : -1;
+        var n = opts.length;
+        self.activeIndex = ((self.activeIndex < 0 ? (dir > 0 ? -1 : 0) : self.activeIndex) + dir + n) % n;
+        self.highlightSuggest();
+        return;
+      }
+      if (key === "Enter") {
+        // 候选列表打开时一律拦截 Enter，避免冒泡到表单层触发其他行为
+        if (open && opts.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          var idx = self.activeIndex >= 0 ? self.activeIndex : 0;
+          var pick = opts[idx] && opts[idx].getAttribute("data-name");
+          if (pick) self.addProduct(pick);
+        }
+      }
     });
+    // 「点击空白处收起候选」必须挂在 document 上。但每次切换视图都会 new 一个 ProductPicker，
+    // 旧监听不摘就会无限叠加，并让已卸载的 DOM 无法回收。这里做两件事：
+    //   ① 同一实例重复 attach 时先摘旧的；② 监听自身检测容器已卸载 → 自我摘除。
+    if (this._docClick) document.removeEventListener("click", this._docClick);
+    this._docClick = function (e) {
+      if (!self.container || !self.container.isConnected) {
+        document.removeEventListener("click", self._docClick);
+        return;
+      }
+      if (!e.target.closest(".search-wrap")) self.suggestEl.style.display = "none";
+    };
+    document.addEventListener("click", this._docClick);
     this.listEl.addEventListener("click", function (e) {
       var x = e.target.closest(".x");
       if (x) {
@@ -283,14 +321,42 @@
         (q === "" || p.toLowerCase().includes(q));
     });
     this.suggestEl.innerHTML = "";
-    if (!pool.length) { this.suggestEl.style.display = "none"; return; }
+    if (!pool.length) {
+      this.suggestEl.style.display = "none";
+      this.activeIndex = -1;
+      this.searchEl.setAttribute("aria-expanded", "false");
+      return;
+    }
     pool.slice(0, 30).forEach(function (p) {
       var d = document.createElement("div");
       d.textContent = p;
+      d.setAttribute("data-name", p);
+      d.setAttribute("role", "option");
       d.addEventListener("mousedown", function (ev) { ev.preventDefault(); self.addProduct(p); });
       self.suggestEl.appendChild(d);
     });
     this.suggestEl.style.display = "block";
+    this.searchEl.setAttribute("aria-expanded", "true");
+    // 精确匹配时预选中，扫码枪扫出完整条码/货品名后直接 Enter 即可入选
+    this.activeIndex = -1;
+    if (q) {
+      for (var i = 0; i < this.suggestEl.children.length; i++) {
+        if (this.suggestEl.children[i].getAttribute("data-name").toLowerCase() === q) { this.activeIndex = i; break; }
+      }
+      if (this.activeIndex < 0) this.activeIndex = 0;
+    }
+    this.highlightSuggest();
+  };
+
+  /** 同步候选项高亮态到 this.activeIndex */
+  ProductPicker.prototype.highlightSuggest = function () {
+    var opts = this.suggestEl.children;
+    for (var i = 0; i < opts.length; i++) {
+      var on = i === this.activeIndex;
+      opts[i].classList.toggle("active", on);
+      opts[i].setAttribute("aria-selected", on ? "true" : "false");
+      if (on && opts[i].scrollIntoView) opts[i].scrollIntoView({ block: "nearest" });
+    }
   };
 
   ProductPicker.prototype.addProduct = function (name) {
@@ -321,7 +387,7 @@
         stockHtml +
         '<div class="qty-stepper">' +
           '<button type="button" class="qty-btn" data-act="dec" data-i="' + i + '" aria-label="减少">−</button>' +
-          '<input type="number" min="0" step="any" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
+          '<input type="number" min="0" max="999999" step="any" inputmode="decimal" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 数量" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
           '<button type="button" class="qty-btn" data-act="inc" data-i="' + i + '" aria-label="增加">+</button>' +
         '</div>' +
         '<span class="x" data-i="' + i + '">&times;</span>';
@@ -332,11 +398,28 @@
       : "尚未选择货品，请在上方搜索并选择。";
   };
 
-  /** 获取有效货品 [{name, qty}]（qty>0） */
+  /** 获取有效货品 [{name, qty}]（qty >= MIN_QTY 且 <= MAX_QTY，过滤掉 0.0001 这类误填） */
+  ProductPicker.MIN_QTY = 0.001;
+  ProductPicker.MAX_QTY = 999999;
   ProductPicker.prototype.getItems = function () {
     return this.selected
       .map(function (s) { return { name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }; })
-      .filter(function (s) { return s.name && s.qty > 0; });
+      .filter(function (s) {
+        return s.name && isFinite(s.qty)
+          && s.qty >= ProductPicker.MIN_QTY && s.qty <= ProductPicker.MAX_QTY;
+      });
+  };
+
+  /** 校验已选货品的数量填写情况，返回问题描述数组（供表单做字段级提示） */
+  ProductPicker.prototype.validateItems = function () {
+    var problems = [];
+    this.selected.forEach(function (s) {
+      var n = s.qty === "" ? 0 : Number(s.qty);
+      if (!isFinite(n) || n <= 0) problems.push(s.name + " 未填数量");
+      else if (n < ProductPicker.MIN_QTY) problems.push(s.name + " 数量过小");
+      else if (n > ProductPicker.MAX_QTY) problems.push(s.name + " 数量超上限");
+    });
+    return problems;
   };
 
   ProductPicker.prototype.setSelected = function (arr) {
@@ -346,6 +429,15 @@
 
   ProductPicker.prototype.emit = function () {
     if (this.onChange) this.onChange(this.getItems(), this.selected);
+  };
+
+  /** 显式销毁：摘掉挂在 document 上的全局监听。视图切换时可主动调用（不调也会自我摘除） */
+  ProductPicker.prototype.destroy = function () {
+    if (this._docClick) {
+      document.removeEventListener("click", this._docClick);
+      this._docClick = null;
+    }
+    this.container = null;
   };
 
   /* ================= PhotoUpload ================= */
@@ -558,6 +650,88 @@
     setTimeout(function () { if (document.body.contains(el)) close(); }, 4500);
   }
 
+  /* ============================================================
+     字段级错误提示（替代「一次只弹一条 toast」的校验反馈）
+     放在 components.js 是因为它先于全部 views 加载，依赖方向天然正确。
+     ============================================================ */
+
+  /** 由任意控件上溯到它所属的 .field 容器；找不到则回退到控件自身的父节点 */
+  function fieldOf(el) {
+    if (!el) return null;
+    return (el.closest && el.closest(".field")) || el.parentNode || null;
+  }
+
+  /**
+   * 在指定控件所属字段上标注错误
+   * @param {Element} el   出错的控件（input / textarea / chip 容器 / picker 容器）
+   * @param {string}  msg  错误文案
+   * @returns {Element|null} 被标注的 .field 容器
+   */
+  function showFieldError(el, msg) {
+    var field = fieldOf(el);
+    if (!field) return null;
+    field.classList.add("has-error");
+    var tip = field.querySelector(":scope > .field-error");
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "field-error";
+      field.appendChild(tip);
+    }
+    tip.textContent = msg || "";
+    // 让读屏与校验语义可感知
+    if (el && el.setAttribute && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
+      el.setAttribute("aria-invalid", "true");
+    }
+    return field;
+  }
+
+  /** 清除 root（默认整个文档）范围内的全部字段错误标注 */
+  function clearFieldErrors(root) {
+    var scope = root || document;
+    var marked = scope.querySelectorAll(".field.has-error");
+    for (var i = 0; i < marked.length; i++) marked[i].classList.remove("has-error");
+    var tips = scope.querySelectorAll(".field-error");
+    for (var j = 0; j < tips.length; j++) {
+      if (tips[j].parentNode) tips[j].parentNode.removeChild(tips[j]);
+    }
+    var invalid = scope.querySelectorAll('[aria-invalid="true"]');
+    for (var k = 0; k < invalid.length; k++) invalid[k].removeAttribute("aria-invalid");
+  }
+
+  /**
+   * 一次性上报一组校验错误：清旧 → 全部标注 → 滚动定位到第一个 → 聚焦
+   * @param {Array<{el:Element,msg:string,focus?:boolean}>} list 为空表示校验通过
+   * @param {Element} [root] 清理范围
+   * @returns {boolean} true 表示校验通过（list 为空）
+   */
+  function reportFieldErrors(list, root) {
+    clearFieldErrors(root);
+    if (!list || !list.length) return true;
+    var firstField = null;
+    var firstFocusable = null;
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!item) continue;
+      var f = showFieldError(item.el, item.msg);
+      if (!firstField && f) {
+        firstField = f;
+        if (item.focus !== false && item.el && typeof item.el.focus === "function"
+          && /^(INPUT|TEXTAREA|SELECT)$/.test(item.el.tagName)) {
+          firstFocusable = item.el;
+        }
+      }
+    }
+    if (firstField && firstField.scrollIntoView) {
+      try { firstField.scrollIntoView({ block: "center", behavior: "smooth" }); }
+      catch (e) { firstField.scrollIntoView(); }
+    }
+    if (firstFocusable) {
+      // 让平滑滚动先跑起来，再聚焦，避免移动端键盘弹出打断滚动
+      setTimeout(function () { try { firstFocusable.focus({ preventScroll: true }); } catch (e) { firstFocusable.focus(); } }, 260);
+    }
+    return false;
+  }
+
   window.App = window.App || {};
   window.App.UI = {
     icon: icon,
@@ -569,6 +743,9 @@
     bindCollapse: bindCollapse,
     ProductPicker: ProductPicker,
     PhotoUpload: PhotoUpload,
-    celebrate: celebrate
+    celebrate: celebrate,
+    showFieldError: showFieldError,
+    clearFieldErrors: clearFieldErrors,
+    reportFieldErrors: reportFieldErrors
   };
 })();

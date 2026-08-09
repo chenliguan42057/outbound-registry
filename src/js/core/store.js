@@ -7,6 +7,25 @@
 
   var Config = window.App.Config;
 
+  /** 各浏览器对「存储写满」的报错形态不一致，这里统一识别 */
+  function isQuotaError(e) {
+    if (!e) return false;
+    return e.name === "QuotaExceededError" ||
+           e.name === "NS_ERROR_DOM_QUOTA_REACHED" ||   // Firefox
+           e.code === 22 || e.code === 1014;
+  }
+
+  var quotaWarned = false;
+  /** 整个会话只提示一次：草稿是高频自动保存，否则会变成 toast 刷屏 */
+  function warnQuotaOnce() {
+    if (quotaWarned) return;
+    quotaWarned = true;
+    var U = window.App && window.App.Util;
+    if (U && typeof U.toast === "function") {
+      U.toast("本机存储已写满，草稿与本地缓存暂时无法保存。请在浏览器设置中清理本站数据后重试。", true);
+    }
+  }
+
   var Store = {
     /** 读取 JSON；失败或不存在返回 def */
     get: function (key, def) {
@@ -15,9 +34,20 @@
         return v === null ? def : JSON.parse(v);
       } catch (e) { return def; }
     },
+    /**
+     * 写入 JSON，返回是否成功。
+     * 原实现失败时只 console.warn，用户看不到任何提示 —— 草稿/记录明明没存进去，
+     * 却以为已保存，刷新后内容全丢。这里对「配额写满」这种可恢复故障给出一次可见告警。
+     */
     set: function (key, val) {
-      try { localStorage.setItem(key, JSON.stringify(val)); }
-      catch (e) { console.warn("localStorage set failed:", key, e); }
+      try {
+        localStorage.setItem(key, JSON.stringify(val));
+        return true;
+      } catch (e) {
+        console.warn("localStorage set failed:", key, e);
+        if (isQuotaError(e)) warnQuotaOnce();
+        return false;
+      }
     },
     remove: function (key) {
       try { localStorage.removeItem(key); } catch (e) {}

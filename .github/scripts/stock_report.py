@@ -123,8 +123,10 @@ def week_summary(records):
     只统计 affectsStock===true 的记录（与库存口径一致）；入库 +qty，出库 -qty。
     返回 (rows, monday_str, has_data)；rows = [(name, in_qty, out_qty, net), ...] 按净变化绝对值降序。
     """
-    from datetime import datetime as _dt, timedelta as _td
-    now_bj = _dt.utcnow() + _td(hours=8)
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    # utcnow() 在 Python 3.12+ 已废弃（DeprecationWarning，未来版本移除）。
+    # 改为 aware 取北京时间后去掉 tzinfo：下文 parse_t 产出 naive 时间，二者须同为 naive 才可比较。
+    now_bj = _dt.now(_tz(_td(hours=8))).replace(tzinfo=None)
     monday0 = (now_bj - _td(days=now_bj.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
 
     def parse_t(t):

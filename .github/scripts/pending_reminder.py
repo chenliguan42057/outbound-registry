@@ -132,17 +132,9 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
             if warn_ids and it.get("id") in warn_ids:
                 picker = "⚠️ " + picker
                 time_str += "（已超时）"
-            lines.append("{}. **{}**　📅 {}".format(i, picker, time_str))
-            # 货品明细逐项缩进（每项一行）
-            sub = it.get("items") or []
-            if sub:
-                for g in sub:
-                    name = g.get("name", "")
-                    qty = g.get("qty", "")
-                    if name:
-                        lines.append("    - {} × {}".format(name, qty))
-            else:
-                lines.append("    - {}".format(goods_text(it)))
+            goods = goods_text(it)
+            # 货品明细直接跟在主行后面，避免手机端把缩进 "-" 解析成新列表项导致序号错乱
+            lines.append("{}. **{}**　📅 {}　｜ {}".format(i, picker, time_str, goods))
         if len(items) > MAX_SHOW:
             lines.append("⋯ 其余 {} 条已省略".format(len(items) - MAX_SHOW))
         return lines

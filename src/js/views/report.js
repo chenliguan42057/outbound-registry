@@ -109,19 +109,13 @@
   /** 预设快捷范围：本周/本月/全部 */
   function applyPreset(kind) {
     var now = new Date();
-    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    var todayStr = Util.todayLocal(now);   // 统一走 Util，口径与看板/AI 一致
     if (kind === "week") {
       var day = now.getDay() || 7;   // 周一=1...周日=7
       var monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (day - 1));
-      range = {
-        start: monday.getFullYear() + "-" + pad(monday.getMonth() + 1) + "-" + pad(monday.getDate()),
-        end: now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate())
-      };
+      range = { start: Util.todayLocal(monday), end: todayStr };
     } else if (kind === "month") {
-      range = {
-        start: now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-01",
-        end: now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate())
-      };
+      range = { start: Util.monthLocal(now) + "-01", end: todayStr };
     } else {
       range = { start: "", end: "" };
     }

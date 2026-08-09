@@ -76,11 +76,11 @@
     days = days || 7;
     var out = [];
     var now = new Date();
-    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
     for (var i = days - 1; i >= 0; i--) {
       var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
       out.push({
-        date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
+        // 统一走 Util（本文件未在顶部捕获 Util，用全限定名避免加载顺序依赖）
+        date: window.App.Util.todayLocal(d),
         outQty: 0,
         inQty: 0
       });

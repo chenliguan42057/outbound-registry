@@ -21,16 +21,19 @@
 
   var RECENT_LIMIT = 5;
 
+  /* 云端首拉进行中标记。
+     换设备/无痕/清缓存首次进入时 State.list 为空，若直接渲染「暂无提交记录」，
+     用户会误以为自己之前提交的数据丢了（假空态）。拉取期间改显加载态。 */
+  var recentLoading = false;
+
   /** 时间短格式：当年省略年份 "MM-DD HH:mm"，跨年补全 "YYYY-MM-DD HH:mm" */
   function fmtRecentTime(t) {
     if (!t) return "-";
     var d = new Date(t);
     if (isNaN(d.getTime())) return String(t);
-    var p = function (n) { return (n < 10 ? "0" : "") + n; };
-    var now = new Date();
-    var datePart = (d.getFullYear() === now.getFullYear())
-      ? p(d.getMonth() + 1) + "-" + p(d.getDate())
-      : d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+    var p = Util.pad2;
+    var full = Util.todayLocal(d);                       // "YYYY-MM-DD"
+    var datePart = (d.getFullYear() === new Date().getFullYear()) ? full.slice(5) : full;
     return datePart + " " + p(d.getHours()) + ":" + p(d.getMinutes());
   }
 
@@ -51,6 +54,15 @@
     return "";
   }
 
+  /** 单条骨架行（列表加载态用） */
+  function skelRow() {
+    return '<div class="recent-skel-row">' +
+      '<span class="skeleton recent-skel-avatar" aria-hidden="true"></span>' +
+      '<span class="skeleton recent-skel-line" aria-hidden="true"></span>' +
+      '<span class="skeleton recent-skel-line short" aria-hidden="true"></span>' +
+      '</div>';
+  }
+
   /** 渲染最近提交列表（读 State.list，按 time 降序取最新 5 条；无记录显示空态） */
   function renderRecent() {
     var listEl = Util.$("recentList");
@@ -60,7 +72,13 @@
     }).slice(0, RECENT_LIMIT);
 
     if (!arr.length) {
-      listEl.innerHTML = '<div class="recent-empty">暂无提交记录</div>';
+      if (recentLoading) {
+        // 骨架屏：列表加载态，避免「暂无记录」假空态闪现
+        listEl.innerHTML = '<div class="recent-skel" role="status" aria-live="polite" aria-label="正在从云端加载最近提交…">' +
+          skelRow() + skelRow() + skelRow() + '</div>';
+      } else {
+        listEl.innerHTML = '<div class="recent-empty">暂无提交记录，填写上方表单提交后会自动显示在这里。</div>';
+      }
       return;
     }
 
@@ -88,10 +106,14 @@
   /** 云端刷新最近提交：有 token → syncPull → 重渲染；失败/无 token → 本地缓存 + 可选轻提示 */
   function refreshRecentWithCloud() {
     if (!Cloud.hasToken()) {
+      recentLoading = false;
       renderRecent();
       return Promise.resolve(false);
     }
+    recentLoading = true;
+    renderRecent();   // 同一帧内把空态换成加载态，用户看不到「暂无提交记录」的闪现
     return Cloud.syncPull({ onStatus: function () {} }).then(function (res) {
+      recentLoading = false;
       renderRecent();
       if (!res || !res.ok) {
         Util.toast("云端同步失败，已显示本地缓存", true);
@@ -99,6 +121,7 @@
       }
       return true;
     }).catch(function () {
+      recentLoading = false;
       renderRecent();
       Util.toast("云端同步失败，已显示本地缓存", true);
       return false;
@@ -158,7 +181,8 @@
       window.App.Views.out.edit(id);
     }
 
-    // 最近提交：先本地立即显示，再云端拉取刷新
+    // 最近提交：先本地立即显示（有 token 时空列表显加载态而非假空态），再云端拉取刷新
+    recentLoading = Cloud.hasToken();
     renderRecent();
     refreshRecentWithCloud();
   }

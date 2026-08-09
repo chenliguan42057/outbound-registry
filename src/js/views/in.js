@@ -16,6 +16,7 @@
   var photos = null;
   var editingId = null;
   var els = null;
+  var submitting = false;   // 提交互斥锁：防止连点造成重复入库
 
   function render(container) {
     container.innerHTML =
@@ -26,8 +27,8 @@
           '<div id="inProductPicker"></div>' +
         '</div>' +
         '<div class="field">' +
-          '<label>用途 / 来源</label>' +
-          '<input type="text" id="inPurpose" placeholder="例如：采购入库、退货入库、盘点补录等" />' +
+          '<label for="inPurpose">用途 / 来源</label>' +
+          '<input type="text" id="inPurpose" placeholder="例如：采购入库、退货入库、盘点补录等" maxlength="60" autocomplete="off" inputmode="text" enterkeyhint="done" />' +
         '</div>' +
         '<div class="field">' +
           '<label>现场照片（留存）</label>' +
@@ -107,9 +108,32 @@
 
   function clearDraft() { Store.clearDraft("in"); }
 
+  /** 切换提交按钮的加载态。不改 textContent——resetForm()/edit() 会重写它 */
+  function setSubmitting(on) {
+    submitting = !!on;
+    if (!els || !els.submit) return;
+    els.submit.disabled = !!on;
+    els.submit.classList.toggle("loading", !!on);
+    els.submit.setAttribute("aria-busy", on ? "true" : "false");
+  }
+
   function submit() {
+    if (submitting) return;   // 连点二次直接吞掉
+
     var items = picker.getItems();
-    if (!items.length) return Util.toast("请至少选择一项货品", true);
+    var qtyProblems = picker.validateItems ? picker.validateItems() : [];
+    var errs = [];
+    if (!items.length) {
+      errs.push({
+        el: Util.$("inProductPicker"),
+        msg: qtyProblems.length ? ("请填写数量：" + qtyProblems.join("、")) : "请至少选择一项货品"
+      });
+    } else if (qtyProblems.length) {
+      errs.push({ el: Util.$("inProductPicker"), msg: "以下货品数量无效：" + qtyProblems.join("、") });
+    }
+    if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) return;
+
+    setSubmitting(true);
     var purpose = els.purpose.value.trim();
     var wasEditing = !!editingId;
     var payload = {
@@ -123,13 +147,14 @@
     var rec;
     if (editingId) {
       rec = Records.update(editingId, payload);
-      if (!rec) { Util.toast("记录不存在", true); return; }
+      if (!rec) { Util.toast("记录不存在", true); setSubmitting(false); return; }
     } else {
       rec = Records.create(payload);
     }
     resetForm();
-    // 先上传照片并写回 photoUrls（首推即含图）；再统一推送
-    submitPush(rec, wasEditing);
+    // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
+    // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。
+    submitPush(rec, wasEditing)["catch"](function () {})["finally"](function () { setSubmitting(false); });
   }
 
   /** 异步推送：先写回 photoUrls，再推记录，确保通知含图 */
@@ -196,6 +221,7 @@
   }
 
   function resetForm() {
+    UI.clearFieldErrors(els.submit.closest(".card") || document);
     els.purpose.value = "";
     picker.setSelected([]);
     photos.setPhotos([]);

@@ -10,8 +10,10 @@
   'use strict';
 
   var Util = window.App.Util;
-  var UI = window.App.UI;
   var Config = window.App.Config;
+  // 本文件在 index.html 中先于 js/ui/components.js 加载，解析到这里时 window.App.UI 还不存在。
+  // 所以不能在顶部捕获常量，必须调用时惰性取值，否则「货品目录管理」弹窗一打开就抛 TypeError。
+  function UI() { return window.App.UI; }
 
   var CLOUD_PATH = "data/catalog/catalog.json";
   var LS_KEY = "outbound_catalog_v1";
@@ -141,8 +143,8 @@
       '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
       '<button type="button" class="btn sm" id="catSave">保存目录</button>' +
       '</div>';
-    UI.Modal.show("📋 货品目录管理", body, { width: "760px" });
-    var mBody = UI.Modal.body();
+    UI().Modal.show("📋 货品目录管理", body, { width: "760px" });
+    var mBody = UI().Modal.body();
     var tbody = mBody.querySelector("#catRows");
 
     function draw() {
@@ -188,10 +190,10 @@
         names[n] = 1;
         work.products[i].name = n;
       }
-      var ok = await UI.confirmDialog("保存后全站货品目录/库存将立即更新（新增货品初始库存为 0）。确认保存？", "保存货品目录");
+      var ok = await UI().confirmDialog("保存后全站货品目录/库存将立即更新（新增货品初始库存为 0）。确认保存？", "保存货品目录");
       if (!ok) return;
       save(work, function (ok2, msg) {
-        UI.Modal.hide();
+        UI().Modal.hide();
         Util.toast(msg, !ok2);
         // 刷新依赖目录的视图
         try { if (window.App.Views.stock && window.App.Views.stock.refresh) window.App.Views.stock.refresh(); } catch (e) {}
@@ -199,7 +201,7 @@
         try { if (window.App.Views.report && window.App.Views.report.refresh) window.App.Views.report.refresh(); } catch (e) {}
       });
     });
-    mBody.querySelector('[data-act="cancel"]').addEventListener("click", function () { UI.Modal.hide(); });
+    mBody.querySelector('[data-act="cancel"]').addEventListener("click", function () { UI().Modal.hide(); });
   }
 
   /* ---------- 初始化 ---------- */

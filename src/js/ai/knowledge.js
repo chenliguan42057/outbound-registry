@@ -191,7 +191,7 @@
 
   var WEEK = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
 
-  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  // 未被引用的历史遗留补零函数已移除；如需补零请用 window.App.Util.pad2
 
   /** 解析年份：今年/明年/去年/YYYY年；无年份指示 → 当前年份 */
   function parseYear(input, now) {

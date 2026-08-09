@@ -22,13 +22,73 @@
     return !!(Config.GH.token && Config.GH.token.indexOf("__") !== 0);
   }
 
+  var API_TIMEOUT_MS = 15000;
+
+  /**
+   * API 配额水位。GitHub 认证请求限额 5000 次/小时，且同一令牌下所有设备共用。
+   * 每次响应都会刷新这里，自动同步据此决定是否暂时停表，避免把额度耗光后全站写入瘫痪。
+   */
+  var rate = { remaining: null, limit: null, reset: 0 };
+
+  function readRate(res) {
+    try {
+      var rem = res.headers.get("x-ratelimit-remaining");
+      var lim = res.headers.get("x-ratelimit-limit");
+      var rst = res.headers.get("x-ratelimit-reset");
+      if (rem !== null) rate.remaining = parseInt(rem, 10);
+      if (lim !== null) rate.limit = parseInt(lim, 10);
+      if (rst !== null) rate.reset = parseInt(rst, 10) * 1000;
+    } catch (e) { /* 响应头不可读不影响主流程 */ }
+  }
+
+  /** 把 GitHub 的英文报错翻成用户能看懂的话；保留状态码前缀（调用方靠它判断 404） */
+  function friendlyErr(status, body) {
+    var mins = rate.reset ? Math.max(1, Math.ceil((rate.reset - Date.now()) / 60000)) : 0;
+    if (status === 401) return "令牌无效或已过期，请在「云同步」页重新填写";
+    if (status === 403 && rate.remaining === 0) {
+      return "API 调用额度已用尽" + (mins ? "，约 " + mins + " 分钟后自动恢复" : "");
+    }
+    if (status === 403) return "无权限执行该操作（令牌权限不足或仓库受保护）";
+    if (status === 409) return "版本冲突：这条数据刚被其他设备改过";
+    if (status === 422) return "数据格式被服务端拒绝";
+    if (status >= 500) return "GitHub 服务暂时不可用，请稍后重试";
+    return String(body || "").slice(0, 80);
+  }
+
   async function apiJson(url, opts) {
-    var res = await fetch(url, Object.assign({ headers: ghHeaders() }, opts || {}));
+    // 原实现无超时：移动端弱网下 fetch 会一直挂着，同步按钮永远转圈。
+    // AbortController 比 AbortSignal.timeout 兼容性更好（后者需要 Chrome 103+/Safari 16+）。
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); }, API_TIMEOUT_MS);
+    var res;
+    try {
+      res = await fetch(url, Object.assign({ headers: ghHeaders() }, opts || {}, { signal: ctrl.signal }));
+    } catch (e) {
+      clearTimeout(timer);
+      if (e && e.name === "AbortError") {
+        throw new Error("timeout 请求超时（" + (API_TIMEOUT_MS / 1000) + " 秒未响应），请检查网络后重试");
+      }
+      throw new Error("network 网络不可用：" + ((e && e.message) || e));
+    }
+    clearTimeout(timer);
+    readRate(res);
     if (!res.ok) {
       var t = await res.text().catch(function () { return ""; });
-      throw new Error(res.status + " " + t.slice(0, 80));
+      // 状态码前缀必须保留：pull/pullTombstones 等处用 indexOf("404")===0 判断空目录
+      throw new Error(res.status + " " + friendlyErr(res.status, t));
     }
     return res.json();
+  }
+
+  /** 供自动同步与「云同步」页读取当前配额水位 */
+  function getRate() {
+    return {
+      remaining: rate.remaining,
+      limit: rate.limit,
+      reset: rate.reset,
+      /** 余量告急：低于 200 时应停止自动轮询，把剩余额度留给用户的手动提交 */
+      low: rate.remaining !== null && rate.remaining < 200
+    };
   }
 
   /** 拉取云端全部记录（目录 404 视为空） */
@@ -530,6 +590,7 @@
   window.App = window.App || {};
   window.App.Cloud = {
     hasToken: hasToken,
+    getRate: getRate,
     pull: pull,
     push: push,
     del: del,

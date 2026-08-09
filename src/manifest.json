@@ -1,0 +1,16 @@
+{
+  "name": "进销存管理系统",
+  "short_name": "进销存",
+  "description": "出库 / 入库 / 借用 / 领用 登记与看板",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F1F8F4",
+  "theme_color": "#6FA08A",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "favicon.ico", "sizes": "32x32", "type": "image/x-icon", "purpose": "any" }
+  ]
+}

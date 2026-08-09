@@ -20,6 +20,31 @@
   var listBox = null;
   var activeTab = "ongoing";   // "ongoing"（借出中）| "done"（已完成）
 
+  /**
+   * 弹窗内异步提交防重：把按钮置忙并返回解锁函数。
+   * 借出转入 / 归还都要 await 云端推送，期间连点会重复写记录，必须上锁。
+   * @param {Element} btn
+   * @returns {{locked:boolean, unlock:function}} locked=true 表示已在提交中，调用方应直接 return
+   */
+  function lockBtn(btn) {
+    if (!btn) return { locked: false, unlock: function () {} };
+    if (btn.dataset.busy === "1") return { locked: true, unlock: function () {} };
+    btn.dataset.busy = "1";
+    btn.disabled = true;
+    btn.classList.add("loading");
+    btn.setAttribute("aria-busy", "true");
+    return {
+      locked: false,
+      unlock: function () {
+        if (!btn.isConnected) return;   // 弹窗已关闭，无需还原
+        btn.dataset.busy = "0";
+        btn.disabled = false;
+        btn.classList.remove("loading");
+        btn.setAttribute("aria-busy", "false");
+      }
+    };
+  }
+
   function render(el) {
     container = el;
     el.innerHTML =
@@ -174,24 +199,30 @@
     });
     mBody.querySelector('[data-act="cancel"]').onclick = function () { UI.Modal.hide(); };
     mBody.querySelector('[data-act="ok"]').onclick = async function () {
-      var ids = Array.from(mBody.querySelectorAll(".borrow-check")).filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
-      if (!ids.length) { Util.toast("请至少勾选一条记录", true); return; }
-      var ok = await UI.confirmDialog("将所选 " + ids.length + " 条记录转入先借后还？\n转入后将从出库记录页隐藏，库存扣减保留。", "确认借出");
-      if (!ok) return;
-      UI.Modal.hide();
-      var fail = 0;
-      for (var i = 0; i < ids.length; i++) {
-        var rec = Records.update(ids[i], { borrowed: true });
-        if (rec) {
-          if (Cloud.hasToken()) {
-            try { await Cloud.pushRecord(rec); } catch (e) { fail++; }
-          }
-        } else fail++;
+      var lk = lockBtn(this);
+      if (lk.locked) return;                 // 连点二次直接吞掉
+      try {
+        var ids = Array.from(mBody.querySelectorAll(".borrow-check")).filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
+        if (!ids.length) { Util.toast("请至少勾选一条记录", true); return; }
+        var ok = await UI.confirmDialog("将所选 " + ids.length + " 条记录转入先借后还？\n转入后将从出库记录页隐藏，库存扣减保留。", "确认借出");
+        if (!ok) return;
+        UI.Modal.hide();
+        var fail = 0;
+        for (var i = 0; i < ids.length; i++) {
+          var rec = Records.update(ids[i], { borrowed: true });
+          if (rec) {
+            if (Cloud.hasToken()) {
+              try { await Cloud.pushRecord(rec); } catch (e) { fail++; }
+            }
+          } else fail++;
+        }
+        renderList();
+        Util.toast(fail ? "已转入 " + (ids.length - fail) + " 单（" + fail + " 条待补推）" : "已转入 " + ids.length + " 单");
+        if (fail) window.App.Views.app.setSyncStatus("部分转入待补推", true);
+        else window.App.Views.app.setSyncStatus("已同步", false);
+      } finally {
+        lk.unlock();
       }
-      renderList();
-      Util.toast(fail ? "已转入 " + (ids.length - fail) + " 单（" + fail + " 条待补推）" : "已转入 " + ids.length + " 单");
-      if (fail) window.App.Views.app.setSyncStatus("部分转入待补推", true);
-      else window.App.Views.app.setSyncStatus("已同步", false);
     };
   }
 
@@ -211,7 +242,7 @@
         '<td>' + outQty + '</td>' +
         '<td>' + (ret[it.name] || 0) + '</td>' +
         '<td style="color:#E11D48;font-weight:600;">' + it.qty + '</td>' +
-        '<td><input type="number" class="return-input" data-name="' + Util.esc(it.name) + '" min="0" max="' + it.qty + '" step="any" value="0" style="width:96px;" /></td>' +
+        '<td><input type="number" class="return-input" data-name="' + Util.esc(it.name) + '" min="0" max="' + it.qty + '" step="any" value="0" inputmode="decimal" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 本次归还数量（最多 ' + it.qty + '）" style="width:96px;" /></td>' +
       '</tr>';
     }).join("");
     var body =
@@ -225,22 +256,42 @@
     var mBody = UI.Modal.body();
     mBody.querySelector('[data-act="cancel"]').onclick = function () { UI.Modal.hide(); };
     mBody.querySelector('[data-act="ok"]').onclick = async function () {
-      var inputs = Array.from(mBody.querySelectorAll(".return-input"));
-      var returns = [];
-      var bad = false;
-      inputs.forEach(function (inp) {
-        var v = Number(inp.value);
-        if (!inp.value || isNaN(v)) v = 0;
-        var max = Number(inp.max) || 0;
-        if (v < 0 || v > max) { bad = true; return; }
-        if (v > 0) returns.push({ name: inp.getAttribute("data-name"), qty: v });
-      });
-      if (bad) { Util.toast("归还数量不能超过剩余应还", true); return; }
-      if (!returns.length) { Util.toast("请至少归还一项", true); return; }
-      var ok = await UI.confirmDialog("确认归还？系统将自动处理差额并生成未提单出库记录。", "确认归还");
-      if (!ok) return;
-      UI.Modal.hide();
-      await doReturn(r, returns);
+      var lk = lockBtn(this);
+      if (lk.locked) return;                 // 连点二次直接吞掉
+      try {
+        var inputs = Array.from(mBody.querySelectorAll(".return-input"));
+        var returns = [];
+        var badNames = [];
+        var firstBad = null;
+        inputs.forEach(function (inp) {
+          inp.removeAttribute("aria-invalid");
+          inp.style.borderColor = "";
+          var v = Number(inp.value);
+          if (!inp.value || isNaN(v)) v = 0;
+          var max = Number(inp.max) || 0;
+          if (v < 0 || v > max) {
+            // 逐格标红，直接告诉用户是哪一行超了，替代笼统的一句 toast
+            badNames.push(inp.getAttribute("data-name") + "（最多 " + max + "）");
+            inp.setAttribute("aria-invalid", "true");
+            inp.style.borderColor = "#E11D48";
+            if (!firstBad) firstBad = inp;
+            return;
+          }
+          if (v > 0) returns.push({ name: inp.getAttribute("data-name"), qty: v });
+        });
+        if (badNames.length) {
+          Util.toast("归还数量超出剩余应还：" + badNames.join("、"), true);
+          if (firstBad) { try { firstBad.focus(); firstBad.select(); } catch (e) {} }
+          return;
+        }
+        if (!returns.length) { Util.toast("请至少归还一项", true); return; }
+        var ok = await UI.confirmDialog("确认归还？系统将自动处理差额并生成未提单出库记录。", "确认归还");
+        if (!ok) return;
+        UI.Modal.hide();
+        await doReturn(r, returns);
+      } finally {
+        lk.unlock();
+      }
     };
   }
 

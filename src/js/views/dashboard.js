@@ -79,9 +79,7 @@
       .sort(function (a, b) { return a.stock - b.stock; });
     var totalOut = 0, totalIn = 0, todayOut = 0, todayIn = 0;
     var todayActive = {};
-    var now = new Date();
-    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
-    var today = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
+    var today = Util.todayLocal();   // 统一走 Util，避免各文件各写一份补零逻辑
     list.forEach(function (r) {
       if (r.affectsStock !== true) return;
       var q = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
@@ -325,9 +323,7 @@
 
   /* ================= B8 业绩榜 + 高频货品（本月） ================= */
   function monthPrefix() {
-    var d = new Date();
-    var p = function (n) { return (n < 10 ? "0" : "") + n; };
-    return d.getFullYear() + "-" + p(d.getMonth() + 1);
+    return Util.monthLocal();
   }
   function renderRankBoard() {
     var el = Util.$("dashRank");

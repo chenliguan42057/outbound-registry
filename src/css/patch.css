@@ -1,0 +1,239 @@
+/**
+ * patch.css — 体验修补层（2026-08-09）
+ * 必须在 index.html 中最后加载：本文件依赖「后来者胜出」压过 ux.css / fresh-mint-theme.css 的若干规则。
+ * 原则：移动端相关改动全部锁进 @media (max-width:560px)，PC 端视觉零影响。
+ */
+
+/* ============================================================
+   一、字段级错误提示
+   ============================================================ */
+.field.has-error > input,
+.field.has-error textarea,
+.field.has-error .search-wrap > input,
+.field.has-error .search {
+  border-color: var(--danger, #F04438);
+  background: #FFF8F7;
+}
+.field.has-error > input:focus,
+.field.has-error textarea:focus,
+.field.has-error .search-wrap > input:focus,
+.field.has-error .search:focus {
+  border-color: var(--danger, #F04438);
+  box-shadow: 0 0 0 3px rgba(240, 68, 56, .14);
+}
+
+/* chip 组 / 货品选择器等非 input 控件的错误容器 */
+.field.has-error .chip-group,
+.field.has-error .product-picker,
+.field.has-error > div[id$="ProductPicker"] {
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px rgba(240, 68, 56, .28);
+  padding: 4px;
+  margin: -4px;
+}
+
+.field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--danger, #F04438);
+  font-size: 12px;
+  line-height: 1.5;
+  animation: patch-err-in .18s ease-out;
+}
+.field-error::before { content: "⚠"; flex: 0 0 auto; }
+@keyframes patch-err-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 错误字段滚动定位时，避免被落地页底部固定提交按钮遮挡 */
+.field.has-error { scroll-margin-bottom: 96px; scroll-margin-top: 72px; }
+
+/* ============================================================
+   二、.field-label —— chip 组 / 货品选择器的组标题
+   ------------------------------------------------------------
+   这些控件不是原生表单元素，用 <label for> 无意义（点击不聚焦任何东西），
+   改用 <span class="field-label"> + role="group" aria-labelledby。
+   视觉需与 base.css:82 / fresh-mint-theme.css:293 的 label 完全一致。
+   ============================================================ */
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-700, var(--muted, #6B7280));
+  margin-bottom: 7px;
+}
+.field-label .req {
+  color: var(--req, var(--danger, #F04438));
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: 3px;
+  vertical-align: 1px;
+}
+
+/* ============================================================
+   三、候选列表键盘高亮（↑↓ 选择 / Enter 选中，兼容扫码枪）
+   ============================================================ */
+.suggest div.active {
+  background: var(--mint-100, #EEF2FF);
+  color: var(--mint-700, #3F6B58);
+  font-weight: 600;
+}
+
+/* ============================================================
+   四、移动端：防 iOS 聚焦缩放 + 触控目标 ≥44px
+   ------------------------------------------------------------
+   ux.css:281 的 `.qty-stepper input{font-size:14px}` 特异性 0,1,1 且后于
+   fresh-mint-theme.css:657 加载，把防缩放的 16px 覆盖掉了。
+   这里用 `.sel-item .qty-stepper input.qty`（0,3,1）夺回。
+   ============================================================ */
+@media (max-width: 560px) {
+  .sel-item .qty-stepper input.qty {
+    font-size: 16px;
+  }
+
+  /* 数量 stepper：28×32 → 44×44。
+     外框含上下各 1px 边框，故设 46px，按钮内容区才正好 44px。 */
+  .sel-item .qty-stepper {
+    height: 46px;
+    min-width: 140px;
+  }
+  .sel-item .qty-stepper .qty-btn {
+    width: 44px;
+    font-size: 19px;
+  }
+  .sel-item .qty-stepper input.qty {
+    width: 52px;
+  }
+
+  /* 删除按钮：约 18×18 → 44×44 */
+  .sel-item .x {
+    padding: 10px 8px;
+    font-size: 22px;
+    line-height: 24px;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  /* base.css:122 .sel-item 是 nowrap flex，撑高后会把 .name 挤没，改为允许换行 */
+  .sel-item {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .sel-item .name { flex: 1 1 100%; }
+
+  /* chip 触控目标 */
+  .chip, .chip-add { min-height: 40px; display: inline-flex; align-items: center; }
+
+  /* 提交成功弹窗按钮：原代码在 ≤560px 全局 .btn{width:100%} 把成功页两个按钮也撑满 */
+  .fx-success .actions button { width: auto; flex: 1 1 auto; min-width: 120px; }
+
+  /* 顶栏图标按钮实测仅 34~35px。顶栏高度有限，直接放大会把布局撑变形，
+     因此用透明伪元素向外扩热区：视觉尺寸不变，可点区域达到 44px。 */
+  .landing-topbar .win-topbar-sync,
+  .landing-topbar .landing-admin,
+  .win-topbar-right .win-topbar-sync {
+    position: relative;
+  }
+  .landing-topbar .win-topbar-sync::after,
+  .landing-topbar .landing-admin::after,
+  .win-topbar-right .win-topbar-sync::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ============================================================
+   五、落地页「最近提交」加载态
+   ------------------------------------------------------------
+   换设备/无痕首次进入时本地无缓存，云端拉取需 1~3 秒；
+   期间若直接显示「暂无提交记录」，用户会误判数据丢失（假空态）。
+   ============================================================ */
+.recent-empty.recent-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.recent-spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid var(--mint-200, #D7E9E0);
+  border-top-color: var(--mint-600, #4E8B72);
+  border-radius: 50%;
+  animation: patch-spin .8s linear infinite;
+}
+@keyframes patch-spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   六、无障碍：尊重「减少动态效果」系统偏好
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .btn.loading::before { animation: none; }
+  .field-error { animation: none; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+   七、安全区适配（刘海屏 / 底部 Home 条）
+   ------------------------------------------------------------
+   index.html viewport 已加 viewport-fit=cover，这里吃 env(safe-area-inset*)，
+   让顶栏不被刘海遮挡。底部固定提交钮（#outSubmit）的安全区已在
+   fresh-mint-theme.css ≤560px 段处理；此处补齐顶栏。
+   ============================================================ */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .landing-topbar { padding-top: calc(12px + env(safe-area-inset-top)); }
+  .win-topbar { padding-top: calc(11px + env(safe-area-inset-top)); }
+}
+
+/* ============================================================
+   八、平板竖屏断点缺口 561–768px
+   ------------------------------------------------------------
+   原防 iOS 聚焦缩放（16px 输入）只锁在 ≤560px；iPad 竖屏（768px）
+   落入空白带，数字框聚焦会触发整页缩放。此处补齐该区间。
+   PC 宽屏（>768px）零影响。
+   ============================================================ */
+@media (min-width: 561px) and (max-width: 768px) {
+  .sel-item .qty-stepper input.qty { font-size: 16px; }
+  input[type=text], input[type=datetime-local], input[type=number],
+  input[type=password], input[type=date], input[type=search],
+  select, textarea, .search { font-size: 16px; }   /* 防 iOS 聚焦缩放 */
+}
+
+/* ============================================================
+   九、列表骨架屏（加载态）
+   ------------------------------------------------------------
+   复用 fresh-mint-theme.css 的 .skeleton 微光，构造最近提交占位行。
+   ============================================================ */
+.recent-skel { display: block; padding: 4px 2px; }
+.recent-skel-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 2px; border-bottom: 1px solid var(--line-soft, #DCE6E0);
+}
+.recent-skel-row:last-child { border-bottom: 0; }
+.recent-skel-avatar { width: 36px; height: 36px; border-radius: 10px; flex: 0 0 auto; }
+.recent-skel-line { height: 12px; border-radius: 6px; flex: 1 1 auto; }
+.recent-skel-line.short { max-width: 38%; }
+
+/* ============================================================
+   十、prefers-color-scheme 基线
+   ------------------------------------------------------------
+   ux.js 在「自动」档下把 data-theme 设为 dark/light；这里在 JS 执行前
+   先给浏览器一个暗示，让原生控件/滚动条提前跟随系统深色，减少首屏闪烁。
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) { color-scheme: dark; }
+}

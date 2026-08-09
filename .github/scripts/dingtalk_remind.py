@@ -163,12 +163,17 @@ def build_pickup_confirm_markdown(payload):
     gap = ""
     # 计算间隔（登记→提单）
     try:
-        from datetime import datetime as _dt
-        t0 = _dt.fromisoformat((p.get("time") or "").replace("Z", "+00:00"))
-        t1 = _dt.fromisoformat((p.get("confirmedAt") or "").replace("Z", "+00:00"))
-        # 统一为北京时间
-        t0 = t0.astimezone()
-        t1 = t1.astimezone()
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        # Actions runner 时区为 UTC，astimezone() 无参会转成 UTC 而非北京时间；
+        # 且前端写入的 time/confirmedAt 多为 naive「YYYY-MM-DDTHH:MM」（本就是北京时间）。
+        # 故：naive → 直接挂 CST；aware → 显式转 CST。两端同一时区，间隔计算才准确。
+        _CST = _tz(_td(hours=8))
+
+        def _to_cst(dt):
+            return dt.replace(tzinfo=_CST) if dt.tzinfo is None else dt.astimezone(_CST)
+
+        t0 = _to_cst(_dt.fromisoformat((p.get("time") or "").replace("Z", "+00:00")))
+        t1 = _to_cst(_dt.fromisoformat((p.get("confirmedAt") or "").replace("Z", "+00:00")))
         if t1 > t0:
             secs = int((t1 - t0).total_seconds())
             h, m = divmod(secs // 60, 60)

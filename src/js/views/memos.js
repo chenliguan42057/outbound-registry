@@ -23,6 +23,7 @@
   var remindInput = null;   // 添加区「提醒时间（可选）」datetime-local
   var photos = null;        // 添加区照片上传组件（可选，多张）
   var activeTab = "todo";   // "todo"（未完成）| "done"（已完成）
+  var submitting = false;   // 提交互斥锁：防止连点/连按 Ctrl+Enter 造成重复添加
 
   function render(el) {
     container = el;
@@ -30,8 +31,8 @@
       '<div class="card">' +
         '<h2>添加待做事项</h2>' +
         '<div class="field">' +
-          '<label>待做事项<span class="req">*</span></label>' +
-          '<textarea id="memoText" rows="2" placeholder="例如：补充面膜 5片装库存…"></textarea>' +
+          '<label for="memoText">待做事项<span class="req">*</span></label>' +
+          '<textarea id="memoText" rows="2" maxlength="500" placeholder="例如：补充面膜 5片装库存…" autocomplete="off" enterkeyhint="enter" aria-label="待做事项"></textarea>' +
           '<div class="hint">按 Ctrl + Enter 快速提交</div>' +
         '</div>' +
         '<div class="field">' +
@@ -39,8 +40,8 @@
           '<div id="memoPhotoUpload"></div>' +
         '</div>' +
         '<div class="field">' +
-          '<label>提醒时间（可选）</label>' +
-          '<input type="datetime-local" id="memoRemindAt" step="60" />' +
+          '<label for="memoRemindAt">提醒时间（可选）</label>' +
+          '<input type="datetime-local" id="memoRemindAt" step="60" aria-label="提醒时间（可选）" />' +
           '<div class="hint">到点未完成将推送钉钉，推送后失效；留空则不提醒</div>' +
         '</div>' +
         '<div class="actions">' +
@@ -66,6 +67,7 @@
     photos.attach(Util.$("memoPhotoUpload"));
     Util.$("memoAdd").addEventListener("click", submit);
     Util.$("memoReset").addEventListener("click", function () {
+      UI.clearFieldErrors((textInput.closest && textInput.closest(".card")) || document);
       textInput.value = "";
       remindInput.value = "";
       photos.setPhotos([]);
@@ -97,17 +99,37 @@
     return !isNaN(t) && t <= Date.now();
   }
 
+  /** 切换「添加」按钮加载态 */
+  function setSubmitting(on) {
+    submitting = !!on;
+    var btn = Util.$("memoAdd");
+    if (!btn) return;
+    btn.disabled = !!on;
+    btn.classList.toggle("loading", !!on);
+    btn.setAttribute("aria-busy", on ? "true" : "false");
+  }
+
   function submit() {
+    if (submitting) return;   // 连点二次直接吞掉（Ctrl+Enter 也走这里）
+
     var text = textInput.value.trim();
-    if (!text) { Util.toast("请输入待做事项", true); textInput.focus(); return; }
     var remindAt = (remindInput && remindInput.value) || "";
+
+    // 一次性收集全部问题，字段级标红 + 滚动定位，替代逐条 toast
+    var errs = [];
+    if (!text) errs.push({ el: textInput, msg: "请输入待做事项" });
     if (remindAt) {
-      if (!isRemindAtValid(remindAt)) { Util.toast("请选择有效的提醒时间", true); remindInput.focus(); return; }
-      // 必须晚于当前北京时间（留 1 分钟缓冲，避免保存后立即被 cron 命中）
-      if (new Date(remindAt).getTime() <= Date.now() + 60 * 1000) {
-        Util.toast("提醒时间必须为未来", true); remindInput.focus(); return;
+      if (!isRemindAtValid(remindAt)) {
+        errs.push({ el: remindInput, msg: "请选择有效的提醒时间" });
+      } else if (new Date(remindAt).getTime() <= Date.now() + 60 * 1000) {
+        // 必须晚于当前北京时间（留 1 分钟缓冲，避免保存后立即被 cron 命中）
+        errs.push({ el: remindInput, msg: "提醒时间必须为未来（至少 1 分钟后）" });
       }
     }
+    var scope = (textInput.closest && textInput.closest(".card")) || document;
+    if (!UI.reportFieldErrors(errs, scope)) return;
+
+    setSubmitting(true);
     var memo = Memos.create({
       text: text,
       time: Util.nowLocal(),
@@ -120,9 +142,11 @@
     renderList();
     if (Cloud.hasToken()) {
       Util.toast("已添加，正在同步到云端…");
-      submitPush(memo);
+      // submitPush 是 async，无论成功/失败都要解锁，否则「添加」按钮会永久禁用
+      submitPush(memo)["catch"](function () {})["finally"](function () { setSubmitting(false); });
     } else {
       Util.toast("已添加（已存本机）");
+      setSubmitting(false);
     }
   }
 

@@ -56,7 +56,8 @@
   var statusText = "就绪";
   var statusIsErr = false;
 
-  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  var pad2 = Util.pad2;   // 统一走 Util，避免各文件各写一份补零逻辑
+  var routeBound = false;  // hashchange 只绑一次：壳被移除后重渲染不得重复叠加监听
 
   /** 渲染应用壳；已挂载则仅切换模块并保持壳状态 */
   function render(module) {
@@ -105,7 +106,10 @@
     renderNav();
     wireShell();
     mount(module || State.nav.active || "out-records");
-    window.addEventListener("hashchange", onRouteChange);
+    if (!routeBound) {
+      window.addEventListener("hashchange", onRouteChange);
+      routeBound = true;
+    }
     startAutoSync();
   }
 
@@ -145,24 +149,20 @@
     Util.$("winImportFile").addEventListener("change", handleImport);
   }
 
-  /** 全局搜索辅助：判断入库/出库哪边更容易命中（先看出库，再看入库） */
-  function stateHasMatch(q, kind) {
-    var kw = q.toLowerCase();
-    return (State.list || []).some(function (r) {
-      if (kind === "in" ? (r.type || "out") !== "in" : (r.type || "out") === "in") return false;
-      if (r.borrowed === true) return false;
-      var hay = (r.dept || "") + " " + (r.picker || "") + " " + (r.purpose || "") + " " +
-        (r.entity || "") + " " + (r.note || "") + " " +
-        (r.items || []).map(function (it) { return it.name; }).join(" ");
-      return hay.toLowerCase().includes(kw);
-    });
-  }
+  var currentView = null;   // 当前挂载的视图对象，用于切换前回收资源
 
   /** 挂载模块：切换内容区 + 高亮导航 + 记忆最后停留项 */
   function mount(moduleName) {
     var viewName = VIEW_MAP[moduleName] || "out-records";
     var view = window.App.Views[viewName];
     if (!view) return;
+    // 切走之前先让上一个视图清理自己的定时器/监听。
+    // 下面的 content.innerHTML = "" 只会移除 DOM，视图内的 setInterval 仍在空转
+    // （「云端同步」面板的倒计时就是这样泄漏的：切到别的模块后仍每秒跑一次）。
+    if (currentView && currentView !== view && typeof currentView.destroy === "function") {
+      try { currentView.destroy(); } catch (e) { console.warn("[app] 视图清理失败", e); }
+    }
+    currentView = view;
     State.nav.active = moduleName;
     Store.saveNav(State.nav);
     var items = Util.$("winNav").querySelectorAll(".win-sidebar-item");
@@ -210,7 +210,11 @@
   var syncing = false;          // 并发锁：同步进行中跳过本轮，防止请求重叠
   var nextSyncAt = 0;           // 下次自动同步时间戳（毫秒），供同步面板倒计时
 
-  /** 触发一次同步；syncing 并发锁 + 无令牌降级本机模式 */
+  /** 配额告急时的退避间隔：10 分钟看一次，等额度自然恢复 */
+  var RATE_BACKOFF_MS = 10 * 60 * 1000;
+  var rateWarned = false;
+
+  /** 触发一次同步；syncing 并发锁 + 无令牌降级本机模式 + 配额告急自动停表 */
   function triggerSync(reason) {
     if (!autoSyncOn) return;
     if (syncing) return;        // 并发防护：上一轮未结束则跳过本轮
@@ -218,11 +222,24 @@
       setSyncStatus("本机模式", true);
       return;
     }
+    // GitHub 认证请求限额 5000 次/小时且所有设备共用。轮询若把额度耗到 0，
+    // 用户连出库单都推不上去。余量告急时主动停表，把剩余额度留给写入操作。
+    var r = Cloud.getRate ? Cloud.getRate() : null;
+    if (r && r.low) {
+      setSyncStatus("API 额度不足，已暂停自动同步", true);
+      if (!rateWarned) {
+        rateWarned = true;
+        Util.toast("云端调用额度将尽（剩 " + r.remaining + " 次），自动同步已暂停，稍后自动恢复。手动提交不受影响。", true);
+      }
+      scheduleNextSync(RATE_BACKOFF_MS);
+      return;
+    }
+    rateWarned = false;
+
     syncing = true;
     setSyncStatus("同步中…", false);
     var before = State.list.length;
     Cloud.syncPull({ onStatus: function () {} }).then(function (res) {
-      syncing = false;
       if (res.ok) {
         setSyncStatus("就绪", false);
         var added = State.list.length - before;
@@ -230,15 +247,16 @@
       } else {
         setSyncStatus("同步失败", true);
       }
-      refreshActiveView();
-      scheduleNextSync();
       // 每次自动同步后顺带冲刷「待补推队列」（空队列无 API 开销）
       Cloud.flushQueue().then(function (fres) {
         if (fres && fres.ok > 0) Util.toast("已补推 " + fres.ok + " 条记录");
       }).catch(function () {});
-    }).catch(function () {
+    }).catch(function (e) {
+      setSyncStatus("同步失败：" + ((e && e.message) || "未知原因"), true);
+    }).finally(function () {
+      // 复位与排程放在 finally：即便上面的 then 内部抛错，
+      // 也不会把 syncing 永久锁死导致自动同步彻底停摆。
       syncing = false;
-      setSyncStatus("同步失败", true);
       refreshActiveView();
       scheduleNextSync();
     });

@@ -251,7 +251,9 @@
       memos: State.memos || [],
       catalog: (window.App.Catalog && window.App.Catalog.get()) || null
     };
-    Util.download("进销存备份_" + new Date().toISOString().slice(0, 10) + ".json",
+    // 文件名用本地日期（toISOString 是 UTC，东八区 08:00 前会写成前一天）；
+    // pkg.exportedAt 保留 ISO/UTC，那是机器可解析的绝对时刻，无歧义。
+    Util.download("进销存备份_" + Util.todayLocal() + ".json",
       JSON.stringify(pkg, null, 1), "application/json;charset=utf-8");
     Util.toast("备份已下载");
   }
@@ -347,13 +349,22 @@
     });
   }
 
-  /* 离开 #/app 时停止倒计时（返回时 render 会重新启动），避免残留定时器 */
+  /* 倒计时只在「云端同步」面板真正可见时运行。
+     原判据是 `container` 是否存在，但 container 一经 render 就永久保留，
+     用户切到别的模块后倒计时仍在空转，每秒操作一次已被移除的 DOM。 */
+  function syncPanelVisible() {
+    var S = window.App.State;
+    return window.App.Router.parse().base === "app" &&
+           S && S.nav && S.nav.active === "sync" &&
+           !!(container && container.isConnected);
+  }
   window.addEventListener("hashchange", function () {
-    if (window.App.Router.parse().base !== "app") stopCountdown();
-    else if (container) startCountdown();
+    if (syncPanelVisible()) startCountdown();
+    else stopCountdown();
   });
 
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
-  window.App.Views.sync = { render: render, refresh: refresh, doSync: doSync, startCountdown: startCountdown, stopCountdown: stopCountdown };
+  // destroy：由 app.mount 在切换模块前调用，回收本视图持有的定时器
+  window.App.Views.sync = { render: render, refresh: refresh, doSync: doSync, startCountdown: startCountdown, stopCountdown: stopCountdown, destroy: stopCountdown };
 })();

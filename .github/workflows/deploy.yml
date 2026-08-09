@@ -2,6 +2,18 @@ name: Deploy Pages
 on:
   push:
     branches: [main]
+    # 数据文件由前端与其他 Action 高频写入（每提交一条出库单就是一次 commit）。
+    # 若不排除，每条业务数据都会触发一次全站重新部署；而下面的
+    # concurrency.cancel-in-progress 会把正在进行的部署直接取消，
+    # 高峰期表现为「连续提交多条，站点却迟迟不更新」。
+    # 部署产物只有 src/（见下方 cp -r src/. dist/），data/ 根本不参与打包，
+    # 因此忽略这些路径不会让站点内容失真。
+    paths-ignore:
+      - 'data/**'
+      - 'docs/**'
+      - '**.md'
+      - '.wps_synced.json'
+      - '_local_marker.json'
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,8 +31,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
+          set -euo pipefail
+
+          # 前置校验：Secret 缺失时 perl 会把占位符替换成空串，部署照常"成功"，
+          # 但线上站点云同步全废。宁可让部署失败，也不要发布一个坏站点。
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::仓库 Secret GH_TOKEN 未配置或为空，注入后云同步将完全不可用，已中止部署。"
+            exit 1
+          fi
+
           mkdir -p dist
           perl -pi -e 's/__GH_TOKEN_PLACEHOLDER__/$ENV{GH_TOKEN}/g' src/index.html src/legacy.html src/lurong.html
+
+          # 静态资源指纹：把 index.html 里的 __CACHE_BUST__ 换成短 git SHA，
+          # 让 GitHub Pages 的强缓存（max-age=600）在发版后立即失效、拉到新资源。
+          SHA=$(printf '%s' "${GITHUB_SHA:-}" | cut -c1-8)
+          perl -pi -e "s/__CACHE_BUST__/$SHA/g" src/index.html
+
+          # 后置校验：任一文件仍残留占位符，说明替换没生效（文件改名、编码异常等），
+          # 同样属于"发布出去就是坏的"，必须拦下。
+          if grep -rln '__GH_TOKEN_PLACEHOLDER__' src/ ; then
+            echo "::error::占位符替换失败，上列文件仍有残留，已中止部署。"
+            exit 1
+          fi
+
           cp -r src/. dist/
       - uses: actions/upload-pages-artifact@v3
         with:

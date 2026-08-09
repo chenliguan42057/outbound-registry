@@ -23,6 +23,7 @@
   var els = null;
   var selectedPurpose = "";
   var activeTab = "todo";   // "todo"（待取货）| "shipped"（已出库）
+  var submitting = false;   // 提交互斥锁：防止连点造成重复登记
 
   function render(el) {
     container = el;
@@ -31,24 +32,24 @@
         '<h2>待取货登记 <span class="tag">已提单未出库</span></h2>' +
         '<div class="grid2">' +
           '<div class="field">' +
-            '<label>部门 / 客户<span class="req">*</span></label>' +
+            '<label for="pkDept">部门 / 客户<span class="req">*</span></label>' +
             '<div class="search-wrap">' +
-              '<input type="text" id="pkDept" placeholder="请输入部门 / 客户" autocomplete="off" />' +
+              '<input type="text" id="pkDept" placeholder="请输入部门 / 客户" autocomplete="off" inputmode="text" enterkeyhint="next" />' +
               '<div class="suggest" id="pkDeptSuggest"></div>' +
             '</div>' +
           '</div>' +
           '<div class="field">' +
-            '<label>取货人<span class="req">*</span></label>' +
+            '<label for="pkPicker">取货人<span class="req">*</span></label>' +
             '<div class="search-wrap">' +
-              '<input type="text" id="pkPicker" placeholder="请输入取货人姓名" autocomplete="off" />' +
+              '<input type="text" id="pkPicker" placeholder="请输入取货人姓名" autocomplete="off" inputmode="text" enterkeyhint="next" />' +
               '<div class="suggest" id="pkPickerSuggest"></div>' +
             '</div>' +
           '</div>' +
         '</div>' +
         '<div class="grid2">' +
           '<div class="field">' +
-            '<label>预计取货时间<span class="req">*</span></label>' +
-            '<input type="datetime-local" id="pkTime" />' +
+            '<label for="pkTime">预计取货时间<span class="req">*</span></label>' +
+            '<input type="datetime-local" id="pkTime" step="60" />' +
             '<div class="hint"><span class="auto" id="pkFillNow">📎 自动填入当前时间</span></div>' +
           '</div>' +
           '<div class="field">' +
@@ -69,8 +70,8 @@
           '<div id="pkProductPicker"></div>' +
         '</div>' +
         '<div class="field">' +
-          '<label>备注（可选）</label>' +
-          '<textarea id="pkNote" rows="2" placeholder="备注信息，如取货凭证号、联系方式等（可选）"></textarea>' +
+          '<label for="pkNote">备注（可选）</label>' +
+          '<textarea id="pkNote" rows="2" maxlength="500" placeholder="备注信息，如取货凭证号、联系方式等（可选）" autocomplete="off" enterkeyhint="enter"></textarea>' +
         '</div>' +
         '<div class="actions">' +
           '<button type="button" class="btn" id="pkSubmit">提交登记</button>' +
@@ -264,18 +265,44 @@
 
   /* ---------- 提交登记 ---------- */
 
+  /** 切换提交按钮的加载态。不改 textContent——resetForm() 不重写它 */
+  function setSubmitting(on) {
+    submitting = !!on;
+    if (!els || !els.submit) return;
+    els.submit.disabled = !!on;
+    els.submit.classList.toggle("loading", !!on);
+    els.submit.setAttribute("aria-busy", on ? "true" : "false");
+  }
+
   function submit() {
+    if (submitting) return;   // 连点二次直接吞掉
+
     var time = els.time.value;
     var pickerVal = els.picker.value.trim();
     var dept = els.dept.value.trim();
     var purpose = selectedPurpose;
-    if (!time) return Util.toast("请填写预计取货时间", true);
-    if (!pickerVal) return Util.toast("请填写取货人", true);
-    if (!dept) return Util.toast("请填写部门/客户（必填）", true);
-    if (!purpose) return Util.toast("请选择用途/项目（必填）", true);
-    var items = picker.getItems();
-    if (!items.length) return Util.toast("请至少选择一项货品", true);
 
+    // 一次性收集全部缺失项，字段级标红 + 滚动定位到第一处，替代「一次只弹一条 toast」
+    var errs = [];
+    if (!dept) errs.push({ el: els.dept, msg: "请填写部门 / 客户" });
+    if (!pickerVal) errs.push({ el: els.picker, msg: "请填写取货人" });
+    if (!time) errs.push({ el: els.time, msg: "请填写预计取货时间" });
+    if (!purpose) errs.push({ el: els.purposeChips, msg: "请选择用途 / 项目" });
+
+    var items = picker.getItems();
+    var qtyProblems = picker.validateItems ? picker.validateItems() : [];
+    if (!items.length) {
+      errs.push({
+        el: Util.$("pkProductPicker"),
+        msg: qtyProblems.length ? ("请填写数量：" + qtyProblems.join("、")) : "请至少选择一项货品"
+      });
+    } else if (qtyProblems.length) {
+      errs.push({ el: Util.$("pkProductPicker"), msg: "以下货品数量无效：" + qtyProblems.join("、") });
+    }
+
+    if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) return;
+
+    setSubmitting(true);
     var pk = Pickups.create({
       time: time,
       picker: pickerVal,
@@ -293,16 +320,18 @@
         window.App.Views.app.setSyncStatus("已同步", false);
       }).catch(function () {
         window.App.Views.app.setSyncStatus("云端同步失败（已存本机）", true);
-      });
+      })["finally"](function () { setSubmitting(false); });
       Util.toast("登记成功，正在同步到云端…");
     } else {
       // 令牌缺失＝只存在本机浏览器，换设备看不到。必须醒目告警，否则用户会误以为已同步。
       Util.toast("⚠️ 仅存本机，未上传云端！请联系管理员检查同步令牌", true);
       window.App.Views.app.setSyncStatus("⚠️ 未配置云端令牌，本条只存在本机，换设备看不到", true);
+      setSubmitting(false);
     }
   }
 
   function resetForm() {
+    UI.clearFieldErrors(els.submit.closest(".card") || document);
     els.picker.value = "";
     selectedPurpose = "";
     renderPurposeChips();
@@ -319,9 +348,8 @@
   function renderList() {
     if (!listBox) return;
     var list = State.pickups;
-    var nowD = new Date();
-    var p2 = function (n) { return (n < 10 ? "0" : "") + n; };
-    var nowStr = nowD.getFullYear() + "-" + p2(nowD.getMonth() + 1) + "-" + p2(nowD.getDate()) + "T" + p2(nowD.getHours()) + ":" + p2(nowD.getMinutes());
+    // 与 p.time（datetime-local "YYYY-MM-DDTHH:mm"）同格式，直接字符串比较判超时
+    var nowStr = Util.nowLocal();
     var todo = list.filter(function (p) { return p.shipped !== true; });
     // A8 超时置顶：预计取货时间已过且未出库 → 置顶标红
     todo.forEach(function (p) { p.__overdue = !!(p.time && p.time <= nowStr); });

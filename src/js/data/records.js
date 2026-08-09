@@ -139,7 +139,8 @@
     var arr = list || State.list;
     if (!arr.length) { Util.toast("没有可导出的记录", true); return; }
     var csv = "\ufeff" + toCsv(arr);
-    Util.download("出库登记_" + new Date().toISOString().slice(0, 10) + ".csv", csv, "text/csv;charset=utf-8");
+    // 文件名必须用本地日期：toISOString() 是 UTC，东八区 08:00 前导出会写成前一天
+    Util.download("出库登记_" + Util.todayLocal() + ".csv", csv, "text/csv;charset=utf-8");
     Util.toast("已导出 CSV");
   }
 
@@ -175,7 +176,7 @@
     var arr = list || State.list;
     if (!arr.length) { Util.toast("没有可导出的记录", true); return; }
     var csv = "\ufeff" + toReconCsv(arr);
-    Util.download("对账_" + new Date().toISOString().slice(0, 10) + ".csv", csv, "text/csv;charset=utf-8");
+    Util.download("对账_" + Util.todayLocal() + ".csv", csv, "text/csv;charset=utf-8");
     Util.toast("已导出对账 CSV");
   }
 

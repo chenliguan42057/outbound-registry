@@ -2,23 +2,109 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
-<meta http-equiv="Pragma" content="no-cache" />
-<meta http-equiv="Expires" content="0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>进销存管理系统</title>
-<link rel="stylesheet" href="css/base.css" />
-<link rel="stylesheet" href="css/layout.css" />
-<link rel="stylesheet" href="css/views.css" />
-<link rel="stylesheet" href="css/ai.css" />
-<link rel="stylesheet" href="css/fresh-mint-theme.css" />
-  <link rel="stylesheet" href="css/ux.css" />
+<link rel="icon" href="favicon.ico?v=__CACHE_BUST__" />
+<link rel="apple-touch-icon" href="favicon.ico?v=__CACHE_BUST__" />
+<link rel="manifest" href="manifest.json?v=__CACHE_BUST__" />
+<meta name="theme-color" content="#6FA08A" />
+<meta name="color-scheme" content="light dark" />
+<link rel="stylesheet" href="css/base.css?v=__CACHE_BUST__" />
+<link rel="stylesheet" href="css/layout.css?v=__CACHE_BUST__" />
+<link rel="stylesheet" href="css/views.css?v=__CACHE_BUST__" />
+<link rel="stylesheet" href="css/ai.css?v=__CACHE_BUST__" />
+<link rel="stylesheet" href="css/fresh-mint-theme.css?v=__CACHE_BUST__" />
+<link rel="stylesheet" href="css/ux.css?v=__CACHE_BUST__" />
+<link rel="stylesheet" href="css/patch.css?v=__CACHE_BUST__" />
 <script>
   /* 应急回退：?legacy=1 直接跳转冻结的旧版单页 legacy.html */
   (function () {
     if (location.search.indexOf('legacy=1') !== -1) {
       location.replace('legacy.html' + location.hash);
     }
+  })();
+
+  /* 全局错误兜底：任一模块抛错或资源 404 时，页面不再静默白屏，
+     而是顶部弹出可关闭的错误条并给出旧版回退入口。
+     刻意使用内联样式、不依赖任何外部 CSS/JS —— 样式表自身加载失败时也必须可见。 */
+  (function () {
+    var MAX = 3;                       // 最多同时展示 3 条，防错误风暴刷屏
+    var seen = Object.create(null);
+    var shown = 0;
+    var bar = null;
+
+    function ensureBar() {
+      if (bar && bar.parentNode) return bar;
+      if (!document.body) return null;
+      bar = document.createElement('div');
+      bar.id = 'fatal-error-bar';
+      bar.setAttribute('role', 'alert');
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;' +
+        'font:13px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;' +
+        'padding:10px 12px;box-sizing:border-box;background:#fff2f0;color:#a8071a;' +
+        'border-bottom:1px solid #ffccc7;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
+        'max-height:40vh;overflow:auto;';
+      document.body.appendChild(bar);
+      return bar;
+    }
+
+    function report(msg) {
+      if (!msg) return;
+      msg = String(msg).slice(0, 200);
+      if (seen[msg]) return;           // 同一错误只报一次
+      seen[msg] = 1;
+      if (shown >= MAX) return;
+      var host = ensureBar();
+      if (!host) {                     // body 尚未解析，等 DOM 就绪后补报
+        seen[msg] = 0;
+        document.addEventListener('DOMContentLoaded', function () { report(msg); });
+        return;
+      }
+      shown++;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:2px 0;';
+      var txt = document.createElement('span');
+      txt.style.cssText = 'flex:1;word-break:break-all;';
+      txt.textContent = '页面有部分功能未能正常加载：' + msg;
+      var reload = document.createElement('a');
+      reload.href = location.href;
+      reload.textContent = '刷新重试';
+      reload.style.cssText = 'color:#a8071a;font-weight:600;white-space:nowrap;';
+      var legacy = document.createElement('a');
+      legacy.href = '?legacy=1';
+      legacy.textContent = '用旧版打开';
+      legacy.style.cssText = 'color:#a8071a;font-weight:600;white-space:nowrap;';
+      var close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = '\u00d7';
+      close.setAttribute('aria-label', '关闭提示');
+      close.style.cssText = 'border:0;background:transparent;color:#a8071a;font-size:18px;line-height:1;cursor:pointer;padding:0 2px;';
+      close.onclick = function () {
+        if (row.parentNode) row.parentNode.removeChild(row);
+        if (bar && !bar.children.length && bar.parentNode) { bar.parentNode.removeChild(bar); bar = null; }
+      };
+      row.appendChild(txt); row.appendChild(reload); row.appendChild(legacy); row.appendChild(close);
+      host.appendChild(row);
+    }
+
+    window.addEventListener('error', function (e) {
+      // 资源加载失败不冒泡到 window.onerror，只能在捕获阶段从 e.target 识别
+      var t = e.target;
+      if (t && t !== window && (t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IMG')) {
+        var url = t.src || t.href || '';
+        report('资源加载失败 ' + url.split('/').slice(-2).join('/'));
+        return;
+      }
+      report((e.message || '未知错误') +
+        (e.lineno ? ' @' + String(e.filename || '').split('/').pop() + ':' + e.lineno : ''));
+    }, true);
+
+    window.addEventListener('unhandledrejection', function (e) {
+      var r = e && e.reason;
+      report('异步操作失败：' + ((r && (r.message || r.msg)) || r || '未知原因'));
+    });
+
+    window.__reportFatal = report;     // 供 main.js 启动失败时复用
   })();
 </script>
 </head>
@@ -41,44 +127,44 @@
   </script>
 
   <!-- 经典 <script> 顺序加载（不用 ES Module，保证 file:// 调试与加载顺序） -->
-  <script src="qrcode.js"></script>
-  <script src="js/core/config.js"></script>
-  <script src="js/core/util.js"></script>
-  <script src="js/core/store.js"></script>
-  <script src="js/data/stock.js"></script>
-  <script src="js/data/cloud.js"></script>
-  <script src="js/data/catalog.js"></script>
-  <script src="js/data/audit.js"></script>
-  <script src="js/data/records.js"></script>
-  <script src="js/data/pickups.js"></script>
-  <script src="js/data/memos.js"></script>
-  <script src="js/auth/auth.js"></script>
-  <script src="js/router/router.js"></script>
-  <script src="js/ui/components.js"></script>
-  <script src="js/views/landing.js"></script>
-  <script src="js/views/app.js"></script>
-  <script src="js/views/dashboard.js"></script>
-  <script src="js/views/out.js"></script>
-  <script src="js/views/in.js"></script>
-  <script src="js/views/stock.js"></script>
-  <script src="js/views/records.js"></script>
-  <script src="js/views/remind.js"></script>
-  <script src="js/views/pickups.js"></script>
-  <script src="js/views/memos.js"></script>
-  <script src="js/views/borrow.js"></script>
-  <script src="js/views/report.js"></script>
-  <script src="js/views/sync.js"></script>
-  <script src="js/ai/knowledge.js"></script>
-  <script src="js/ai/tools.js"></script>
-  <script src="js/ai/check.js"></script>
-  <script src="js/ai/engine.js"></script>
-  <script src="js/ai/llm.js"></script>
-  <script src="js/ai/web.js"></script>
-  <script src="js/ai/chat.js"></script>
-  <script src="js/views/ai.js"></script>
-  <script src="js/main.js"></script>
-  <script src="js/ui/shortcuts.js"></script>
-  <script src="js/ui/ux.js"></script>
-  <script src="js/ui/dingtalk.js"></script>
+  <script src="qrcode.js?v=__CACHE_BUST__"></script>
+  <script src="js/core/config.js?v=__CACHE_BUST__"></script>
+  <script src="js/core/util.js?v=__CACHE_BUST__"></script>
+  <script src="js/core/store.js?v=__CACHE_BUST__"></script>
+  <script src="js/data/stock.js?v=__CACHE_BUST__"></script>
+  <script src="js/data/cloud.js?v=__CACHE_BUST__"></script>
+  <script src="js/data/catalog.js?v=__CACHE_BUST__"></script>
+  <script src="js/data/audit.js?v=__CACHE_BUST__"></script>
+  <script src="js/data/records.js?v=__CACHE_BUST__"></script>
+  <script src="js/data/pickups.js?v=__CACHE_BUST__"></script>
+  <script src="js/data/memos.js?v=__CACHE_BUST__"></script>
+  <script src="js/auth/auth.js?v=__CACHE_BUST__"></script>
+  <script src="js/router/router.js?v=__CACHE_BUST__"></script>
+  <script src="js/ui/components.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/landing.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/app.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/dashboard.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/out.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/in.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/stock.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/records.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/remind.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/pickups.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/memos.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/borrow.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/report.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/sync.js?v=__CACHE_BUST__"></script>
+  <script src="js/ai/knowledge.js?v=__CACHE_BUST__"></script>
+  <script src="js/ai/tools.js?v=__CACHE_BUST__"></script>
+  <script src="js/ai/check.js?v=__CACHE_BUST__"></script>
+  <script src="js/ai/engine.js?v=__CACHE_BUST__"></script>
+  <script src="js/ai/llm.js?v=__CACHE_BUST__"></script>
+  <script src="js/ai/web.js?v=__CACHE_BUST__"></script>
+  <script src="js/ai/chat.js?v=__CACHE_BUST__"></script>
+  <script src="js/views/ai.js?v=__CACHE_BUST__"></script>
+  <script src="js/main.js?v=__CACHE_BUST__"></script>
+  <script src="js/ui/shortcuts.js?v=__CACHE_BUST__"></script>
+  <script src="js/ui/ux.js?v=__CACHE_BUST__"></script>
+  <script src="js/ui/dingtalk.js?v=__CACHE_BUST__"></script>
 </body>
 </html>
