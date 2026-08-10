@@ -89,11 +89,20 @@
     try { if (window.App.Audit) window.App.Audit.log("clear-all", {}); } catch (e) {}
   }
 
-  /** 合并策略：同 id 云端覆盖本地；排序 = time 降序，次 _ts 降序（与现网一致） */
+  /** 合并策略：同 id 云端覆盖本地，但「本地有 photos 而云端已剥离（photos 为空但 photoUrls 有值）」
+      时保留本地 photos——dataURL 是本机编辑回填/补传所需的原始凭证，云端瘦身后不应反向抹掉它。
+      排序 = time 降序，次 _ts 降序（与现网一致） */
   function mergeAndSort(local, remote) {
     var map = new Map();
     (local || []).forEach(function (r) { map.set(r.id, r); });
-    (remote || []).forEach(function (r) { map.set(r.id, r); });
+    (remote || []).forEach(function (r) {
+      var prev = map.get(r.id);
+      if (prev && (prev.photos && prev.photos.length) && !(r.photos && r.photos.length) && (r.photoUrls && r.photoUrls.length)) {
+        map.set(r.id, Object.assign({}, r, { photos: prev.photos }));
+      } else {
+        map.set(r.id, r);
+      }
+    });
     return Array.from(map.values()).sort(function (a, b) {
       return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
     });

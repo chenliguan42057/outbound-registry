@@ -144,8 +144,8 @@
 
     /* 业务常量 */
     LOW_STOCK_THRESHOLD: 95,
-    PHOTO_MAX_EDGE: 1280,
-    PHOTO_QUALITY: 0.72,
+    PHOTO_MAX_EDGE: 1024,
+    PHOTO_QUALITY: 0.6,
 
     /* 出库「用途/项目」预设（chip 单选；用户自定义项存 outbound_purpose_history） */
     PURPOSE_PRESETS: ["客户销售", "赠送客户", "内部员工使用"],

@@ -109,16 +109,28 @@
     return recs;
   }
 
-  /** 推送单条记录（存在则更新，不存在则新增） */
+  /** 推送前剥离 photos base64（只留 photoUrls CDN 链接）：
+      本地仍保留 photos 供编辑回填/补传，但云端记录不携带大段 base64，
+      记录文件从 100-300KB 瘦到 <20KB，同步/拉取更快。
+      剥离为纯副本，不修改调用方持有的原对象。 */
+  function slimRecord(rec) {
+    if (!rec) return rec;
+    if (!Array.isArray(rec.photos) || !rec.photos.length) return rec;
+    var slim = Object.assign({}, rec, { photos: [] });
+    return slim;
+  }
+
+  /** 推送单条记录（存在则更新，不存在则新增）；云端仅存 photoUrls，剥离 photos base64 */
   async function push(rec) {
-    var path = Config.GH.dir + "/" + rec.id + ".json";
-    var content = Util.b64enc(JSON.stringify(rec));
+    var slim = slimRecord(rec);
+    var path = Config.GH.dir + "/" + slim.id + ".json";
+    var content = Util.b64enc(JSON.stringify(slim));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
     var body = sha
-      ? { message: "update " + rec.id, content: content, sha: sha, branch: Config.GH.branch }
-      : { message: "add " + rec.id, content: content, branch: Config.GH.branch };
+      ? { message: "update " + slim.id, content: content, sha: sha, branch: Config.GH.branch }
+      : { message: "add " + slim.id, content: content, branch: Config.GH.branch };
     await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
       method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
     });
@@ -158,8 +170,9 @@
 
   /** 推送单条待取货（存在则更新，不存在则新增） */
   async function pushPickup(rec) {
-    var path = "data/pickups/" + rec.id + ".json";
-    var content = Util.b64enc(JSON.stringify(rec));
+    var slim = slimRecord(rec);
+    var path = "data/pickups/" + slim.id + ".json";
+    var content = Util.b64enc(JSON.stringify(slim));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
@@ -216,8 +229,9 @@
 
   /** 推送单条备忘录（存在则更新，不存在则新增） */
   async function pushMemo(rec) {
-    var path = "data/memos/" + rec.id + ".json";
-    var content = Util.b64enc(JSON.stringify(rec));
+    var slim = slimRecord(rec);
+    var path = "data/memos/" + slim.id + ".json";
+    var content = Util.b64enc(JSON.stringify(slim));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
@@ -334,6 +348,25 @@
     return toms;
   }
 
+  /** 照片上传云端（带重试）：data/photos/<id>-<index>.jpg；返回公网 URL（jsdelivr CDN）。
+      与 pushWithRetry 同模式：最多 attempts 次指数退避（800ms/1600ms），
+      401/403 令牌失效立即放弃（避免白等配额/权限问题）。 */
+  async function pushPhotoWithRetry(id, index, dataUrl, attempts) {
+    attempts = attempts || 3;
+    var lastErr = null;
+    for (var i = 0; i < attempts; i++) {
+      try {
+        return await pushPhoto(id, index, dataUrl);
+      } catch (e) {
+        lastErr = e;
+        var msg = String((e && e.message) || "");
+        if (/^401 |^403 /.test(msg)) break;           // 令牌失效/配额：不再重试
+        if (i < attempts - 1) await new Promise(function (r) { setTimeout(r, 800 * Math.pow(2, i)); });
+      }
+    }
+    throw lastErr || new Error("photo upload failed");
+  }
+
   /** 照片上传云端：data/photos/<id>-<index>.jpg；返回公网 URL（jsdelivr CDN） */
   async function pushPhoto(id, index, dataUrl) {
     var m = /^data:image\/[^;]+;base64,(.+)$/.exec(String(dataUrl || ""));
@@ -351,18 +384,85 @@
     return "https://cdn.jsdelivr.net/gh/" + Config.GH.repo + "@" + Config.GH.branch + "/" + path;
   }
 
-  /** 批量上传记录照片，返回 photoUrls 数组（失败跳过）；limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖） */
-  async function pushPhotos(rec, limit) {
-    var urls = [];
+  /* ================= 照片上传失败追踪 =================
+     照片是业务凭证，绝不能静默丢失。失败时把 {id, failedIndexes} 记入本机队列，
+     云同步页可一键补传；dataURL 始终保留在记录 photos 字段（不丢原始数据）。 */
+
+  var PHOTO_PENDING_KEY = "outbound_photo_pending";
+
+  function loadPhotoPending() {
+    try { return JSON.parse(localStorage.getItem(PHOTO_PENDING_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function savePhotoPending(arr) {
+    try { localStorage.setItem(PHOTO_PENDING_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
+  /** 记录照片失败项（合并同 id 的 failedIndexes） */
+  function markPhotoPending(id, failedIndexes) {
+    if (!id || !failedIndexes || !failedIndexes.length) return;
+    var q = loadPhotoPending();
+    var hit = q.filter(function (x) { return x.id === id; })[0];
+    if (!hit) { q.push({ id: id, failedIndexes: failedIndexes.slice() }); }
+    else {
+      hit.failedIndexes = Array.from(new Set(hit.failedIndexes.concat(failedIndexes))).sort(function (a, b) { return a - b; });
+    }
+    savePhotoPending(q);
+  }
+  /** 清除某记录的照片失败项 */
+  function clearPhotoPending(id) {
+    savePhotoPending(loadPhotoPending().filter(function (x) { return x.id !== id; }));
+  }
+
+  /** 批量上传记录照片（带重试，不再静默吞错）。
+      返回 { urls, failedIndexes }；failedIndexes 为失败的照片下标（从 0 计），
+      调用方据此 toast 提示并调用 markPhotoPending 入补传队列。
+      limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖）。 */
+  async function pushPhotosDetailed(rec, limit) {
+    var urls = [], failed = [];
     var photos = (rec && rec.photos) || [];
     var slice = limit ? photos.slice(0, limit) : photos;
     for (var i = 0; i < slice.length; i++) {
       try {
-        var u = await pushPhoto(rec.id, i + 1, slice[i]);
-        if (u) urls.push(u);
-      } catch (e) {}
+        var u = await pushPhotoWithRetry(rec.id, i + 1, slice[i]);
+        if (u) urls.push(u); else failed.push(i);
+      } catch (e) {
+        failed.push(i);
+      }
     }
-    return urls;
+    return { urls: urls, failedIndexes: failed };
+  }
+
+  /** 批量上传记录照片，返回 photoUrls 数组（兼容旧调用方；失败项自动入补传队列）。
+      limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖） */
+  async function pushPhotos(rec, limit) {
+    var r = await pushPhotosDetailed(rec, limit);
+    if (r.failedIndexes.length) markPhotoPending(rec.id, r.failedIndexes);
+    return r.urls;
+  }
+
+  /** 补传某条记录的全部缺失照片：对比 photos 与 photoUrls，只传未传成功的。
+      返回 { ok, fail }。成功全部后清补传队列项。 */
+  async function retryPhotosFor(rec) {
+    if (!rec || !Array.isArray(rec.photos) || !rec.photos.length) return { ok: 0, fail: 0 };
+    var have = (rec.photoUrls || []).length;      // 已成功的照片数（索引 0..have-1）
+    var missing = [];
+    for (var i = have; i < rec.photos.length; i++) missing.push(i);
+    if (!missing.length) { clearPhotoPending(rec.id); return { ok: 0, fail: 0 }; }
+    var urls = rec.photoUrls ? rec.photoUrls.slice() : [];
+    var failed = [];
+    for (var i = 0; i < missing.length; i++) {
+      var idx = missing[i];
+      try {
+        var u = await pushPhotoWithRetry(rec.id, idx + 1, rec.photos[idx]);
+        if (u) urls.push(u); else failed.push(idx);
+      } catch (e) { failed.push(idx); }
+    }
+    if (!failed.length && window.App.Records) {
+      var updated = window.App.Records.update(rec.id, { photoUrls: urls });
+      clearPhotoPending(rec.id);
+      return { ok: urls.length - have, fail: 0, updated: updated || rec };
+    }
+    markPhotoPending(rec.id, failed);
+    return { ok: urls.length - have, fail: failed.length, updated: rec };
   }
 
   /** 逐条推送本地全部记录 */
@@ -640,7 +740,12 @@
     clearAllWithReason: clearAllWithReason,
     pullTombstones: pullTombstones,
     pushPhoto: pushPhoto,
+    pushPhotoWithRetry: pushPhotoWithRetry,
     pushPhotos: pushPhotos,
+    pushPhotosDetailed: pushPhotosDetailed,
+    retryPhotosFor: retryPhotosFor,
+    loadPhotoPending: loadPhotoPending,
+    clearPhotoPending: clearPhotoPending,
     pullPickups: pullPickups,
     pushPickup: pushPickup,
     delPickup: delPickup,

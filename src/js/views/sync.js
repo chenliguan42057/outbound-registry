@@ -73,6 +73,14 @@
         '<div class="sync-err" id="syncErr"></div>' +
       '</div>' +
       '<div class="card">' +
+        '<h2>照片补传 <span class="tag">弱网恢复</span></h2>' +
+        '<div class="sync-row"><span class="sync-k">待补传</span><span class="sync-v" id="syncPhotoPending">—</span></div>' +
+        '<div class="actions">' +
+          '<button type="button" class="btn sm" id="syncRetryPhotos">📷 补传照片</button>' +
+        '</div>' +
+        '<div class="hint">提交时因弱网/配额上传失败的照片会列在这里（原始照片保留在本机不会丢）。点击「补传照片」自动重试。</div>' +
+      '</div>' +
+      '<div class="card">' +
         '<h2>云端令牌设置 <span class="tag">Contents API</span></h2>' +
         '<div class="field">' +
           '<label>设置 GitHub 令牌</label>' +
@@ -102,6 +110,8 @@
       '</div>';
     statusEl = Util.$("syncStateText");
     Util.$("syncNow").addEventListener("click", doSync);
+    Util.$("syncRetryPhotos").addEventListener("click", retryAllPhotos);
+    renderPhotoPending();
     Util.$("syncLogout").addEventListener("click", async function () {
       var ok = await UI.confirmDialog("退出登录后需重新输入密码。确定退出？", "退出登录");
       if (!ok) return;
@@ -367,4 +377,72 @@
   window.App.Views = window.App.Views || {};
   // destroy：由 app.mount 在切换模块前调用，回收本视图持有的定时器
   window.App.Views.sync = { render: render, refresh: refresh, doSync: doSync, startCountdown: startCountdown, stopCountdown: stopCountdown, destroy: stopCountdown };
+
+  /* ================= 照片补传（弱网失败恢复） ================= */
+
+  /** 刷新「待补传」统计文案 */
+  function renderPhotoPending() {
+    var el = Util.$("syncPhotoPending");
+    if (!el) return;
+    var q = (Cloud.loadPhotoPending && Cloud.loadPhotoPending()) || [];
+    var extra = 0;
+    (State.list || []).forEach(function (r) {
+      if ((r.photos || []).length > (r.photoUrls || []).length) extra++;
+    });
+    (window.App.State.memos || []).forEach(function (m) {
+      if ((m.photos || []).length > (m.photoUrls || []).length) extra++;
+    });
+    var n = q.length + extra;
+    el.textContent = n > 0 ? n + " 条记录（" + (q.length ? "队列 " + q.length : "") + (q.length && extra ? " + " : "") + (extra ? "缺失 " + extra : "") + "）" : "无";
+  }
+
+  /** 补传全部缺失照片：队列项 + 本机 photos > photoUrls 的记录/备忘录 */
+  async function retryAllPhotos() {
+    if (!Cloud.hasToken()) { Util.toast("未配置云端令牌，无法补传", true); return; }
+    Util.toast("正在补传照片…");
+    var ok = 0, fail = 0;
+    var targets = [];
+    // ① 补传队列中的记录
+    var q = (Cloud.loadPhotoPending && Cloud.loadPhotoPending()) || [];
+    (q || []).forEach(function (x) {
+      var rec = (State.list || []).filter(function (r) { return r.id === x.id; })[0];
+      if (rec) targets.push(rec);
+    });
+    // ② photos > photoUrls 的本地记录（队列遗漏/无队列项场景）
+    (State.list || []).forEach(function (r) {
+      if ((r.photos || []).length > (r.photoUrls || []).length) {
+        if (!targets.some(function (t) { return t.id === r.id; })) targets.push(r);
+      }
+    });
+    // ③ 备忘录（memos 也有照片）
+    (window.App.State.memos || []).forEach(function (m) {
+      if ((m.photos || []).length > (m.photoUrls || []).length) {
+        if (!targets.some(function (t) { return t.id === m.id; })) targets.push(m);
+      }
+    });
+    if (!targets.length) { Util.toast("没有需要补传的照片"); renderPhotoPending(); return; }
+    for (var i = 0; i < targets.length; i++) {
+      try {
+        var r = await Cloud.retryPhotosFor(targets[i]);
+        ok += r.ok || 0;
+        fail += r.fail || 0;
+        if (r.updated && window.App.Records) {
+          // 若记录本体未上云，补传成功后可顺带推送记录（含 photoUrls）
+          try {
+            if (window.App.State.list.some(function (x) { return x.id === r.updated.id; })) {
+              await Cloud.pushRecord(r.updated);
+            } else if (window.App.Memos && window.App.Memos.update) {
+              // 备忘录已在 retryPhotosFor 内更新；这里确保推送本体
+              try { await Cloud.pushMemo(r.updated); } catch (e) {}
+            }
+          } catch (e) {}
+        }
+      } catch (e) { fail++; }
+    }
+    renderPhotoPending();
+    if (ok || fail) {
+      Util.toast(fail ? "补传完成：成功 " + ok + "，失败 " + fail + "（可再试）" : "补传完成：成功 " + ok + " 张照片", !!fail);
+    }
+    try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
+  }
 })();

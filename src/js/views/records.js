@@ -188,7 +188,7 @@
           return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + Stock.getRecordStock(it.name, r, it) + '</div>';
         }).join("");
         var qtySum = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
-        var photos = r.photos || [];
+        var photos = (r.photoUrls && r.photoUrls.length) ? r.photoUrls : (r.photos || []);
         var photoHtml = photos.length
           ? photos.slice(0, 4).map(function (src, pi) {
               return '<img class="mini-photo" src="' + src + '" data-act="photo" data-src="' + src + '" data-id="' + r.id + '" alt="照片' + (pi + 1) + '" />';
@@ -221,11 +221,15 @@
         return '<div class="detail-item"><span>' + Util.esc(it.name) + ' × ' + it.qty + '</span>' +
           '<span style="color:var(--muted);">库存 ' + Stock.getRecordStock(it.name, r, it) + '</span></div>';
       }).join("");
-      var photosHtml = (r.photos && r.photos.length)
-        ? '<div class="detail-photos">' + r.photos.map(function (src, i) {
+      var photosHtml = (r.photoUrls && r.photoUrls.length)
+        ? '<div class="detail-photos">' + r.photoUrls.map(function (src, i) {
             return '<img src="' + src + '" data-act="photo" data-src="' + src + '" alt="照片' + (i + 1) + '" />';
           }).join("") + '</div>'
-        : '<span style="color:var(--muted);">无照片</span>';
+        : ((r.photos && r.photos.length)
+          ? '<div class="detail-photos">' + r.photos.map(function (src, i) {
+              return '<img src="' + src + '" data-act="photo" data-src="' + src + '" alt="照片' + (i + 1) + '" />';
+            }).join("") + '</div>'
+          : '<span style="color:var(--muted);">无照片</span>');
       var rows = "";
       rows += '<div class="detail-row"><span class="k">类型</span><span class="v">' + (isRecIn ? '<span class="in-tag">入库</span>' : "出库") + '</span></div>';
       rows += '<div class="detail-row"><span class="k">时间</span><span class="v">' + Util.esc(r.time || "-") + '</span></div>';

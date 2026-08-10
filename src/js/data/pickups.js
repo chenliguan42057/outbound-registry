@@ -52,6 +52,10 @@
     (remote || []).forEach(function (p) {
       var lp = map.get(p.id);
       if (lp && lp.shipped === true && p.shipped !== true) return;   // 保留本地「已出库」操作状态
+      if (lp && (lp.photos && lp.photos.length) && !(p.photos && p.photos.length) && (p.photoUrls && p.photoUrls.length)) {
+        map.set(p.id, Object.assign({}, p, { photos: lp.photos }));   // 保留本地 photos 原始凭证
+        return;
+      }
       map.set(p.id, p);
     });
     return Array.from(map.values()).sort(function (a, b) {

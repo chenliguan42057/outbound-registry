@@ -49,12 +49,21 @@
     State.saveMemos();
   }
 
-  /** 合并策略：同 id 冲突时云端覆盖本地（与待取货一致，云端为准）；
+  /** 合并策略：同 id 冲突时云端覆盖本地（与待取货一致，云端为准），
+      但「本地有 photos 而云端已剥离（photos 空但 photoUrls 有值）」时保留本地 photos
+      （dataURL 为本机编辑回填/补传所需原始凭证）；
       排序 = time 降序，次 _ts 降序（与记录一致） */
   function mergeAndSort(local, remote) {
     var map = new Map();
     (local || []).forEach(function (m) { map.set(m.id, m); });
-    (remote || []).forEach(function (m) { map.set(m.id, m); });
+    (remote || []).forEach(function (m) {
+      var prev = map.get(m.id);
+      if (prev && (prev.photos && prev.photos.length) && !(m.photos && m.photos.length) && (m.photoUrls && m.photoUrls.length)) {
+        map.set(m.id, Object.assign({}, m, { photos: prev.photos }));
+      } else {
+        map.set(m.id, m);
+      }
+    });
     return Array.from(map.values()).sort(function (a, b) {
       return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
     });

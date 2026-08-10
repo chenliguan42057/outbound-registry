@@ -501,7 +501,7 @@
     this.inputEl.value = "";
   };
 
-  /** 压缩：最大边 1280px / JPEG 0.72（与现网一致） */
+  /** 压缩：最大边 1024px / JPEG 0.6（2026-08-10 调优：原 1280/0.72，单张约减半） */
   PhotoUpload.prototype.compress = function (dataUrl, name, done) {
     var self = this;
     var img = new Image();

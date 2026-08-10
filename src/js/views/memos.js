@@ -150,17 +150,26 @@
     }
   }
 
-  /** 异步推送：先上传照片并写回 photoUrls（跨设备可见），再推备忘录本体 */
+  /** 异步推送：先上传照片并写回 photoUrls（跨设备可见），再推备忘录本体。
+      照片失败不静默：toast 提示 + 入补传队列，dataURL 保留在 memo.photos 不丢。 */
   async function submitPush(memo) {
     try {
       if (memo.photos && memo.photos.length) {
-        var urls = await Cloud.pushPhotos(memo);
-        if (urls && urls.length) {
-          var updated = Memos.update(memo.id, { photoUrls: urls });
+        if (Cloud.getRate && Cloud.getRate().low) {
+          Util.toast("⚠️ API 配额紧张，照片可能上传较慢或失败；失败可到「云同步」页补传", true);
+        }
+        var r = await Cloud.pushPhotosDetailed(memo);
+        if (r.urls && r.urls.length) {
+          var updated = Memos.update(memo.id, { photoUrls: r.urls });
           if (updated) memo = updated;
         }
+        if (r.failedIndexes && r.failedIndexes.length) {
+          Cloud.markPhotoPending(memo.id, r.failedIndexes);
+          var names = r.failedIndexes.map(function (i) { return "第 " + (i + 1) + " 张"; }).join("、");
+          Util.toast("⚠️ 照片 " + names + " 上传失败（弱网/配额），已存本机，可到「云同步」页补传", true);
+        }
       }
-    } catch (e) { /* 照片上传失败不阻塞备忘录本体推送 */ }
+    } catch (e) { /* 照片上传异常不阻塞备忘录本体推送 */ }
     Cloud.pushMemo(memo).then(function () {
       window.App.Views.app.setSyncStatus("已同步", false);
     }).catch(function () {
