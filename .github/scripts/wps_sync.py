@@ -149,6 +149,7 @@ else:
     WPS_MAP = PM.get("wpsMap") or dict(PRODUCT_MAP_FALLBACK)
     NAME_MAP = PM.get("nameMap") or dict(NAME_MAP_FALLBACK)
     PRODUCTS = PM.get("products") or list(PRODUCTS_FALLBACK)
+    log("✅ 已从商品映射单一来源加载（%d 商品 / %d 条台账映射，前后端共用）" % (len(PRODUCTS), len(WPS_MAP)))
 PRODUCTS_SET = set(PRODUCTS)
 
 
