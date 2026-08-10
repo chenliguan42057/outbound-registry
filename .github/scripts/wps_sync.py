@@ -32,27 +32,48 @@ GH_PAT = (os.environ.get("GH_PAT") or "").strip()  # 本地回填时用来回写
 REPO = "chenliguan42057/outbound-registry"
 MARKER = ".wps_synced.json"
 
-# 主程序商品名 -> (金山子表, 金山列归一化名)
-# 归一化名须与 airscript_append.js 的 normalizeProductName() 输出一致
-# 2026-08-10 前端商品名精简后，同时保留旧名做兼容（历史记录/旧入口仍可能用旧名）。
-PRODUCT_MAP = {
-    # ===== 2026鹿茸水乳系列 =====
-    # 洁面
+# ===== 商品映射「单一真相源」=====
+# 前后端共用 src/js/data/product-map.js（挂载 window.APP_PRODUCT_MAP），结构：
+#   products: 前端商品目录（精简名）
+#   nameMap:  旧名→新名（库存折算 / 后台归一后重试）
+#   wpsMap:   全名(新旧都含)→ [金山子表, 金山列名]；null 表示已知但不进台账（如手提袋）
+# 后台(wps_sync.py) 启动时解析该 JS 文件；解析失败才回退到下面的内置兜底（仅灾难恢复）。
+PRODUCTS_FALLBACK = [
+    "精华液 20支装", "精华液 5支装", "精华液 单支装", "面膜 5片装", "面膜 1片装",
+    "精华液 30支装", "洁面慕斯 150ml", "洁面慕斯 50ml", "精粹水 120ml", "精粹水 30ml",
+    "精粹乳 80ml", "精粹乳 30ml", "精粹乳 1ml", "精粹霜 50g", "精粹霜 15g", "精粹霜 5g", "精粹霜 1g",
+    "华大鹿茸凝时系列礼盒装", "小鹿牛皮纸袋 大", "小鹿牛皮纸袋 小"
+]
+NAME_MAP_FALLBACK = {
+    "冻干精华液 20支装": "精华液 20支装",
+    "冻干精华液 5支装": "精华液 5支装",
+    "冻干精华液 单支装": "精华液 单支装",
+    "冻干精华液 30支装": "精华液 30支装",
+    "舒缓精粹水 120ml": "精粹水 120ml",
+    "舒缓精粹水 30ml": "精粹水 30ml",
+    "赋活精粹乳 80ml": "精粹乳 80ml",
+    "赋活精粹乳 30ml": "精粹乳 30ml",
+    "赋活精粹乳 1ml": "精粹乳 1ml",
+    "舒缓精粹霜 50g": "精粹霜 50g",
+    "舒缓精粹霜 15g": "精粹霜 15g",
+    "舒缓精粹霜 5g": "精粹霜 5g",
+    "舒缓精粹霜 1g": "精粹霜 1g",
+    "小鹿牛皮纸袋（全系列护肤品手提袋）大": "小鹿牛皮纸袋 大",
+    "小鹿牛皮纸袋（精华+面膜手提袋）小": "小鹿牛皮纸袋 小"
+}
+PRODUCT_MAP_FALLBACK = {
     "洁面慕斯 150ml": ("2026鹿茸水乳系列", "洁面150ml"),
     "洁面慕斯 50ml": ("2026鹿茸水乳系列", "洁面50ml"),
-    # 精粹水（旧名含"舒缓"前缀，新名已去掉）
     "舒缓精粹水 120ml": ("2026鹿茸水乳系列", "精粹水120ml"),
     "舒缓精粹水 30ml": ("2026鹿茸水乳系列", "精粹水30ml"),
     "精粹水 120ml": ("2026鹿茸水乳系列", "精粹水120ml"),
     "精粹水 30ml": ("2026鹿茸水乳系列", "精粹水30ml"),
-    # 精粹乳（旧名含"赋活"前缀，新名已去掉）
     "赋活精粹乳 80ml": ("2026鹿茸水乳系列", "精粹乳80ml"),
     "赋活精粹乳 30ml": ("2026鹿茸水乳系列", "精粹乳30ml"),
     "赋活精粹乳 1ml": ("2026鹿茸水乳系列", "精粹乳1ml"),
     "精粹乳 80ml": ("2026鹿茸水乳系列", "精粹乳80ml"),
     "精粹乳 30ml": ("2026鹿茸水乳系列", "精粹乳30ml"),
     "精粹乳 1ml": ("2026鹿茸水乳系列", "精粹乳1ml"),
-    # 精粹霜（旧名含"舒缓"前缀，新名已去掉）
     "舒缓精粹霜 50g": ("2026鹿茸水乳系列", "精粹霜50g"),
     "舒缓精粹霜 15g": ("2026鹿茸水乳系列", "精粹霜15g"),
     "舒缓精粹霜 5g": ("2026鹿茸水乳系列", "精粹霜5g"),
@@ -61,8 +82,6 @@ PRODUCT_MAP = {
     "精粹霜 15g": ("2026鹿茸水乳系列", "精粹霜15g"),
     "精粹霜 5g": ("2026鹿茸水乳系列", "精粹霜5g"),
     "精粹霜 1g": ("2026鹿茸水乳系列", "精粹霜1g"),
-    # ===== 2026时空鹿茸库存 =====
-    # 精华液（旧名含"冻干"前缀，新名已去掉）
     "冻干精华液 20支装": ("2026时空鹿茸库存", "20支盒"),
     "冻干精华液 5支装": ("2026时空鹿茸库存", "5支盒"),
     "冻干精华液 单支装": ("2026时空鹿茸库存", "1支袋"),
@@ -71,12 +90,66 @@ PRODUCT_MAP = {
     "精华液 5支装": ("2026时空鹿茸库存", "5支盒"),
     "精华液 单支装": ("2026时空鹿茸库存", "1支袋"),
     "精华液 30支装": ("2026时空鹿茸库存", "精华30支盒"),
-    # 面膜
     "面膜 5片装": ("2026时空鹿茸库存", "面膜5片盒"),
     "面膜 1片装": ("2026时空鹿茸库存", "面膜1片"),
-    # 礼盒
     "华大鹿茸凝时系列礼盒装": ("2026时空鹿茸库存", "中秋礼盒"),
 }
+
+
+def _extract_json_object(text):
+    """从 product-map.js 中提取 window.APP_PRODUCT_MAP = {...} 的 {...} 子串（平衡括号）。
+
+    注意：不能只搜 "APP_PRODUCT_MAP"，因为顶部注释里也出现了该词；
+    必须锚定赋值 "APP_PRODUCT_MAP = {"，取其后第一个 { 作为对象起点。
+    """
+    idx = text.find("APP_PRODUCT_MAP =")
+    if idx < 0:
+        idx = text.find("APP_PRODUCT_MAP")
+        if idx < 0:
+            raise ValueError("未找到 APP_PRODUCT_MAP")
+    i = text.find("{", idx)
+    if i < 0:
+        raise ValueError("未找到对象起始 {")
+    depth = 0
+    for j in range(i, len(text)):
+        c = text[j]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[i:j + 1]
+    raise ValueError("对象括号未闭合")
+
+
+def load_product_map():
+    """解析 src/js/data/product-map.js，返回 {products, nameMap, wpsMap}；失败返回 None。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.normpath(os.path.join(here, "..", "..", "src", "js", "data", "product-map.js")),
+        os.environ.get("PRODUCT_MAP_JS") or "",
+    ]
+    for p in candidates:
+        if p and os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return json.loads(_extract_json_object(f.read()))
+            except Exception as e:
+                log("⚠️ 解析商品映射失败 %s: %s" % (p, e))
+    return None
+
+
+PM = load_product_map()
+if PM is None:
+    log("⚠️ 未加载到 product-map.js，回退内置 PRODUCT_MAP（请尽快补齐 product-map.js）")
+    WPS_MAP = dict(PRODUCT_MAP_FALLBACK)
+    NAME_MAP = dict(NAME_MAP_FALLBACK)
+    PRODUCTS = list(PRODUCTS_FALLBACK)
+else:
+    WPS_MAP = PM.get("wpsMap") or dict(PRODUCT_MAP_FALLBACK)
+    NAME_MAP = PM.get("nameMap") or dict(NAME_MAP_FALLBACK)
+    PRODUCTS = PM.get("products") or list(PRODUCTS_FALLBACK)
+PRODUCTS_SET = set(PRODUCTS)
 
 
 def log(msg):
@@ -97,8 +170,21 @@ def fmt_date(time_str):
         return time_str
 
 
-def map_product(name):
-    return PRODUCT_MAP.get((name or "").strip())
+def classify(name):
+    """返回 (kind, value)：
+       kind='mapped'  → value=[子表, 金山列]，该商品要写进金山
+       kind='excluded'→ value=None，已知商品但不进金山（如手提袋）
+       kind='unknown' → value=None，不在映射里（手写/错字/漏配映射）
+    """
+    nm = (name or "").strip()
+    if nm in WPS_MAP:
+        v = WPS_MAP[nm]
+        return ("mapped", v) if isinstance(v, list) else ("excluded", None)
+    norm = NAME_MAP.get(nm)
+    if norm and norm in WPS_MAP:
+        v = WPS_MAP[norm]
+        return ("mapped", v) if isinstance(v, list) else ("excluded", None)
+    return ("unknown", None)
 
 
 def load_synced():
@@ -180,12 +266,12 @@ def now_iso():
 
 
 def collect_jobs(rec):
-    """返回 {sheet_name: [(product, qty), ...]} —— 同一订单按子表分组。
-
-    目的：把「一个订单的多商品」聚到对应子表，便于在金山里「一个订单一行」
-    （同一子表内的多个商品填在同一行的不同列）。
+    """返回 (by_sheet, skipped)：
+       by_sheet: {sheet_name: [(product, qty), ...]} —— 同一订单按子表分组，便于金山「一单一行」
+       skipped : 鹿茸目录商品却找不到台账映射的名称列表（防呆告警用，如未来新增商品忘配映射）
     """
     by_sheet = {}
+    skipped = []
     lurong = rec.get("lurong")
     items = rec.get("items") or []
 
@@ -196,17 +282,24 @@ def collect_jobs(rec):
         qty = rec.get("qty") or (items[0].get("qty", 0) if items else 0)
         if sheet and product:
             by_sheet.setdefault(sheet, []).append((product, qty))
-        return by_sheet
+        return by_sheet, skipped
 
     for it in items:
         name = it.get("name", "")
-        mp = map_product(name)
-        if not mp:
-            continue  # 非鹿茸商品（如手提袋）跳过
-        sheet, product = mp
-        qty = it.get("qty", 0)
-        by_sheet.setdefault(sheet, []).append((product, qty))
-    return by_sheet
+        kind, val = classify(name)
+        if kind == "mapped":
+            sheet, product = val
+            qty = it.get("qty", 0)
+            by_sheet.setdefault(sheet, []).append((product, qty))
+        elif kind == "excluded":
+            continue  # 已知但不进台账（如手提袋），静默跳过
+        else:  # unknown
+            # 仅当该名属于前端商品目录（鹿茸商品）却没配映射时才告警，
+            # 避免错字/手写串扰正常流程。
+            if name in PRODUCTS_SET or NAME_MAP.get(name) in PRODUCTS_SET:
+                skipped.append(name)
+            # 其余（手写/错字/非目录串）静默跳过
+    return by_sheet, skipped
 
 
 def process_record(rec, synced):
@@ -216,11 +309,15 @@ def process_record(rec, synced):
     if rid in synced:
         return 0, 0
 
-    by_sheet = collect_jobs(rec)
+    by_sheet, skipped = collect_jobs(rec)
     if not by_sheet:
         # 没有可同步的鹿茸商品（例如只领了手提袋），也要标记，
         # 一来避免每小时兜底扫描反复重算，二来前端据此显示「本单不入台账」而不是一直转圈。
-        synced[rid] = {"skip": 1, "at": now_iso()}
+        # 但若鹿茸目录商品缺映射（skipped 非空），则记下来让前端告警「未同步台账」。
+        st = {"skip": 1, "at": now_iso()}
+        if skipped:
+            st["skipped"] = skipped
+        synced[rid] = st
         return 0, 0
 
     rtype = "in" if rec.get("type") == "in" else "out"
@@ -289,6 +386,9 @@ def process_record(rec, synced):
             st["rows"] = rows
         if errs:
             st["err"] = errs[:3]
+        if skipped:
+            # 防呆：本单有商品被静默跳过（鹿茸商品但缺映射），记下来让前端弹 ⚠️ 未同步台账
+            st["skipped"] = skipped
         synced[rid] = st
         fails.pop(rid, None)      # 之前失败过、这次成功了，清掉失败回执
     elif fail > 0:
@@ -322,7 +422,7 @@ def process_tombstone(tomb, synced):
         return 0, 0, 1
 
     rec = tomb.get("rec") or {}
-    sheets = list((collect_jobs(rec) or {}).keys())
+    sheets = list(collect_jobs(rec)[0].keys())
     if not sheets:
         # 墓碑里没带记录快照（老墓碑）→ 兜底：两张子表都试一遍，靠 rid 精确定位，不会误伤
         sheets = ["2026鹿茸水乳系列", "2026时空鹿茸库存"]

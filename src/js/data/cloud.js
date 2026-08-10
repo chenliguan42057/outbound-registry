@@ -486,8 +486,10 @@
   }
 
   /** 从标记文件里读某条记录的台账状态。
-      返回 null=还没结果（继续等）；否则 {phase, rows, detail}
-      phase: done=已写入 / skip=本单无鹿茸商品不入台账 / fail=金山写入失败 */
+      返回 null=还没结果（继续等）；否则 {phase, rows, skipped, detail}
+      phase: done=已写入 / skip=本单无鹿茸商品不入台账 /
+             partial=已写入但部分商品漏映射（skipped 非空）/ nosync=鹿茸商品全缺映射 /
+             fail=金山写入失败 */
   function readWpsState(marker, id) {
     if (!marker) return null;
     var fails = marker.__fail__ || {};
@@ -498,6 +500,11 @@
       return null;
     }
     if (st === true) return { phase: "done", rows: {} };          // 老格式：只知道成功
+    if (st.skipped && st.skipped.length) {
+      // 鹿茸商品但缺台账映射：已写的部分算 done，缺失的单独告警（防呆）
+      if (st.ok > 0) return { phase: "partial", rows: st.rows || {}, skipped: st.skipped, detail: st };
+      return { phase: "nosync", skipped: st.skipped, detail: st };
+    }
     if (st.skip) return { phase: "skip", detail: st };
     if (st.ok > 0) return { phase: "done", rows: st.rows || {}, detail: st };
     return { phase: "fail", detail: st };
@@ -533,6 +540,28 @@
       for (var k in rows) parts.push(k + " 第" + rows[k] + "行");
       return { text: "✅ 已写入金山台账" + (parts.length ? "（" + parts.join("、") + "）" : ""),
                isErr: false, toast: "✅ 已写入金山台账" };
+    }
+    if (st.phase === "partial") {
+      // 已写入，但部分商品因缺映射被静默跳过 → 明确列出来，杜绝"列没对上"无感
+      var pparts = [];
+      var prows = st.rows || {};
+      for (var pk in prows) pparts.push(pk + " 第" + prows[pk] + "行");
+      var pnames = (st.skipped || []).join("、");
+      return {
+        text: "✅ 已写入金山台账" + (pparts.length ? "（" + pparts.join("、") + "）" : "") +
+              "；⚠️ " + pnames + " 未同步（缺台账映射）",
+        isErr: true,
+        toast: "⚠️ " + pnames + " 未同步金山台账（商品未配置映射）"
+      };
+    }
+    if (st.phase === "nosync") {
+      // 鹿茸商品整单都缺映射 → 强告警，等于"漏写台账"
+      var nnames = (st.skipped || []).join("、");
+      return {
+        text: "❌ 鹿茸商品「" + nnames + "」未配置金山台账映射，未写入！请联系管理员",
+        isErr: true,
+        toast: "❌ " + nnames + " 未写入金山台账（缺映射）"
+      };
     }
     if (st.phase === "skip") {
       return { text: "✅ 已同步云端（本单无鹿茸商品，不进台账）", isErr: false, toast: "" };

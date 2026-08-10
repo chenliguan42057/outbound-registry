@@ -156,6 +156,8 @@
 
   <!-- 经典 <script> 顺序加载（不用 ES Module，保证 file:// 调试与加载顺序） -->
   <script src="qrcode.js?v=__CACHE_BUST__"></script>
+  <!-- 商品映射「单一真相源」：前后端共用，须在 config.js 之前加载 -->
+  <script src="js/data/product-map.js?v=__CACHE_BUST__"></script>
   <script src="js/core/config.js?v=__CACHE_BUST__"></script>
   <script src="js/core/util.js?v=__CACHE_BUST__"></script>
   <script src="js/core/store.js?v=__CACHE_BUST__"></script>
