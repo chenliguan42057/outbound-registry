@@ -165,18 +165,25 @@
 
   /** 照片上传云端（可选）：将 photos 上传到 data/photos/ 并把 photoUrls 写回本地记录；不推送记录本身。
       返回更新后的记录（含 photoUrls），无照片或失败时返回原记录。
+      失败照片不静默：toast 明确提示 + 入本机补传队列（云同步页可补传），dataURL 保留不丢。
       由 submitPush 先 await 此函数再调 pushToCloud，确保首推已含 photoUrls。 */
   async function pushPhotosToCloud(rec) {
     if (!Cloud.hasToken() || !rec) return rec;
     var photos = (rec.photos || []);
     if (!photos.length) return rec;
-    try {
-      var urls = await Cloud.pushPhotos(rec);
-      if (urls && urls.length) {
-        var updated = Records.update(rec.id, { photoUrls: urls });
-        return updated || rec;
-      }
-    } catch (e) {}
+    if (Cloud.getRate && Cloud.getRate().low) {
+      Util.toast("⚠️ API 配额紧张，照片可能上传较慢或失败；失败可到「云同步」页补传", true);
+    }
+    var r = await Cloud.pushPhotosDetailed(rec);
+    if (r.urls && r.urls.length) {
+      var updated = Records.update(rec.id, { photoUrls: r.urls });
+      rec = updated || rec;
+    }
+    if (r.failedIndexes && r.failedIndexes.length) {
+      Cloud.markPhotoPending(rec.id, r.failedIndexes);
+      var names = r.failedIndexes.map(function (i) { return "第 " + (i + 1) + " 张"; }).join("、");
+      Util.toast("⚠️ 照片 " + names + " 上传失败（弱网/配额），已存本机，可到「云同步」页补传", true);
+    }
     return rec;
   }
 

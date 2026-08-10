@@ -144,8 +144,8 @@
 
     /* 业务常量 */
     LOW_STOCK_THRESHOLD: 95,
-    PHOTO_MAX_EDGE: 1280,
-    PHOTO_QUALITY: 0.72,
+    PHOTO_MAX_EDGE: 1024,
+    PHOTO_QUALITY: 0.6,
 
     /* 出库「用途/项目」预设（chip 单选；用户自定义项存 outbound_purpose_history） */
     PURPOSE_PRESETS: ["客户销售", "赠送客户", "内部员工使用"],
@@ -183,8 +183,10 @@
          30 秒间隔 → 5520 次/小时 ✗ 击穿限额
          60 秒间隔 → 2760 次/小时 ✓
         120 秒间隔 → 1380 次/小时 ✓ 留足余量给手动同步与写入
-       故取 120000；记录量继续增长时应改为增量拉取（见优化报告 P1）。 */
-    AUTO_SYNC_INTERVAL_MS: 120000,
+       故取 120000；记录量继续增长时应改为增量拉取（见优化报告 P1）。
+       2026-08-10 已实现 Git Trees 增量拉取（每轮 ~1-4 次），
+       轮询放宽到 300 秒，进一步压低配额消耗；focus/可见性即时同步保留。 */
+    AUTO_SYNC_INTERVAL_MS: 300000,
 
     /* 令牌解析与刷新（运行时从注入/本地读取，代码中绝不出现令牌明文） */
     refreshToken: function () {
