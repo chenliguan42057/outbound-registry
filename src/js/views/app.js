@@ -299,12 +299,37 @@
     autoSyncOn = true;
     window.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("focus", onWindowFocus);
+    wireOnlineOffline();       // PWA 离线状态横幅 + 恢复自动同步（优化 3）
     scheduleNextSync();
     triggerSync("start");
     // 启动时冲刷「待补推队列」：把之前因页面关闭而没推上去的记录补推到云端
     Cloud.flushQueue().then(function (fres) {
       if (fres && fres.ok > 0) Util.toast("已补推 " + fres.ok + " 条记录");
     }).catch(function () {});
+  }
+
+  /* ================= PWA 离线状态（优化 3） ================= */
+  var onlineBound = false;
+  function wireOnlineOffline() {
+    if (onlineBound) return;
+    onlineBound = true;
+    function update() {
+      if (navigator.onLine) {
+        setSyncStatus(statusText || "就绪", statusIsErr);   // 恢复在线：还原之前状态
+        // 离线期间可能积累的补推/提交，恢复后立即冲刷
+        if (autoSyncOn && Cloud.hasToken()) {
+          Cloud.flushQueue().then(function (fres) {
+            if (fres && fres.ok > 0) Util.toast("已补推 " + fres.ok + " 条记录");
+          }).catch(function () {});
+          triggerSync("online");
+        }
+      } else {
+        setSyncStatus("📴 离线模式（数据仅存本机，联网后自动同步）", true);
+      }
+    }
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    update();   // 初始化一次，反映当前在线状态
   }
 
   /** 停止自动同步：清理定时器与窗口监听（离开 #/app 或应用壳卸载时调用） */
