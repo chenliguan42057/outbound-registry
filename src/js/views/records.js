@@ -33,6 +33,7 @@
           '<div class="actions rec-actions">' +
             '<button type="button" class="btn ghost sm" id="recExport">&#11015; 导出 CSV</button>' +
             '<button type="button" class="btn ghost sm" id="recExportAcc">&#128202; 对账 CSV</button>' +
+            '<button type="button" class="btn ghost sm" id="recPrintAll">&#128424; 批量打印</button>' +
             '<button type="button" class="btn ghost sm" id="recSync">&#128260; 立即同步</button>' +
             '<button type="button" class="btn ghost sm" id="recRemind">&#128276; 提醒推送</button>' +
             '<button type="button" class="btn danger sm" id="recClearAll">清空全部记录</button>' +
@@ -73,6 +74,7 @@
       Util.$("recExportAcc").addEventListener("click", function () {
         Records.exportReconCsv(filter());
       });
+      Util.$("recPrintAll").addEventListener("click", doPrintAll);
       Util.$("recSync").addEventListener("click", function () { doSync(); });
       Util.$("recRemind").addEventListener("click", function () {
         Router.navigate("/app/" + (isIn ? "in-remind" : "out-remind"));
@@ -273,10 +275,8 @@
       UI.Modal.show("照片预览", '<img class="preview-img" src="' + src + '" alt="" />', { width: "fit-content" });
     }
 
-    /** 打印单据：新窗口排版该记录并触发打印（含标题/字段/货品/签名栏） */
-    function doPrint(id) {
-      var r = State.list.find(function (x) { return x.id === id; });
-      if (!r) return;
+    /** 生成单据打印 HTML（单个记录，供单条打印与批量打印复用） */
+    function buildPrintHtml(r) {
       var isRecIn = r.type === "in";
       var kindLabel = isRecIn ? "入库单" : "出库单";
       var itemsHtml = (r.items || []).map(function (it) {
@@ -284,23 +284,7 @@
           '<td class="c">' + Stock.getRecordStock(it.name, r, it) + '</td></tr>';
       }).join("");
       var statusLabel = isRecIn ? "" : (Records.getStatus(r) === "pending" ? "未提单" : "已提单");
-      var win = window.open("", "_blank", "width=640,height=800");
-      if (!win) { Util.toast("浏览器拦截了打印窗口，请允许弹窗", true); return; }
-      win.document.write(
-        '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">' +
-        '<title>' + kindLabel + ' - ' + Util.esc(r.id) + '</title>' +
-        '<style>' +
-          'body{font-family:"Microsoft YaHei",sans-serif;color:#222;margin:32px;} ' +
-          'h1{font-size:22px;text-align:center;letter-spacing:2px;margin:0 0 4px;} ' +
-          '.sub{text-align:center;color:#888;font-size:12px;margin-bottom:24px;} ' +
-          'table{width:100%;border-collapse:collapse;margin:16px 0;} ' +
-          'th,td{border:1px solid #999;padding:8px 10px;font-size:14px;} ' +
-          'th{background:#f5f5f5;} .c{text-align:center;} ' +
-          '.field{font-size:14px;line-height:2;} .field b{display:inline-block;min-width:80px;} ' +
-          '.sign{display:flex;justify-content:space-between;margin-top:64px;font-size:14px;} ' +
-          '.sign div{text-align:center;} .sign .line{width:120px;border-top:1px solid #666;margin-top:28px;padding-top:6px;} ' +
-          '@media print{body{margin:8mm;}}' +
-        '</style></head><body>' +
+      return '<div class="print-sheet">' +
         '<h1>出入库登记 · ' + kindLabel + '</h1>' +
         '<div class="sub">单号：' + Util.esc(r.orderNo || r.id) + '　|　时间：' + Util.esc(String(r.time || "").replace("T", " ")) + '</div>' +
         '<div class="field">' +
@@ -318,10 +302,62 @@
           '<div>仓管员<div class="line">签名</div></div>' +
           '<div>审批人<div class="line">签名</div></div>' +
         '</div>' +
+      '</div>';
+    }
+
+    /** 打印单据：新窗口排版该记录并触发打印（含标题/字段/货品/签名栏） */
+    function doPrint(id) {
+      var r = State.list.find(function (x) { return x.id === id; });
+      if (!r) return;
+      var win = window.open("", "_blank", "width=640,height=800");
+      if (!win) { Util.toast("浏览器拦截了打印窗口，请允许弹窗", true); return; }
+      win.document.write(
+        '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">' +
+        '<title>' + (r.type === "in" ? "入库单" : "出库单") + ' - ' + Util.esc(r.id) + '</title>' +
+        '<style>' +
+          printStyle() +
+        '</style></head><body>' +
+        buildPrintHtml(r) +
         '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>' +
         '</body></html>'
       );
       win.document.close();
+    }
+
+    /** 批量打印当前筛选出的全部记录：每单独立分页，一次打印 */
+    function doPrintAll() {
+      var list = filter();
+      if (!list.length) { Util.toast("当前筛选无记录可打印", true); return; }
+      if (list.length > 50) { Util.toast("一次最多打印 50 条，请先缩小筛选范围", true); return; }
+      var win = window.open("", "_blank", "width=640,height=800");
+      if (!win) { Util.toast("浏览器拦截了打印窗口，请允许弹窗", true); return; }
+      var sheets = list.map(buildPrintHtml).join("");
+      win.document.write(
+        '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">' +
+        '<title>批量打印（' + list.length + ' 条）</title>' +
+        '<style>' +
+          printStyle() +
+          '.print-sheet{page-break-after:always;} .print-sheet:last-child{page-break-after:auto;}' +
+        '</style></head><body>' +
+        sheets +
+        '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>' +
+        '</body></html>'
+      );
+      win.document.close();
+    }
+
+    /** 打印样式（单条/批量共用） */
+    function printStyle() {
+      return 'body{font-family:"Microsoft YaHei",sans-serif;color:#222;margin:32px;} ' +
+        'h1{font-size:22px;text-align:center;letter-spacing:2px;margin:0 0 4px;} ' +
+        '.sub{text-align:center;color:#888;font-size:12px;margin-bottom:24px;} ' +
+        'table{width:100%;border-collapse:collapse;margin:16px 0;} ' +
+        'th,td{border:1px solid #999;padding:8px 10px;font-size:14px;} ' +
+        'th{background:#f5f5f5;} .c{text-align:center;} ' +
+        '.field{font-size:14px;line-height:2;} .field b{display:inline-block;min-width:80px;} ' +
+        '.sign{display:flex;justify-content:space-between;margin-top:64px;font-size:14px;} ' +
+        '.sign div{text-align:center;} .sign .line{width:120px;border-top:1px solid #666;margin-top:28px;padding-top:6px;} ' +
+        '@media print{body{margin:8mm;}}';
     }
 
     /** 编辑：出库→落地页编辑（保留照片等全字段），入库→入库模块内编辑 */

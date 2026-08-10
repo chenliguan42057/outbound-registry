@@ -25,8 +25,17 @@
   var selectedPurpose = "";
   /** 结算法人单位默认值：预设第一项「深圳细胞法人」，仅手动点击赛迪斯或自定义后才切换 */
   var DEFAULT_ENTITY = (Config.ENTITY_PRESETS && Config.ENTITY_PRESETS[0]) || "";
+  /** 记住上次使用的结算法人单位（体验优化 4c，2026-08-10） */
+  var LAST_ENTITY_KEY = "outbound_last_entity";
+  function loadLastEntity() {
+    try {
+      var v = localStorage.getItem(LAST_ENTITY_KEY);
+      if (v && (Config.ENTITY_PRESETS || []).indexOf(v) !== -1) return v;  // 仅恢复预设值，防脏数据
+    } catch (e) {}
+    return DEFAULT_ENTITY;
+  }
   /** 当前选中的结算法人单位值（chip 单选，互斥高亮；必填，默认深圳细胞法人） */
-  var selectedEntity = DEFAULT_ENTITY;
+  var selectedEntity = loadLastEntity();
 
   function render(container) {
     container.innerHTML =
@@ -492,6 +501,7 @@
     }
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
+    try { localStorage.setItem(LAST_ENTITY_KEY, entity); } catch (e) {}   // 记住本次法人单位
     resetForm();
     // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
     // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。

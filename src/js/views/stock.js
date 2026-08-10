@@ -27,6 +27,7 @@
     el.innerHTML =
       '<div class="card">' +
         '<h2>库存查询 <span class="tag">实时计算</span></h2>' +
+        '<div id="stockLowBanner" style="display:none"></div>' +
         '<div class="field">' +
           '<input type="text" id="stockSearch" class="search" placeholder="搜索货品名称…" autocomplete="off" />' +
         '</div>' +
@@ -88,6 +89,20 @@
     Util.$("stockSummary").innerHTML =
       '<span class="badge">货品总数 ' + summary.length + '</span> ' +
       '<span class="badge low">低库存（&lt;' + Config.LOW_STOCK_THRESHOLD + '）' + lowCount + ' 项</span>';
+    // 低库存醒目 banner（体验优化 4d，2026-08-10）
+    var banner = Util.$("stockLowBanner");
+    if (banner) {
+      var lowItems = summary.filter(function (s) { return s.stock < Config.LOW_STOCK_THRESHOLD; })
+        .map(function (s) { return Util.esc(s.name) + "(" + s.stock + ")"; });
+      if (lowItems.length) {
+        banner.style.display = "block";
+        banner.innerHTML = '<div class="stock-low-banner" style="margin:0 0 12px;padding:10px 14px;border:1px solid #f5c6c0;border-radius:10px;background:#fff1f0;color:#a8071a;font-size:13.5px;line-height:1.7">' +
+          '⚠️ <b>低库存预警（低于 ' + Config.LOW_STOCK_THRESHOLD + ' 件）：</b>' + lowItems.join("、") +
+          '</div>';
+      } else {
+        banner.style.display = "none";
+      }
+    }
     if (!rows.length) {
       tableBox.innerHTML = '<div class="empty">未找到匹配货品</div>';
       return;
