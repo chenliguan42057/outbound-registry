@@ -372,19 +372,11 @@
     var self = this;
     this.listEl.innerHTML = "";
     this.selected.forEach(function (it, i) {
-      var stock = window.App.Stock.getStock(it.name);
       var row = document.createElement("div");
       row.className = "sel-item";
-      var stockHtml = "";
-      if (self.showInStock) {
-        var after = stock + (Number(it.qty) || 0);
-        stockHtml = '<span class="stock">库存 ' + stock + ' → ' + after + '</span>';
-      } else if (self.showStock) {
-        stockHtml = '<span class="stock">库存：' + stock + '</span>';
-      }
+      // 库存展示已隐藏，避免挤占货品名称完整显示空间
       row.innerHTML =
         '<span class="name">' + Util.esc(it.name) + '</span>' +
-        stockHtml +
         '<div class="qty-stepper">' +
           '<button type="button" class="qty-btn" data-act="dec" data-i="' + i + '" aria-label="减少">−</button>' +
           '<input type="number" min="0" max="999999" step="any" inputmode="decimal" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 数量" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
