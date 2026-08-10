@@ -173,14 +173,6 @@ def _layout_record(title, fields, data, status_label=None):
     if fields:
         md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
     md += "\n\n**货品明细**：\n" + goods_lines_of(data)
-    # 出库记录：附加「出库后库存」快照 + 低库存预警（P1-5/P1-6）
-    if str((data or {}).get("type", "")).lower() != "in":
-        snaps = stock_snapshot_lines(data)
-        if snaps:
-            md += "\n\n**出库后库存**：\n" + snaps
-        warns = post_stock_lines(data)
-        if warns:
-            md += "\n\n**⚠️ 库存预警**：\n" + warns
     note = str((data or {}).get("note") or "").strip()
     if note:
         md += "\n- **备注**：{}".format(note)

@@ -16,7 +16,6 @@
   var container = null;
   var tableBox = null;
   var rankBox = null;
-  var chartBox = null;
   var q = "";
 
   /* 排名排序模式（默认库存多→少；不持久化，页面重进回到默认） */
@@ -25,10 +24,6 @@
   function render(el) {
     container = el;
     el.innerHTML =
-      '<div class="card">' +
-        '<h2>库存可视化 <span class="tag">Top 10</span></h2>' +
-        '<div id="stockChart"></div>' +
-      '</div>' +
       '<div class="card">' +
         '<h2>库存查询 <span class="tag">实时计算</span></h2>' +
         '<div class="field">' +
@@ -40,6 +35,7 @@
         '</div>' +
         '<div class="stock-summary" id="stockSummary"></div>' +
         '<div id="stockTableBox"></div>' +
+        '<div class="hint" style="margin-top:10px">💡 <b>双击表格行</b>可查看该货品完整出入库流水，并支持导出 CSV。</div>' +
       '</div>' +
       '<div class="card">' +
         '<h2>全部库存排名 <span class="tag">全量</span></h2>' +
@@ -51,7 +47,6 @@
       '</div>';
     tableBox = Util.$("stockTableBox");
     rankBox = Util.$("rankBox");
-    chartBox = Util.$("stockChart");
     var search = Util.$("stockSearch");
     search.addEventListener("input", function () {
       q = search.value.trim().toLowerCase();
@@ -68,7 +63,6 @@
     });
     Util.$("stockTakeBtn").addEventListener("click", openStocktake);
     wireHistory();
-    renderChart();
     renderTable();
     renderRank();
   }
@@ -77,43 +71,6 @@
   function refresh() {
     if (tableBox) renderTable();
     if (rankBox) renderRank();
-    if (chartBox) renderChart();
-  }
-
-  /* ================= 库存可视化条形图（手写 SVG，零依赖） ================= */
-
-  /** 渲染 Top 10 库存条形图：横向条形，低库存红色、正常绿色 */
-  function renderChart() {
-    if (!chartBox) return;
-    var summary = Stock.summarize()
-      .slice()
-      .sort(function (a, b) { return b.stock - a.stock; })
-      .slice(0, 10);
-    if (!summary.length) {
-      chartBox.innerHTML = '<div class="empty">暂无数据</div>';
-      return;
-    }
-    var max = summary[0].stock || 1;
-    var W = 640, H = 32 * summary.length + 30, barH = 18;
-    var esc = Util.esc;
-    var rows = summary.map(function (s, i) {
-      var w = Math.max(2, Math.round(s.stock / max * (W - 190)));
-      var low = s.stock < Config.LOW_STOCK_THRESHOLD;
-      var color = low ? "#e74c3c" : "#2ecc71";
-      var y = 10 + i * 32;
-      return '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + (low ? "#e74c3c" : "#555") + '">' +
-        esc(truncate(s.name, 14)) + '</text>' +
-        '<rect x="150" y="' + y + '" width="' + w + '" height="' + barH + '" rx="4" fill="' + color + '" opacity="0.9" />' +
-        '<text x="' + (158 + w) + '" y="' + (y + 14) + '" font-size="12" font-weight="bold" fill="' + color + '">' +
-        s.stock + '</text>';
-    }).join("");
-    chartBox.innerHTML =
-      '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;" role="img" aria-label="库存条形图">' +
-      rows + '</svg>' +
-      '<div class="chart-legend">' +
-        '<span class="legend-dot low"></span>低库存（&lt;' + Config.LOW_STOCK_THRESHOLD + '）' +
-        '<span class="legend-dot ok"></span>正常' +
-      '</div>';
   }
 
   /** 名称截断（超长加省略号，避免顶出 SVG 画布） */
@@ -139,9 +96,9 @@
       '</tr></thead><tbody>';
     rows.forEach(function (s) {
       var low = s.stock < Config.LOW_STOCK_THRESHOLD;
-      html += '<tr class="' + (low ? "low-stock" : "") + '">' +
+      html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击查看出入库流水" style="cursor:pointer">' +
         '<td>' + Util.esc(s.name) + '</td>' +
-        '<td class="stock-num" data-name="' + Util.esc(s.name) + '" style="cursor:pointer;text-decoration:underline dotted rgba(111,160,138,.5)">' + s.stock + '</td>' +
+        '<td class="stock-num" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
         '<td>' + s.inQty + '</td>' +
         '<td>' + s.outQty + '</td>' +
         '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
@@ -192,10 +149,10 @@
       '</tr></thead><tbody>';
     arr.forEach(function (s, i) {
       var low = s.stock < Config.LOW_STOCK_THRESHOLD;
-      html += '<tr class="' + (low ? "low-stock" : "") + '">' +
+      html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击查看出入库流水" style="cursor:pointer">' +
         '<td>' + (i + 1) + '</td>' +
         '<td>' + Util.esc(s.name) + '</td>' +
-        '<td class="stock-num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '" style="cursor:pointer;text-decoration:underline dotted rgba(111,160,138,.5)">' + s.stock + '</td>' +
+        '<td class="stock-num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
         '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
       '</tr>';
     });
@@ -207,31 +164,91 @@
   function wireHistory() {
     if (!container || container.getAttribute("data-his")) return;
     container.setAttribute("data-his", "1");
+    // 单击「当前库存」单元格 → 弹窗（与双击等价，兼容键盘/触屏）
     container.addEventListener("click", function (e) {
       var el = e.target.closest(".stock-num");
       if (!el || !el.getAttribute("data-name")) return;
       showHistory(el.getAttribute("data-name"));
     });
+    // 双击整行 → 弹窗（用户主操作路径，提示文案同步强调）
+    container.addEventListener("dblclick", function (e) {
+      var tr = e.target.closest("tr[data-name]");
+      if (!tr) return;
+      showHistory(tr.getAttribute("data-name"));
+    });
   }
-  function showHistory(name) {
+
+  /** 过滤出与指定货品相关的所有出入记录（按 NAME_MAP 归一化） */
+  function rowsForProduct(name) {
     var nm = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[name]) || name;
-    var rows = (State.list || []).filter(function (r) {
+    return (State.list || []).filter(function (r) {
       return (r.items || []).some(function (it) {
         var n = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[it.name]) || it.name;
         return n === nm;
       });
     });
+  }
+
+  /** 在记录的 items 里找到与指定货品名（已归一化）匹配的那一项 */
+  function findItemFor(rows, name) {
+    var nm = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[name]) || name;
+    for (var i = 0; i < rows.length; i++) {
+      var items = (rows[i].items || []);
+      for (var j = 0; j < items.length; j++) {
+        var n = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[items[j].name]) || items[j].name;
+        if (n === nm) return { record: rows[i], item: items[j] };
+      }
+    }
+    return { record: null, item: null };
+  }
+
+  /** 把货品的所有出入库记录导出为 CSV 并触发下载（UTF-8 BOM 兼容 Excel） */
+  function exportProductCSV(name) {
+    var rows = rowsForProduct(name);
+    if (!rows.length) { Util.toast("该货品暂无出入记录，无法导出", true); return; }
+    var esc = Util.esc;
+    var headers = ["时间", "类型", "部门/客户", "领取人", "货品名称", "数量", "当时库存", "备注"];
+    var lines = [headers.map(esc).join(",")];
+    rows.forEach(function (r) {
+      var info = findItemFor([r], name);
+      var it = info.item;
+      if (!it) return;
+      var isIn = (r.type || "out") === "in";
+      var stockCell = (it && typeof it.stock === "number") ? String(it.stock) : "";
+      var row = [
+        esc(String(r.time || "").replace("T", " ")),
+        esc(isIn ? "入库" : "出库"),
+        esc(r.dept || ""),
+        esc(r.picker || ""),
+        esc(it.name || ""),
+        esc(String(it.qty || "")),
+        esc(stockCell),
+        esc(r.note || "")
+      ];
+      lines.push(row.join(","));
+    });
+    var csv = "\ufeff" + lines.join("\r\n");   // BOM 防 Excel 乱码，CRLF 兼容
+    var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = name.replace(/[\\/:*?"<>|]/g, "_") + "_出入库流水_" +
+      (new Date().toISOString().slice(0, 10)) + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+  }
+
+  function showHistory(name) {
+    var rows = rowsForProduct(name);
     if (!rows.length) { Util.toast("该货品暂无出入记录", true); return; }
     var html = '<div class="table-wrap" style="max-height:50vh;overflow:auto">' +
       '<table class="table" style="min-width:0;width:100%"><thead><tr>' +
       '<th>时间</th><th>类型</th><th>部门/领取人</th><th>数量</th><th>当时库存</th>' +
       '</tr></thead><tbody>' +
       rows.map(function (r) {
-        var it = null;
-        for (var x = 0; x < (r.items || []).length; x++) {
-          var n = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[r.items[x].name]) || r.items[x].name;
-          if (n === nm) { it = r.items[x]; break; }
-        }
+        var info = findItemFor([r], name);
+        var it = info.item;
         var isIn = (r.type || "out") === "in";
         var stock = (it && typeof it.stock === "number") ? it.stock : "-";
         return '<tr>' +
@@ -244,7 +261,14 @@
       }).join("") +
       '</tbody></table></div>' +
       '<div class="hint">「当时库存」为该笔完成后的快照；当前库存 ' + Util.esc(String(window.App.Stock.getStock(name))) + '</div>';
-    UI.Modal.show("📦 库存流水 · " + Util.esc(name), html, { width: "620px" });
+    UI.Modal.show("📦 库存流水 · " + Util.esc(name),
+      '<div class="modal-actions" style="margin:-6px 0 12px;justify-content:flex-end">' +
+        '<button type="button" class="btn ghost sm" data-act="export">📥 导出 CSV</button>' +
+      '</div>' + html,
+      { width: "640px" });
+    var mBody = UI.Modal.body();
+    var exp = mBody.querySelector('[data-act="export"]');
+    if (exp) exp.addEventListener("click", function () { exportProductCSV(name); });
   }
 
   /* ================= B2 库存盘点平账 ================= */

@@ -16,8 +16,8 @@
   var Config = window.App.Config;
 
   var NAV_ITEMS = [
-    { id: "dashboard", icon: "report", label: "仪表盘" },
     { id: "stock", icon: "stock", label: "库存查询" },
+    { id: "dashboard", icon: "report", label: "仪表盘" },
     { id: "in", icon: "in", label: "入库管理" },
     { id: "pickups", icon: "box", label: "待取货" },
     { id: "out-records", icon: "records", label: "出库记录" },
@@ -65,7 +65,7 @@
     if (!el) return;
     if (State.appMounted && shellEl && document.body.contains(shellEl)) {
       el.style.display = "";
-      mount(module || State.nav.active || "out-records");
+      mount(module || State.nav.active || "stock");
       return;
     }
     State.appMounted = true;
@@ -105,7 +105,7 @@
     shellEl = Util.$("winShell");
     renderNav();
     wireShell();
-    mount(module || State.nav.active || "out-records");
+    mount(module || State.nav.active || "stock");
     if (!routeBound) {
       window.addEventListener("hashchange", onRouteChange);
       routeBound = true;
@@ -153,7 +153,7 @@
 
   /** 挂载模块：切换内容区 + 高亮导航 + 记忆最后停留项 */
   function mount(moduleName) {
-    var viewName = VIEW_MAP[moduleName] || "out-records";
+    var viewName = VIEW_MAP[moduleName] || "stock";
     var view = window.App.Views[viewName];
     if (!view) return;
     // 切走之前先让上一个视图清理自己的定时器/监听。
