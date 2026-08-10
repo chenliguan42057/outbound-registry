@@ -451,27 +451,16 @@
     var self = this;
     this.container = container;
     container.innerHTML =
-      '<div class="photo-drop">📷 点击或拖拽上传照片，作为现场留存凭证（可多张）<br/>' +
-        '<span style="font-size:12px;opacity:.7">手机点按直接拍照（iOS/Android 均支持）；想从相册选请用下方按钮</span></div>' +
-      '<input type="file" accept="image/*" capture="environment" multiple hidden />' +
-      '<input type="file" accept="image/*" multiple hidden class="photo-alt-input" />' +
+      '<div class="photo-drop">📷 点击或拖拽上传照片，作为现场留存凭证（可多张）</div>' +
+      '<input type="file" accept="image/*" multiple hidden />' +
       '<div class="thumbs"></div>' +
       '<div class="photo-meta"></div>';
     var drop = container.querySelector(".photo-drop");
     this.inputEl = container.querySelector("input[type=file]");
-    this.altInputEl = container.querySelector(".photo-alt-input");
     this.thumbsEl = container.querySelector(".thumbs");
     this.metaEl = container.querySelector(".photo-meta");
 
     drop.addEventListener("click", function () { self.inputEl.click(); });
-    // 「从相册选择」辅助按钮：capture=environment 强制调相机时，需要无 capture 的 input 走相册
-    var altBtn = document.createElement("button");
-    altBtn.type = "button";
-    altBtn.className = "btn ghost sm";
-    altBtn.textContent = "🖼️ 从相册选择";
-    altBtn.style.marginTop = "8px";
-    altBtn.addEventListener("click", function (e) { e.stopPropagation(); self.altInputEl.click(); });
-    container.insertBefore(altBtn, this.thumbsEl);
     drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.style.borderColor = "var(--primary)"; });
     drop.addEventListener("dragleave", function () { drop.style.borderColor = ""; });
     drop.addEventListener("drop", function (e) {
@@ -480,7 +469,6 @@
       self.handleFiles(e.dataTransfer.files);
     });
     this.inputEl.addEventListener("change", function () { self.handleFiles(self.inputEl.files); });
-    this.altInputEl.addEventListener("change", function () { self.handleFiles(self.altInputEl.files); });
     this.thumbsEl.addEventListener("click", function (e) {
       var del = e.target.closest(".del");
       if (del) {
@@ -513,7 +501,7 @@
     this.inputEl.value = "";
   };
 
-  /** 压缩：最大边 1024px / JPEG 0.6（2026-08-10 调优：原 1280/0.72，单张约减半） */
+  /** 压缩：最大边 1280px / JPEG 0.72（与现网一致） */
   PhotoUpload.prototype.compress = function (dataUrl, name, done) {
     var self = this;
     var img = new Image();
