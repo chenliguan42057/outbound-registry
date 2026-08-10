@@ -7,6 +7,7 @@
   'use strict';
 
   var Util = window.App.Util;
+  var UI = window.App.UI;
   var Config = window.App.Config;
   var Stock = window.App.Stock;
   var State = window.App.State;
