@@ -54,10 +54,12 @@ jobs:
           cp -r src/. dist/
           printf '%s' "$SHA" > dist/version.txt
 
-          # 后置校验：任一文件仍残留占位符，说明替换没生效（文件改名、编码异常等），
-          # 同样属于"发布出去就是坏的"，必须拦下。
-          if grep -rln '__GH_TOKEN_PLACEHOLDER__' src/ ; then
-            echo "::error::占位符替换失败，上列文件仍有残留，已中止部署。"
+          # 后置校验：任一注入文件仍残留「赋值语句里的令牌占位符」，说明替换没生效
+          # （文件改名、编码异常等），同样属于"发布出去就是坏的"，必须拦下。
+          # 注意：只匹配 window.__GH_TOKEN__ = "__GH_TOKEN_PLACEHOLDER__" 这种真实赋值，
+          # 不要用裸 grep 全文——注释里出现占位符字样会误判，导致正常部署被中止。
+          if grep -rn 'window.__GH_TOKEN__ *= *"__GH_TOKEN_PLACEHOLDER__"' src/index.html src/legacy.html src/lurong.html ; then
+            echo "::error::令牌占位符替换失败，上列文件仍有残留，已中止部署。"
             exit 1
           fi
 

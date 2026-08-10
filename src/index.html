@@ -145,10 +145,10 @@
   <div id="modal-root"></div>
   <div id="toast-root"></div>
 
-  <!-- 云端令牌：由部署 workflow 用 perl 将 __GH_TOKEN_PLACEHOLDER__ 替换为仓库密匙（Secrets.GH_TOKEN），
+  <!-- 云端令牌：由部署 workflow 用 perl 将「令牌值占位符」替换为仓库密匙（Secrets.GH_TOKEN），
        任何设备打开即自带写入能力。localStorage 中的 gh_token 仅作兜底。
        注意：变量名 window.__GH_TOKEN__ 保持不变（外部 config.js 依赖它），
-       仅替换值占位符 __GH_TOKEN_PLACEHOLDER__，避免 perl 全局替换误伤变量名。
+       仅替换下方赋值语句的值占位符，避免 perl 全局替换误伤变量名。
        此占位必须保持内联脚本，不得移入外部 js / 构建产物。 -->
   <script>
     window.__GH_TOKEN__ = "__GH_TOKEN_PLACEHOLDER__";
