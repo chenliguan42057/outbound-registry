@@ -32,6 +32,11 @@ GH_PAT = (os.environ.get("GH_PAT") or "").strip()  # 本地回填时用来回写
 REPO = "chenliguan42057/outbound-registry"
 MARKER = ".wps_synced.json"
 
+
+def log(msg):
+    print(msg, flush=True)
+
+
 # ===== 商品映射「单一真相源」=====
 # 前后端共用 src/js/data/product-map.js（挂载 window.APP_PRODUCT_MAP），结构：
 #   products: 前端商品目录（精简名）
@@ -151,10 +156,6 @@ else:
     PRODUCTS = PM.get("products") or list(PRODUCTS_FALLBACK)
     log("✅ 已从商品映射单一来源加载（%d 商品 / %d 条台账映射，前后端共用）" % (len(PRODUCTS), len(WPS_MAP)))
 PRODUCTS_SET = set(PRODUCTS)
-
-
-def log(msg):
-    print(msg, flush=True)
 
 
 def fmt_date(time_str):
