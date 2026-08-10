@@ -52,17 +52,6 @@
     window.addEventListener("focus", check);
   })();
 
-  /* PWA 离线：注册 Service Worker（优化 3）。
-     仅部署环境注册（https + 非 file://）；本地直开跳过。
-     注册失败静默（浏览器不支持 / 隐私模式等），不影响页面功能。 */
-  (function () {
-    if (!("serviceWorker" in navigator)) return;
-    if (location.protocol !== "https:" && location.hostname !== "localhost") return;
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.register("sw.js").catch(function () {});
-    });
-  })();
-
   /* 全局错误兜底：任一模块抛错或资源 404 时，页面不再静默白屏，
      而是顶部弹出可关闭的错误条并给出旧版回退入口。
      刻意使用内联样式、不依赖任何外部 CSS/JS —— 样式表自身加载失败时也必须可见。 */
