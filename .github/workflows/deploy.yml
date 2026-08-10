@@ -48,6 +48,12 @@ jobs:
           SHA=$(printf '%s' "${GITHUB_SHA:-}" | cut -c1-8)
           perl -pi -e "s/__CACHE_BUST__/$SHA/g" src/index.html
 
+          # 版本探针：部署产物里写 version.txt = 短 SHA。
+          # index.html 内联版本自检脚本（<meta name="build-ver"> + fetch version.txt）
+          # 检测到不一致说明页面跑的是旧版 → 强制 reload，绕开无法自定义的 GitHub Pages 缓存。
+          cp -r src/. dist/
+          printf '%s' "$SHA" > dist/version.txt
+
           # 后置校验：任一文件仍残留占位符，说明替换没生效（文件改名、编码异常等），
           # 同样属于"发布出去就是坏的"，必须拦下。
           if grep -rln '__GH_TOKEN_PLACEHOLDER__' src/ ; then
@@ -55,7 +61,10 @@ jobs:
             exit 1
           fi
 
-          cp -r src/. dist/
+          if ! grep -q 'build-ver' src/index.html || ! [ -s dist/version.txt ]; then
+            echo "::error::版本探针缺失（build-ver meta 或 version.txt），已中止部署。"
+            exit 1
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

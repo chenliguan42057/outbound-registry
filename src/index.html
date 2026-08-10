@@ -9,6 +9,7 @@
 <link rel="manifest" href="manifest.json?v=__CACHE_BUST__" />
 <meta name="theme-color" content="#6FA08A" />
 <meta name="color-scheme" content="light dark" />
+<meta name="build-ver" content="__CACHE_BUST__" />
 <link rel="stylesheet" href="css/base.css?v=__CACHE_BUST__" />
 <link rel="stylesheet" href="css/layout.css?v=__CACHE_BUST__" />
 <link rel="stylesheet" href="css/views.css?v=__CACHE_BUST__" />
@@ -22,6 +23,33 @@
     if (location.search.indexOf('legacy=1') !== -1) {
       location.replace('legacy.html' + location.hash);
     }
+  })();
+
+  /* 版本自检：GitHub Pages 无法下发 Cache-Control 头，页面长时间挂着可能跑旧版 JS。
+     部署时把短 SHA 写入 <meta build-ver> 与 version.txt（见 deploy.yml），
+     此处对比两者，不一致说明页面是旧版 → 强制 reload 拉到最新资源。
+     注意：仅在「部署环境」（build-ver 是 8 位 SHA）生效；本地直开 index.html 时占位符未替换，跳过。 */
+  (function () {
+    var cur = (document.querySelector('meta[name="build-ver"]') || {}).getAttribute
+      ? document.querySelector('meta[name="build-ver"]').getAttribute('content')
+      : "";
+    if (!cur || cur.indexOf("__") !== -1 || !/^[0-9a-f]{8}$/.test(cur)) return;
+    var done = false;
+    function check() {
+      if (done) return;
+      fetch("version.txt?_=" + Date.now(), { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.text() : ""; })
+        .then(function (txt) {
+          var ver = String(txt || "").trim();
+          if (ver && ver !== cur) { done = true; location.reload(); }
+        })
+        .catch(function () {});
+    }
+    if (document.visibilityState === "visible") check();
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") check();
+    });
+    window.addEventListener("focus", check);
   })();
 
   /* 全局错误兜底：任一模块抛错或资源 404 时，页面不再静默白屏，
