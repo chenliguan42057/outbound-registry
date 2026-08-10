@@ -448,7 +448,7 @@
     body.className = "ai-check-modal";
     body.innerHTML =
       '<div class="ai-check-guide">📌 从库存截图里复制文字，粘贴到下方（本功能识别的是你粘贴的文字，不是图片本身）。<br/>每行格式：货品名 数量</div>' +
-      '<div class="ai-check-example">示例：<br/>冻干精华液 20支装 95<br/>面膜 5片装 120件<br/>洁面慕斯 150ml: 85</div>' +
+      '<div class="ai-check-example">示例：<br/>精华液 20支装 95<br/>面膜 5片装 120件<br/>洁面慕斯 150ml: 85</div>' +
       '<textarea id="aiCheckText" class="ai-check-textarea" rows="8" placeholder="在此粘贴截图文字…" autocomplete="off"></textarea>' +
       '<div class="ai-check-hint" id="aiCheckHint">粘贴后点击「开始核对」，结果将显示在聊天面板。</div>' +
       '<div class="ai-check-actions">' +
