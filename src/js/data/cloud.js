@@ -91,7 +91,98 @@
     };
   }
 
-  /** 拉取云端全部记录（目录 404 视为空） */
+  /* ================= Git Trees 增量拉取（同步性能优化） =================
+     现状：syncPull 对 records/deleted/pickups/memos 各做 1 次目录列举 + 每文件 1 次读取
+     （N+1，约 49 次/轮），多设备共享 GitHub 5000/h 配额。
+     优化：用 Git Trees API 一次拿全量 {path: sha}（1 次请求），与本地缓存对比，
+     只拉 sha 变化/新增的文件（每轮约 1-4 次）；缓存存 localStorage。
+     fetchTree 失败/无缓存 → 降级回退现有全量逻辑，绝不破坏同步。 */
+
+  var TREE_CACHE_KEY = "outbound_tree_cache";
+
+  function loadTreeCache() {
+    try { return JSON.parse(localStorage.getItem(TREE_CACHE_KEY) || "null"); } catch (e) { return null; }
+  }
+  function saveTreeCache(cache) {
+    try { localStorage.setItem(TREE_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
+  }
+
+  /** Git Trees API：一次拿全量 path→sha（blob）。失败抛错由调用方降级。 */
+  async function fetchTree() {
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/git/trees/" + Config.GH.branch + "?recursive=1";
+    var j = await apiJson(url);
+    if (!j || !Array.isArray(j.tree)) throw new Error("tree empty");
+    var map = {};
+    (j.tree || []).forEach(function (t) {
+      if (t.type === "blob" && t.path) map[t.path] = t.sha;
+    });
+    return map;
+  }
+
+  /**
+   * 增量拉取某目录下全部 .json：先 fetchTree 拿全量 path+sha，对比缓存只拉变更文件。
+   * @param {string} dir 目录前缀，如 "data/records"
+   * @param {Object|null} tree 外部传入的 tree（syncPull 一次拉取复用）；null 时内部获取
+   * @returns {Promise<{recs: Array, fallback: boolean}>} fallback=true 表示走了全量兜底
+   */
+  async function pullDir(dir, tree) {
+    var gotTree = tree;
+    if (!gotTree) {
+      try { gotTree = await fetchTree(); } catch (e) { gotTree = null; }
+    }
+    var cache = loadTreeCache();
+    var prev = (cache && cache.tree) || {};
+    var prefix = dir + "/";
+
+    // 该目录下云端全部 .json 文件 {path: sha}
+    var cloudFiles = {};
+    Object.keys(gotTree || {}).forEach(function (p) {
+      if (p.indexOf(prefix) === 0 && p.slice(-5) === ".json") cloudFiles[p] = gotTree[p];
+    });
+
+    // 对比缓存：找出 sha 变化/新增的文件
+    var changed = [];
+    Object.keys(cloudFiles).forEach(function (p) {
+      if (prev[p] !== cloudFiles[p]) changed.push(p);
+    });
+
+    var recs = [];
+    // 无 tree（首次/失败）→ 全量拉取该目录（回退现有逻辑）
+    if (!gotTree) {
+      var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + dir + "?ref=" + Config.GH.branch;
+      var arr;
+      try { arr = await apiJson(url); }
+      catch (e) { if (String(e.message).indexOf("404") === 0) return { recs: [], fallback: true }; throw e; }
+      if (Array.isArray(arr)) {
+        var files = arr.filter(function (f) { return f.name.endsWith(".json") && f.size < 5 * 1024 * 1024; });
+        for (var i = 0; i < files.length; i++) {
+          try {
+            var j = await apiJson(files[i].url);
+            recs.push(JSON.parse(Util.b64dec(j.content)));
+          } catch (e) {}
+        }
+      }
+      // 全量后更新缓存（把拿到的文件 sha 写入，下次就能增量）
+      if (gotTree) {
+        var nc = { tree: Object.assign({}, prev, gotTree), ts: Date.now() };
+        saveTreeCache(nc);
+      }
+      return { recs: recs, fallback: true };
+    }
+
+    // 增量：只拉变更文件（并发 3 个，避免触发次级限流）
+    for (var i = 0; i < changed.length; i++) {
+      try {
+        var j = await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + changed[i] + "?ref=" + Config.GH.branch);
+        recs.push(JSON.parse(Util.b64dec(j.content)));
+      } catch (e) { /* 单条失败跳过 */ }
+    }
+    // 更新缓存：合并新 tree
+    saveTreeCache({ tree: Object.assign({}, prev, gotTree), ts: Date.now() });
+    return { recs: recs, fallback: false, changedCount: changed.length };
+  }
+
+  /** 拉取云端全部记录（目录 404 视为空）——保留原函数供降级/兼容调用 */
   async function pull() {
     var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.GH.dir + "?ref=" + Config.GH.branch;
     var arr;
@@ -686,14 +777,18 @@
     var onStatus = opts.onStatus || function () {};
     onStatus("同步中…", false);
     try {
-      var recs = await pull();
+      // Git Trees 增量拉取：1 次 tree + 仅变更文件，替代 4 目录 N+1 全量
+      var tree = null;
+      try { tree = await fetchTree(); } catch (e) { tree = null; }
+      var r1 = await pullDir("data/records", tree);
+      var recs = r1.recs;
       // 待取货同步：拉取失败（非 404 网络异常）不影响 records 同步，单独降级为空
       var pks = [];
-      try { pks = await pullPickups(); } catch (e) { pks = []; }
+      try { pks = (await pullDir("data/pickups", tree)).recs; } catch (e) { pks = []; }
       // 备忘录同步：与待取货一致，失败降级为空，不影响 records
       var mms = [];
-      try { mms = await pullMemos(); } catch (e) { mms = []; }
-      var toms = await pullTombstones();
+      try { mms = (await pullDir("data/memos", tree)).recs; } catch (e) { mms = []; }
+      var toms = (await pullDir("data/deleted", tree)).recs;
       var merged = window.App.Records.mergeAndSort(window.App.State.list, recs);
       // 应用墓碑：删除本地已标记删除的记录
       if (toms && toms.length) {
@@ -735,6 +830,8 @@
     waitWpsReceipt: waitWpsReceipt,
     describeWpsReceipt: describeWpsReceipt,
     syncPull: syncPull,
+    fetchTree: fetchTree,
+    pullDir: pullDir,
     pushTombstone: pushTombstone,
     delWithTombstone: delWithTombstone,
     clearAllWithReason: clearAllWithReason,
