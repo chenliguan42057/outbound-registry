@@ -97,6 +97,38 @@ jobs:
             echo "::error::检测到 PWA 离线优化被回滚（缺 wireOnlineOffline / SW 注册），已中止部署。"
             exit 1
           fi
+
+          # 第二轮优化完整性校验（2026-08-10 下午）：跨设备同步回归修复 + 数据不丢 + 性能 + 回收站。
+          # 这些改动分散在多个文件，任何一个被旧工作区覆盖都会造成"看起来正常、实际丢数据"，
+          # 所以每一项都单独校验、缺一即中止。
+          if ! grep -q 'pullTombstones()' src/js/data/cloud.js || \
+             ! grep -q 'enqueueTomb' src/js/data/cloud.js || \
+             ! grep -q 'delTombstone' src/js/data/cloud.js ; then
+            echo "::error::检测到 cloud.js 被回滚（缺跨设备同步修复/墓碑队列/回收站支持），已中止部署。"
+            exit 1
+          fi
+          if ! grep -q 'deletedAt' src/js/data/records.js || \
+             ! grep -q 'newerOf' src/js/data/records.js || \
+             ! grep -q 'function restore' src/js/data/records.js ; then
+            echo "::error::检测到 records.js 被回滚（缺 clear-all 时间窗/冲突取较新/回收站还原），已中止部署。"
+            exit 1
+          fi
+          if ! grep -q 'buildStockIndex' src/js/data/stock.js ; then
+            echo "::error::检测到 stock.js 被回滚（缺库存预计算索引），已中止部署。"
+            exit 1
+          fi
+          if ! [ -f src/js/views/trash.js ] || ! grep -q 'views/trash.js' src/index.html ; then
+            echo "::error::检测到回收站视图缺失或未在 index.html 注册，已中止部署。"
+            exit 1
+          fi
+          if ! grep -q 'recBulkDel' src/js/views/records.js ; then
+            echo "::error::检测到记录列表批量操作被回滚，已中止部署。"
+            exit 1
+          fi
+          if ! grep -q 'inHandler' src/js/views/in.js ; then
+            echo "::error::检测到入库经办人字段被回滚，已中止部署。"
+            exit 1
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -23,6 +23,7 @@
     var container = null;
     var listBox = null;
     var searchState = null;
+    var selected = {};        // 批量选中集合：id -> true
 
     function render(el) {
       container = el;
@@ -37,6 +38,14 @@
             '<button type="button" class="btn ghost sm" id="recSync">&#128260; 立即同步</button>' +
             '<button type="button" class="btn ghost sm" id="recRemind">&#128276; 提醒推送</button>' +
             '<button type="button" class="btn danger sm" id="recClearAll">清空全部记录</button>' +
+          '</div>' +
+          // 批量操作条：默认隐藏，勾选任意一行后出现。只确认一次，避免 20 单逐条点确认
+          '<div class="bulk-bar" id="recBulkBar" style="display:none;">' +
+            '<span class="bulk-count" id="recBulkCount">已选 0 条</span>' +
+            (!isIn ? '<button type="button" class="btn ghost sm" id="recBulkSubmit">批量标为已提单</button>' : '') +
+            (!isIn ? '<button type="button" class="btn ghost sm" id="recBulkPending">批量标为未提单</button>' : '') +
+            '<button type="button" class="btn danger sm" id="recBulkDel">批量删除</button>' +
+            '<button type="button" class="btn ghost sm" id="recBulkCancel">取消选择</button>' +
           '</div>' +
           '<div class="rec-filters">' +
             '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "来源" : "部门/客户") + '" autocomplete="off" />' +
@@ -89,10 +98,40 @@
         Util.toast("已清空全部记录");
       });
 
+      // 批量操作按钮
+      var bulkSubmitEl = Util.$("recBulkSubmit");
+      if (bulkSubmitEl) bulkSubmitEl.addEventListener("click", function () { doBulkStatus("submitted"); });
+      var bulkPendingEl = Util.$("recBulkPending");
+      if (bulkPendingEl) bulkPendingEl.addEventListener("click", function () { doBulkStatus("pending"); });
+      Util.$("recBulkDel").addEventListener("click", doBulkDel);
+      Util.$("recBulkCancel").addEventListener("click", function () { selected = {}; renderList(); });
+
+      // 勾选：change 事件单独处理，不能混进下面的 click 委托——
+      // 行本身绑了 data-act="detail"，勾选必须阻止冒泡，否则每勾一条就弹一次详情
+      listBox.addEventListener("click", function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains("rec-check")) {
+          e.stopPropagation();
+          var cid = e.target.getAttribute("data-id");
+          if (e.target.checked) selected[cid] = true; else delete selected[cid];
+          updateBulkBar();
+          return;
+        }
+        if (e.target && e.target.id === "recCheckAll") {
+          e.stopPropagation();
+          var all = e.target.checked;
+          selected = {};
+          if (all) filter().forEach(function (r) { selected[r.id] = true; });
+          listBox.querySelectorAll(".rec-check").forEach(function (cb) { cb.checked = all; });
+          updateBulkBar();
+          return;
+        }
+      });
+
       // 列表操作事件委托
       listBox.addEventListener("click", function (e) {
         var btn = e.target.closest("[data-act]");
         if (!btn) return;
+        if (e.target && e.target.classList && e.target.classList.contains("rec-check")) return;
         var act = btn.getAttribute("data-act");
         var id = btn.getAttribute("data-id");
         if (act === "detail") showDetail(id);
@@ -161,10 +200,9 @@
       renderList();
       Util.toast("已标记为" + label);
       if (Cloud.hasToken()) {
-        Cloud.push(rec).then(function () {
-          window.App.Views.app.setSyncStatus("已同步", false);
-        }).catch(function () {
-          window.App.Views.app.setSyncStatus("云端同步失败", true);
+        // 走队列式推送：推送失败自动入队，下次同步/操作冲刷补推，避免状态改动丢失
+        Cloud.pushRecord(rec).then(function (ok) {
+          window.App.Views.app.setSyncStatus(ok ? "已同步" : "云端同步失败（已入队，稍后自动补推）", !ok);
         });
       }
     }
@@ -174,9 +212,12 @@
       Util.$("recCount").textContent = list.length + " 条";
       if (!list.length) {
         listBox.innerHTML = '<div class="empty">暂无记录，请先登记。</div>';
+        selected = {};
+        updateBulkBar();
         return;
       }
       var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
+        '<th class="check-col"><input type="checkbox" id="recCheckAll" title="全选当前筛选结果" /></th>' +
         '<th>序号</th><th>时间</th><th>' + (isIn ? "经办人" : "领取人") + '</th>' +
         (!isIn ? '<th>状态</th>' : '') +
         (!isIn ? '<th>结算法人单位</th>' : '') +
@@ -198,6 +239,8 @@
           : '<span class="badge">无</span>';
         var inMark = r.type === "in" ? '<span class="in-tag">入库</span>' : "";
         html += '<tr data-act="detail" data-id="' + r.id + '">' +
+          '<td class="check-col"><input type="checkbox" class="rec-check" data-id="' + r.id + '"' +
+            (selected[r.id] ? " checked" : "") + ' /></td>' +
           '<td><div>' + (list.length - i) + inMark + '</div></td>' +
           '<td>' + Util.esc(r.time || "-") + '</td>' +
           '<td>' + Util.esc(r.picker || "-") + '</td>' +
@@ -213,6 +256,85 @@
       });
       html += '</tbody></table></div>';
       listBox.innerHTML = html;
+      // 列表重建后（同步/筛选变化）清理已不在结果里的选中项，避免"已选 3 条"却找不到行
+      var visible = {};
+      list.forEach(function (r) { visible[r.id] = true; });
+      Object.keys(selected).forEach(function (id) { if (!visible[id]) delete selected[id]; });
+      updateBulkBar();
+    }
+
+    /** 刷新批量操作条的显示与计数 */
+    function updateBulkBar() {
+      var ids = Object.keys(selected);
+      var bar = Util.$("recBulkBar");
+      if (!bar) return;
+      bar.style.display = ids.length ? "" : "none";
+      var cnt = Util.$("recBulkCount");
+      if (cnt) cnt.textContent = "已选 " + ids.length + " 条";
+    }
+
+    function selectedRecords() {
+      return State.list.filter(function (r) { return selected[r.id]; });
+    }
+
+    /** 批量改状态：只确认一次，逐条本地更新后统一推送云端 */
+    async function doBulkStatus(next) {
+      var recs = selectedRecords();
+      if (!recs.length) return;
+      var label = next === "pending" ? "未提单" : "已提单";
+      var ok = await UI.confirmDialog("将把选中的 " + recs.length + " 条记录标记为" + label + "。", "批量更新状态");
+      if (!ok) return;
+      var updated = [];
+      recs.forEach(function (r) {
+        var rec = Records.update(r.id, { status: next });
+        if (rec) updated.push(rec);
+      });
+      selected = {};
+      renderList();
+      Util.toast("已标记 " + updated.length + " 条为" + label);
+      if (Cloud.hasToken()) {
+        // 队列式推送：失败自动入队，下次同步补推，不会静默丢状态
+        var fail = 0;
+        for (var i = 0; i < updated.length; i++) {
+          var okPush = await Cloud.pushRecord(updated[i]);
+          if (!okPush) fail++;
+        }
+        window.App.Views.app.setSyncStatus(
+          fail ? (fail + " 条同步失败（已入队，稍后自动补推）") : "已同步", !!fail
+        );
+      }
+    }
+
+    /** 批量删除：一次填理由、一次确认，逐条走与单条删除相同的墓碑队列 */
+    async function doBulkDel() {
+      var recs = selectedRecords();
+      if (!recs.length) return;
+      var affects = recs.some(function (r) { return r.affectsStock === true; });
+      var res = await UI.promptDialog(
+        "将删除选中的 " + recs.length + " 条记录" + (affects ? "，库存会自动恢复" : "") + "。请填写删除理由：",
+        "例如：登记错误 / 重复登记 / 已撤销…",
+        "批量删除 " + recs.length + " 条记录",
+        "确认删除"
+      );
+      if (!res.ok) return;
+      // 先全部入本地墓碑队列再删，中途失败也不会让记录在下次同步复活
+      if (Cloud.hasToken()) recs.forEach(function (r) { Cloud.enqueueTomb(r.id, res.value); });
+      recs.forEach(function (r) { Records.remove(r.id); });
+      selected = {};
+      renderList();
+      Util.toast("已删除 " + recs.length + " 条" + (affects ? "，库存已自动恢复" : ""));
+      if (Cloud.hasToken()) {
+        var failed = 0;
+        for (var i = 0; i < recs.length; i++) {
+          try {
+            await Cloud.delWithTombstone(recs[i], res.value);
+            Cloud.dequeueTomb(recs[i].id);
+          } catch (e) { failed++; }
+        }
+        if (failed) {
+          window.App.Views.app.setSyncStatus(failed + " 条云端删除失败（已存本地墓碑，下次同步自动补推）", true);
+        }
+      }
     }
 
     function showDetail(id) {
@@ -385,12 +507,17 @@
         "确认删除"
       );
       if (!res.ok) return;
+      // 先写本地墓碑队列：即使云端失败，也会在后续 sync 冲刷补推，避免记录复活
+      if (Cloud.hasToken()) Cloud.enqueueTomb(id, res.value);
       Records.remove(id);
       renderList();
       Util.toast(affects ? "已删除，库存已自动恢复" : "已删除");
       if (Cloud.hasToken()) {
-        try { await Cloud.delWithTombstone(r, res.value); } catch (e) {
-          window.App.Views.app.setSyncStatus("云端删除失败（已存本地墓碑待同步）", true);
+        try {
+          await Cloud.delWithTombstone(r, res.value);
+          Cloud.dequeueTomb(id);   // 云端墓碑+删除成功才出队
+        } catch (e) {
+          window.App.Views.app.setSyncStatus("云端删除失败（已存本地墓碑，下次同步自动补推）", true);
         }
       }
     }

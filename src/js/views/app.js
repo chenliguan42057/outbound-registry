@@ -25,6 +25,7 @@
     { id: "report", icon: "report", label: "报表统计" },
     { id: "borrow", icon: "box", label: "先借后还" },
     { id: "memos", icon: "edit", label: "备忘录" },
+    { id: "trash", icon: "box", label: "回收站" },
     { id: "ai", icon: "box", label: "AI 助手" }
   ];
 
@@ -41,6 +42,7 @@
     "in-remind": "remind",
     "out-remind": "remind",
     borrow: "borrow",
+    trash: "trash",
     report: "report",
     ai: "ai"
   };
@@ -48,7 +50,7 @@
   var MODULE_TITLES = {
     dashboard: "仪表盘", stock: "库存查询", in: "入库管理", pickups: "待取货", memos: "备忘录", sync: "云端同步",
     "in-records": "入库记录", "out-records": "出库记录", report: "报表统计", ai: "AI 助手",
-    borrow: "先借后还",
+    borrow: "先借后还", trash: "回收站",
     "in-remind": "入库提醒", "out-remind": "出库提醒"
   };
 
@@ -281,12 +283,13 @@
 
   /** 页面重新可见：立即同步（不等定时器） */
   function onVisibilityChange() {
-    if (document.visibilityState === "visible") triggerSync("visible");
+    if (document.visibilityState === "visible") { triggerSync("visible"); checkMemoReminders(); }
   }
 
   /** 窗口重新聚焦：立即同步（不等定时器） */
   function onWindowFocus() {
     triggerSync("focus");
+    checkMemoReminders();
   }
 
   /** 启动自动同步：立即同步一次 + 定时轮询 + 可见性/聚焦监听（幂等） */
@@ -300,12 +303,56 @@
     window.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("focus", onWindowFocus);
     wireOnlineOffline();       // PWA 离线状态横幅 + 恢复自动同步（优化 3）
+    startMemoReminder();       // 备忘录提醒前端兜底（每分钟轮询本地，不依赖后台）
     scheduleNextSync();
     triggerSync("start");
     // 启动时冲刷「待补推队列」：把之前因页面关闭而没推上去的记录补推到云端
     Cloud.flushQueue().then(function (fres) {
       if (fres && fres.ok > 0) Util.toast("已补推 " + fres.ok + " 条记录");
     }).catch(function () {});
+  }
+
+  /* ================= 备忘录提醒前端兜底（优化 2.3） =================
+     不依赖 GitHub 定时任务：进 App 后每分钟轮询本地 State.memos，
+     到点未完成弹醒目横幅 + 系统通知。后台任务常被延迟/停用也不漏提醒。 */
+  var memoReminderTimer = null;
+  var memoLocalNotified = {};   // id -> true，避免同一条重复弹
+  function ensureMemoBanner() {
+    var b = document.getElementById("memoReminderBanner");
+    if (!b) {
+      b = document.createElement("div");
+      b.id = "memoReminderBanner";
+      b.className = "memo-reminder-banner";
+      b.style.display = "none";
+      document.body.appendChild(b);
+    }
+    return b;
+  }
+  function checkMemoReminders() {
+    var due = (State.memos || []).filter(function (m) {
+      if (!m || m.done || !m.remindAt || memoLocalNotified[m.id]) return false;
+      try { return new Date(m.remindAt).getTime() <= Date.now(); } catch (e) { return false; }
+    });
+    var banner = ensureMemoBanner();
+    if (!due.length) { banner.style.display = "none"; return; }
+    due.forEach(function (m) { memoLocalNotified[m.id] = true; });   // 已通知，避免重复
+    var titles = due.map(function (m) { return "• " + Util.esc(m.text || m.title || m.content || "备忘"); }).join("<br>");
+    banner.innerHTML = '<div class="mr-title">⏰ 备忘提醒（' + due.length + ' 项到点未完成）</div>' +
+      '<div class="mr-body">' + titles + '</div>' +
+      '<button type="button" class="mr-close" onclick="this.parentNode.style.display=\'none\'">知道了</button>';
+    banner.style.display = "block";
+    if ("Notification" in window && Notification.permission === "granted") {
+      try { due.forEach(function (m) { new Notification("备忘提醒", { body: (m.text || m.title || m.content || "备忘") }); }); } catch (e) {}
+    }
+  }
+  function startMemoReminder() {
+    if (memoReminderTimer) return;
+    checkMemoReminders();
+    memoReminderTimer = setInterval(checkMemoReminders, 60 * 1000);
+  }
+  /** 请求系统通知授权（需在用户手势内调用，故在添加备忘时触发） */
+  function requestMemoNotification() {
+    try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
   }
 
   /* ================= PWA 离线状态（优化 3） ================= */
@@ -415,6 +462,8 @@
     triggerSync: triggerSync,
     scheduleNextSync: scheduleNextSync,
     isAutoSyncOn: isAutoSyncOn,
-    nextSyncRemainSec: nextSyncRemainSec
+    nextSyncRemainSec: nextSyncRemainSec,
+    requestMemoNotification: requestMemoNotification,
+    checkMemoReminders: checkMemoReminders
   };
 })();

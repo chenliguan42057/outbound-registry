@@ -145,7 +145,8 @@ def collect_due(memos_list, now, force=False):
             continue
         if m.get("reminded") is True:
             continue
-        if target_dt <= now <= target_dt + timedelta(minutes=TOLERANCE_LATE):
+        # 去掉上界：到点即推（错过窗口的后续运行仍可补推，配合前端兜底不漏提醒）
+        if target_dt <= now:
             due.append(m)
     return due
 

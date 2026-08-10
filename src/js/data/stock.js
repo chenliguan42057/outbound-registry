@@ -17,20 +17,57 @@
     return m[name] || name;
   }
 
-  /** 单货品当前库存 */
-  function getStock(name, list) {
-    name = norm(name);
-    var init = Config.INVENTORY[name] || 0;
-    var inQty = 0, outQty = 0;
-    (list || State.list).forEach(function (r) {
-      if (r.affectsStock !== true) return; // 旧记录已包含在 INVENTORY 快照里，不再重复计算
+  /** 库存预计算索引：name → 按时序排序的出入库事件 + 前缀和。
+      解决原来 getRecordStock 每行每 item 各做一次 O(N) 全表扫描（上千条变 O(N²) 卡死）的问题。
+      改为一次建索引 O(N·items)，之后每次取值 O(事件数) 线性扫描（事件数=该货品记录数）。 */
+  var _stockIndex = null;
+  var _stockIndexDirty = true;
+  function markDirty() { _stockIndexDirty = true; }
+  function buildStockIndex() {
+    var idx = {};
+    (Config.PRODUCTS || []).forEach(function (name) {
+      idx[name] = { inv: Config.INVENTORY[name] || 0, events: [] };
+    });
+    (State.list || []).forEach(function (r) {
+      if (r.affectsStock !== true) return; // 旧记录已含在 INVENTORY 快照，不重复计算
       (r.items || []).forEach(function (it) {
-        if (norm(it.name) !== name) return;
+        var name = norm(it.name);
+        if (!idx[name]) idx[name] = { inv: Config.INVENTORY[name] || 0, events: [] };
         var q = Number(it.qty) || 0;
-        if (r.type === "in") inQty += q; else outQty += q;
+        idx[name].events.push({ ts: Number(r._ts) || 0, delta: r.type === "in" ? q : -q });
       });
     });
-    return init + inQty - outQty;
+    Object.keys(idx).forEach(function (name) {
+      var ev = idx[name].events.sort(function (a, b) { return a.ts - b.ts; });
+      var sum = 0;
+      for (var i = 0; i < ev.length; i++) { sum += ev[i].delta; ev[i].prefix = sum; }
+      idx[name].events = ev;
+    });
+    _stockIndex = idx;
+    _stockIndexDirty = false;
+  }
+
+  /** 单货品当前库存。list 显式传入时退化为即时计算（报表汇总，避免依赖全局索引）；
+      否则走预计算索引 O(1)。 */
+  function getStock(name, list) {
+    name = norm(name);
+    if (list) { // 即时计算（显式 list）
+      var init = Config.INVENTORY[name] || 0, inQty = 0, outQty = 0;
+      list.forEach(function (r) {
+        if (r.affectsStock !== true) return;
+        (r.items || []).forEach(function (it) {
+          if (norm(it.name) !== name) return;
+          var q = Number(it.qty) || 0;
+          if (r.type === "in") inQty += q; else outQty += q;
+        });
+      });
+      return init + inQty - outQty;
+    }
+    if (_stockIndexDirty || !_stockIndex) buildStockIndex();
+    var entry = _stockIndex[name];
+    if (!entry) return Config.INVENTORY[name] || 0;
+    var ev = entry.events;
+    return entry.inv + (ev.length ? ev[ev.length - 1].prefix : 0);
   }
 
   /**
@@ -45,21 +82,17 @@
   function getRecordStock(name, rec, item) {
     name = norm(name);
     var t = rec && rec._ts;
-    if (t) {
-      var netAfter = 0;
-      (State.list || []).forEach(function (r) {
-        if (!r || r.id === rec.id) return;         // 跳过自身
-        if (r.affectsStock !== true) return;        // 只统计参与库存的记录
-        if ((r._ts || 0) <= t) return;              // 只统计该记录之后（_ts 更大）的记录
-        (r.items || []).forEach(function (it) {
-          if (!it || norm(it.name) !== name) return;
-          var q = Number(it.qty) || 0;
-          netAfter += (r.type === "in" ? q : -q);   // 之后入库 +，出库 -
-        });
-      });
-      return getStock(name) - netAfter;             // 当前实时库存 - 之后的变化 = 当时的库存
+    if (!t) return getStock(name);                  // 无 _ts 极端情况 → 退回当前实时库存
+    if (_stockIndexDirty || !_stockIndex) buildStockIndex();
+    var entry = _stockIndex[name];
+    if (!entry) return getStock(name);
+    var ev = entry.events;
+    // 当时库存 = 初始 + 截止到该记录时刻（含自身）的前缀和
+    var sum = 0;
+    for (var i = 0; i < ev.length; i++) {
+      if (ev[i].ts <= t) sum = ev[i].prefix; else break;
     }
-    return getStock(name);
+    return entry.inv + sum;
   }
 
   /** 全部货品汇总：{name, stock, inQty, outQty} */
@@ -115,6 +148,7 @@
   window.App.Stock = {
     getStock: getStock,
     getRecordStock: getRecordStock,
+    markDirty: markDirty,
     summarize: summarize,
     trend: trend
   };

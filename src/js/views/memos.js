@@ -130,6 +130,8 @@
     if (!UI.reportFieldErrors(errs, scope)) return;
 
     setSubmitting(true);
+    // 设置提醒时间时顺带请求系统通知授权（在用户手势内调用，浏览器才允许）
+    if (remindAt && window.App.Views.app) window.App.Views.app.requestMemoNotification();
     var memo = Memos.create({
       text: text,
       time: Util.nowLocal(),

@@ -1,0 +1,25 @@
+name: Daily Backup
+on:
+  schedule:
+    # 每天 UTC 18:00 = 北京时间次日 02:00，避开业务高峰，快照内容是"前一天收工后的状态"
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  # 与其他写仓库的定时任务分开排队；同名任务不并发，避免两次 push 互相 reject
+  group: daily-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需要能 push，用默认 GITHUB_TOKEN 即可（permissions.contents: write）
+          persist-credentials: true
+      - name: Create daily snapshot
+        run: python3 .github/scripts/daily_backup.py

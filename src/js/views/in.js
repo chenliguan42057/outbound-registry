@@ -31,6 +31,10 @@
           '<input type="text" id="inPurpose" placeholder="例如：采购入库、退货入库、盘点补录等" maxlength="60" autocomplete="off" inputmode="text" enterkeyhint="done" />' +
         '</div>' +
         '<div class="field">' +
+          '<label for="inHandler">经办人<span class="req">*</span></label>' +
+          '<input type="text" id="inHandler" placeholder="谁经手的入库（默认带出上次）" maxlength="20" autocomplete="off" inputmode="text" enterkeyhint="next" />' +
+        '</div>' +
+        '<div class="field">' +
           '<label>现场照片（留存）</label>' +
           '<div id="inPhotoUpload"></div>' +
         '</div>' +
@@ -44,11 +48,15 @@
 
     els = {
       purpose: Util.$("inPurpose"),
+      handler: Util.$("inHandler"),
       submit: Util.$("inSubmit"),
       reset: Util.$("inReset"),
       cancelEdit: Util.$("inCancelEdit"),
       preview: Util.$("inPreview")
     };
+
+    // 经办人默认带出上次值
+    try { var _lh = localStorage.getItem("outbound_in_last_handler"); if (_lh) Util.$("inHandler").value = _lh; } catch (e) {}
 
     picker = new UI.ProductPicker({
       showInStock: true,
@@ -122,7 +130,11 @@
 
     var items = picker.getItems();
     var qtyProblems = picker.validateItems ? picker.validateItems() : [];
+    var handlerVal = (els.handler ? els.handler.value : "").trim();
     var errs = [];
+    if (!handlerVal) {
+      errs.push({ el: Util.$("inHandler"), msg: "请填写经办人" });
+    }
     if (!items.length) {
       errs.push({
         el: Util.$("inProductPicker"),
@@ -141,9 +153,11 @@
       type: "in",
       items: items,
       purpose: purpose,
+      picker: handlerVal,
       photos: photos.getPhotos(),
       affectsStock: true
     };
+    try { localStorage.setItem("outbound_in_last_handler", handlerVal); } catch (e) {}
     var rec;
     if (editingId) {
       rec = Records.update(editingId, payload);

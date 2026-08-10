@@ -161,6 +161,9 @@
     list: [],
     pickups: [],
     memos: [],
+    /* 删除墓碑（回收站数据源）：只存内存不落 localStorage——快照里含照片 dataURL，
+       持久化会迅速撑爆 5MB 配额；每次 syncPull 都会重新填充。 */
+    tombstones: [],
     lastSync: null,
     nav: null,
     appMounted: false,

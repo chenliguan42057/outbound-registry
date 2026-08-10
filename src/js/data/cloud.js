@@ -125,13 +125,26 @@
    * @param {Object|null} tree 外部传入的 tree（syncPull 一次拉取复用）；null 时内部获取
    * @returns {Promise<{recs: Array, fallback: boolean}>} fallback=true 表示走了全量兜底
    */
+  /** 解析云端记录内容；失败（损坏 JSON / 缺 id / 缺 items）返回 {ok:false}（用于提示+从缓存剔除以便重试） */
+  function tryParseRecord(b64, path) {
+    try {
+      var rec = JSON.parse(Util.b64dec(b64));
+      if (!rec || typeof rec !== "object" || !rec.id) return { ok: false };
+      for (var k = 0; k < (rec.items || []).length; k++) {
+        if (!rec.items[k] || !rec.items[k].name) return { ok: false };
+      }
+      return { ok: true, rec: rec };
+    } catch (e) { return { ok: false }; }
+  }
+
   async function pullDir(dir, tree) {
     var gotTree = tree;
     if (!gotTree) {
       try { gotTree = await fetchTree(); } catch (e) { gotTree = null; }
     }
-    var cache = loadTreeCache();
-    var prev = (cache && cache.tree) || {};
+    var cache = loadTreeCache() || {};
+    var cacheTree = cache.tree || {};
+    var prev = cacheTree[dir] || {};
     var prefix = dir + "/";
 
     // 该目录下云端全部 .json 文件 {path: sha}
@@ -147,6 +160,8 @@
     });
 
     var recs = [];
+    var parseFail = 0;
+    var failPaths = [];
     // 无 tree（首次/失败）→ 全量拉取该目录（回退现有逻辑）
     if (!gotTree) {
       var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + dir + "?ref=" + Config.GH.branch;
@@ -158,27 +173,35 @@
         for (var i = 0; i < files.length; i++) {
           try {
             var j = await apiJson(files[i].url);
-            recs.push(JSON.parse(Util.b64dec(j.content)));
-          } catch (e) {}
+            var pr = tryParseRecord(j.content, dir + "/" + files[i].name);
+            if (pr.ok) recs.push(pr.rec); else { parseFail++; failPaths.push(dir + "/" + files[i].name); }
+          } catch (e) { /* 网络失败，sha 已入缓存，下次重试 */ }
         }
       }
-      // 全量后更新缓存（把拿到的文件 sha 写入，下次就能增量）
-      if (gotTree) {
-        var nc = { tree: Object.assign({}, prev, gotTree), ts: Date.now() };
-        saveTreeCache(nc);
-      }
+      // 全量后更新缓存（把本目录拿到的文件 sha 写入分片，下次就能增量）
+      var fbTree = Object.assign({}, cacheTree);
+      fbTree[dir] = {};
+      (arr || []).forEach(function (f) { if (String(f.name).endsWith(".json")) fbTree[dir][dir + "/" + f.name] = f.sha; });
+      failPaths.forEach(function (p) { delete fbTree[dir][p]; });   // 解析失败的剔除，允许重试
+      saveTreeCache({ tree: fbTree, ts: Date.now() });
+      if (parseFail) { try { window.App.Util.toast(parseFail + " 条记录解析失败已跳过（可稍后重新同步重试）", true); } catch (e) {} }
       return { recs: recs, fallback: true };
     }
 
-    // 增量：只拉变更文件（并发 3 个，避免触发次级限流）
+    // 增量：只拉变更文件
     for (var i = 0; i < changed.length; i++) {
       try {
-        var j = await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + changed[i] + "?ref=" + Config.GH.branch);
-        recs.push(JSON.parse(Util.b64dec(j.content)));
-      } catch (e) { /* 单条失败跳过 */ }
+        var jc = await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + changed[i] + "?ref=" + Config.GH.branch);
+        var pr2 = tryParseRecord(jc.content, changed[i]);
+        if (pr2.ok) recs.push(pr2.rec); else { parseFail++; failPaths.push(changed[i]); }
+      } catch (e) { /* 网络失败跳过（sha 不变，下次重试） */ }
     }
-    // 更新缓存：合并新 tree
-    saveTreeCache({ tree: Object.assign({}, prev, gotTree), ts: Date.now() });
+    // 更新缓存：仅按目录分片存储本目录的 sha，避免不同目录互相污染（修复同步回归的根因）
+    var newTree = Object.assign({}, cacheTree);
+    newTree[dir] = Object.assign({}, prev, cloudFiles);
+    failPaths.forEach(function (p) { delete newTree[dir][p]; });   // 解析失败的剔除，允许重试
+    saveTreeCache({ tree: newTree, ts: Date.now() });
+    if (parseFail) { try { window.App.Util.toast(parseFail + " 条记录解析失败已跳过（可稍后重新同步重试）", true); } catch (e) {} }
     return { recs: recs, fallback: false, changedCount: changed.length };
   }
 
@@ -401,6 +424,19 @@
     await del(rec.id);
   }
 
+  /** 移除云端墓碑（回收站还原用）。
+      还原必须「先删墓碑、再写回记录」：反过来的话下一轮 syncPull 会用残留墓碑把刚还原的记录再删一次。 */
+  async function delTombstone(id) {
+    var path = "data/deleted/" + id + ".json";
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }   // 404 视为已无墓碑
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "DELETE", headers: ghHeaders(),
+      body: JSON.stringify({ message: "restore " + id, sha: sha, branch: Config.GH.branch })
+    });
+  }
+
   /** 清空全部并写一条汇总墓碑（data/deleted/__clear-all__.json） */
   async function clearAllWithReason(reason) {
     var path = "data/deleted/__clear-all__.json";
@@ -508,13 +544,15 @@
       调用方据此 toast 提示并调用 markPhotoPending 入补传队列。
       limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖）。 */
   async function pushPhotosDetailed(rec, limit) {
-    var urls = [], failed = [];
     var photos = (rec && rec.photos) || [];
     var slice = limit ? photos.slice(0, limit) : photos;
+    // 定长数组按 index 占位：urls[i] 对应第 i 张照片（失败则为 undefined），避免中间照片失败导致补传错位
+    var urls = new Array(slice.length);
+    var failed = [];
     for (var i = 0; i < slice.length; i++) {
       try {
         var u = await pushPhotoWithRetry(rec.id, i + 1, slice[i]);
-        if (u) urls.push(u); else failed.push(i);
+        if (u) urls[i] = u; else failed.push(i);
       } catch (e) {
         failed.push(i);
       }
@@ -534,26 +572,30 @@
       返回 { ok, fail }。成功全部后清补传队列项。 */
   async function retryPhotosFor(rec) {
     if (!rec || !Array.isArray(rec.photos) || !rec.photos.length) return { ok: 0, fail: 0 };
-    var have = (rec.photoUrls || []).length;      // 已成功的照片数（索引 0..have-1）
+    var n = rec.photos.length;
+    // 按 index 占位的定长数组：photoUrls[i] 对应第 i 张照片（允许 undefined/null 表示未成功），杜绝中间失败错位
+    var urls = new Array(n);
+    (rec.photoUrls || []).forEach(function (u, i) { if (u) urls[i] = u; });
     var missing = [];
-    for (var i = have; i < rec.photos.length; i++) missing.push(i);
+    for (var i = 0; i < n; i++) { if (!urls[i]) missing.push(i); }
     if (!missing.length) { clearPhotoPending(rec.id); return { ok: 0, fail: 0 }; }
-    var urls = rec.photoUrls ? rec.photoUrls.slice() : [];
     var failed = [];
-    for (var i = 0; i < missing.length; i++) {
-      var idx = missing[i];
+    for (var k = 0; k < missing.length; k++) {
+      var idx = missing[k];
       try {
         var u = await pushPhotoWithRetry(rec.id, idx + 1, rec.photos[idx]);
-        if (u) urls.push(u); else failed.push(idx);
+        if (u) urls[idx] = u; else failed.push(idx);
       } catch (e) { failed.push(idx); }
     }
+    var okUrls = urls.filter(function (x) { return x; });
+    var prevOk = (rec.photoUrls || []).filter(function (x) { return x; }).length;
     if (!failed.length && window.App.Records) {
       var updated = window.App.Records.update(rec.id, { photoUrls: urls });
       clearPhotoPending(rec.id);
-      return { ok: urls.length - have, fail: 0, updated: updated || rec };
+      return { ok: okUrls.length - prevOk, fail: 0, updated: updated || rec };
     }
     markPhotoPending(rec.id, failed);
-    return { ok: urls.length - have, fail: failed.length, updated: rec };
+    return { ok: okUrls.length - prevOk, fail: failed.length, updated: rec };
   }
 
   /** 逐条推送本地全部记录 */
@@ -625,6 +667,51 @@
       var rec = (window.App.State.list || []).find(function (r) { return r.id === id; });
       if (!rec) { dequeue(id); continue; }            // 本地已删，出队
       if (await pushWithRetry(rec, 2)) { dequeue(id); ok++; } else { remain++; }
+    }
+    return { ok: ok, remain: remain };
+  }
+
+  /* ================= 本地删除墓碑队列 =================
+     解决「删除时云端墓碑写入失败，下轮 syncPull 又把记录拉回复活」的问题。
+     - 删除时立即把 {id, reason} 写入本地队列（localStorage outbound_tomb_queue）。
+     - syncPull 合并后剔除队列中的 id（本地不复活），并冲刷队列把墓碑补推到云端。
+     - 云端墓碑 + 删除文件成功后才出队。 */
+  var TOMB_QUEUE_KEY = "outbound_tomb_queue";
+  function loadTombQueue() {
+    try { return JSON.parse(localStorage.getItem(TOMB_QUEUE_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function saveTombQueue(arr) {
+    try { localStorage.setItem(TOMB_QUEUE_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
+  function enqueueTomb(id, reason) {
+    if (!id) return;
+    var q = loadTombQueue();
+    if (!q.some(function (x) { return x.id === id; })) q.push({ id: id, reason: String(reason || "") });
+    saveTombQueue(q);
+  }
+  function dequeueTomb(id) {
+    saveTombQueue(loadTombQueue().filter(function (x) { return x.id !== id; }));
+  }
+  function getLocalTombIds() {
+    var s = {};
+    loadTombQueue().forEach(function (x) { if (x && x.id) s[x.id] = true; });
+    return s;
+  }
+  /** 冲刷本地墓碑队列：逐条补推 tombstone + 删除文件，成功出队。返回 {ok, remain} */
+  async function flushTombQueue() {
+    var q = loadTombQueue();
+    if (!q.length) return { ok: 0, remain: 0 };
+    if (!hasToken()) return { ok: 0, remain: q.length };
+    var ok = 0, remain = 0;
+    for (var i = 0; i < q.length; i++) {
+      var item = q[i];
+      var rec = (window.App.State.list || []).find(function (r) { return r.id === item.id; });
+      try {
+        if (rec) { await delWithTombstone(rec, item.reason); }
+        else { await pushTombstone({ id: item.id }, item.reason); }   // 本地已删仅剩队列项：补推墓碑即可
+        dequeueTomb(item.id);
+        ok++;
+      } catch (e) { remain++; }
     }
     return { ok: ok, remain: remain };
   }
@@ -782,19 +869,29 @@
       try { tree = await fetchTree(); } catch (e) { tree = null; }
       var r1 = await pullDir("data/records", tree);
       var recs = r1.recs;
-      // 待取货同步：拉取失败（非 404 网络异常）不影响 records 同步，单独降级为空
+      // 待取货/备忘录/删除墓碑：用各自独立的全量拉取函数，不再走 pullDir 增量缓存，
+      // 修复"同步加速"引入的回归——pullDir 曾把整树 sha 写入同一缓存，导致这三个目录在首次同步被跳过、
+      // 跨设备删除/待取货/备忘录永远拉不到。各自降级为空不影响 records 同步。
       var pks = [];
-      try { pks = (await pullDir("data/pickups", tree)).recs; } catch (e) { pks = []; }
-      // 备忘录同步：与待取货一致，失败降级为空，不影响 records
+      try { pks = await pullPickups(); } catch (e) { pks = []; }
       var mms = [];
-      try { mms = (await pullDir("data/memos", tree)).recs; } catch (e) { mms = []; }
-      var toms = (await pullDir("data/deleted", tree)).recs;
+      try { mms = await pullMemos(); } catch (e) { mms = []; }
+      var toms = [];
+      try { toms = await pullTombstones(); } catch (e) { toms = []; }
       var merged = window.App.Records.mergeAndSort(window.App.State.list, recs);
       // 应用墓碑：删除本地已标记删除的记录
       if (toms && toms.length) {
         merged = window.App.Records.applyTombstones(merged, toms);
       }
+      // 本地墓碑队列中的 id 在云端确认前先从本地列表剔除，避免 syncPull 把已删记录拉回复活
+      var localTomb = getLocalTombIds();
+      if (localTomb && Object.keys(localTomb).length) {
+        merged = merged.filter(function (r) { return !localTomb[r.id]; });
+      }
       window.App.State.list = merged;
+      // 墓碑保留在内存态，供「回收站」列出可还原的已删记录（不落 localStorage：快照含照片 dataURL，易撑爆配额）
+      window.App.State.tombstones = toms || [];
+      if (window.App.Stock) window.App.Stock.markDirty();   // 记录集变化，库存预计算索引需重建
       Store.saveRecords(merged);
       // 待取货合并：同 id 云端覆盖本地（流程性数据，不参与墓碑删除同步）
       window.App.State.pickups = window.App.Pickups.mergeAndSort(window.App.State.pickups, pks);
@@ -802,9 +899,14 @@
       // 备忘录合并：同 id 云端覆盖本地（流程性数据，不参与墓碑删除同步）
       window.App.State.memos = window.App.Memos.mergeAndSort(window.App.State.memos, mms);
       Store.saveMemos(window.App.State.memos);
+      // 冲刷本地墓碑队列（删除云端失败的补推，成功才出队）
+      try { await flushTombQueue(); } catch (e) {}
       window.App.State.lastSync = new Date();
-      onStatus("已同步 " + window.App.State.lastSync.toLocaleString(), false);
-      return { ok: true, list: merged, pickups: pks, memos: mms, tombstones: toms };
+      var cfl = (window.App.Records && window.App.Records.getLastConflicts) ? window.App.Records.getLastConflicts() : [];
+      var statusText = "已同步 " + window.App.State.lastSync.toLocaleString();
+      if (cfl && cfl.length) statusText += "（" + cfl.length + " 条冲突已按较新版本保留）";
+      onStatus(statusText, false);
+      return { ok: true, list: merged, pickups: pks, memos: mms, tombstones: toms, conflicts: cfl };
     } catch (e) {
       onStatus("同步失败：" + e.message + "（显示本地缓存）", true);
       return { ok: false, error: e };
@@ -823,6 +925,10 @@
     pushRecord: pushRecord,
     pushWithRetry: pushWithRetry,
     flushQueue: flushQueue,
+    enqueueTomb: enqueueTomb,
+    dequeueTomb: dequeueTomb,
+    flushTombQueue: flushTombQueue,
+    getLocalTombIds: getLocalTombIds,
     pushRemind: pushRemind,
     pushNotifyFile: pushNotifyFile,
     fetchWpsMarker: fetchWpsMarker,
@@ -834,6 +940,7 @@
     pullDir: pullDir,
     pushTombstone: pushTombstone,
     delWithTombstone: delWithTombstone,
+    delTombstone: delTombstone,
     clearAllWithReason: clearAllWithReason,
     pullTombstones: pullTombstones,
     pushPhoto: pushPhoto,

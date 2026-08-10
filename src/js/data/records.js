@@ -29,7 +29,7 @@
     var Stock = window.App.Stock;   // 延迟访问（stock.js 在 records.js 之前加载，运行时必已存在）
     if (!Stock || !Stock.getStock) return;
     (rec.items || []).forEach(function (it) {
-      if (it && it.name) it.stock = Stock.getStock(it.name);
+      if (it && it.name) it.stock = Stock.getStock(it.name, State.list);
     });
   }
 
@@ -43,6 +43,7 @@
       photos: []
     }, payload);
     State.list.unshift(rec);
+    if (window.App.Stock) window.App.Stock.markDirty();
     stampStock(rec);        // 先入列再打快照：getStock 已包含本笔影响
     State.save();
     try {
@@ -63,7 +64,10 @@
     if (idx < 0) return null;
     var rec = Object.assign({}, State.list[idx], patch, { updatedAt: Date.now(), affectsStock: true });
     State.list[idx] = rec;
-    if (patch && Object.prototype.hasOwnProperty.call(patch, "items")) stampStock(rec);
+    if (patch && Object.prototype.hasOwnProperty.call(patch, "items")) {
+      if (window.App.Stock) window.App.Stock.markDirty();
+      stampStock(rec);
+    }
     State.save();
     return rec;
   }
@@ -74,12 +78,34 @@
     State.list.forEach(function (r) { if (r.id === id) gone = r; });
     State.list = State.list.filter(function (r) { return r.id !== id; });
     State.save();
+    if (window.App.Stock) window.App.Stock.markDirty();
     try {
       if (window.App.Audit && gone) window.App.Audit.log("delete", {
         id: id,
         summary: ((gone.picker || "") + " " + (gone.purpose || "")).slice(0, 200)
       });
     } catch (e) {}
+  }
+
+  /** 回收站还原：把墓碑快照原样塞回本地列表。
+      不能走 create()——那会生成新的 id 与新的 _ts，既丢失原单据编号，
+      又会把这笔记录挪到时间线末尾，导致它之后所有记录的「当时库存」全部算错。
+      幂等：列表里已存在同 id 时直接返回，重复点还原不会产生副本。 */
+  function restore(rec) {
+    if (!rec || !rec.id) return null;
+    var exists = State.list.some(function (r) { return r.id === rec.id; });
+    if (!exists) {
+      State.list = mergeAndSort(State.list.concat([rec]), []);
+      if (window.App.Stock) window.App.Stock.markDirty();
+      State.save();
+      try {
+        if (window.App.Audit) window.App.Audit.log("restore", {
+          id: rec.id,
+          summary: ((rec.picker || "") + " " + (rec.purpose || "")).slice(0, 200)
+        });
+      } catch (e) {}
+    }
+    return rec;
   }
 
   /** 清空本地记录 */
@@ -89,18 +115,43 @@
     try { if (window.App.Audit) window.App.Audit.log("clear-all", {}); } catch (e) {}
   }
 
-  /** 合并策略：同 id 云端覆盖本地，但「本地有 photos 而云端已剥离（photos 为空但 photoUrls 有值）」
-      时保留本地 photos——dataURL 是本机编辑回填/补传所需的原始凭证，云端瘦身后不应反向抹掉它。
+  /** 取较新的一条：updatedAt/_ts 较大者胜；相等时本地优先（避免把未推送的本地改动判输） */
+  function newerOf(a, b) {
+    var ta = Number((a && (a.updatedAt || a._ts)) || 0);
+    var tb = Number((b && (b.updatedAt || b._ts)) || 0);
+    if (ta === tb) return a;
+    return tb > ta ? b : a;
+  }
+
+  /** 合并策略：同 id 取较新者（updatedAt/_ts 大者胜），不再无条件云端覆盖本地——
+      修复「本地改了还没推，轮询一到被云端旧版静默覆盖、改动永久消失」的问题。
+      云端较新时仍保留本地 photos（dataURL 是编辑回填/补传所需原始凭证）。
+      检测到双方都改过（时间戳不同）会记入 _lastMergeConflicts，供同步状态提示。
       排序 = time 降序，次 _ts 降序（与现网一致） */
+  var _lastMergeConflicts = [];
   function mergeAndSort(local, remote) {
+    _lastMergeConflicts = [];
     var map = new Map();
     (local || []).forEach(function (r) { map.set(r.id, r); });
     (remote || []).forEach(function (r) {
       var prev = map.get(r.id);
-      if (prev && (prev.photos && prev.photos.length) && !(r.photos && r.photos.length) && (r.photoUrls && r.photoUrls.length)) {
+      if (!prev) { map.set(r.id, r); return; }
+      var win = newerOf(prev, r);
+      if (win === prev) {
+        // 本地较新：保留本地，不反向被云端旧版覆盖（杜绝静默吞改）
+        if (Number(prev.updatedAt || prev._ts) !== Number(r.updatedAt || r._ts)) {
+          _lastMergeConflicts.push({ id: r.id, kept: "local" });
+        }
+        return;
+      }
+      // 云端较新：用云端，但保留本地 photos（云端瘦身后不应反向抹掉原始凭证）
+      if (prev.photos && prev.photos.length && !(r.photos && r.photos.length) && (r.photoUrls && r.photoUrls.length)) {
         map.set(r.id, Object.assign({}, r, { photos: prev.photos }));
       } else {
         map.set(r.id, r);
+      }
+      if (Number(prev.updatedAt || prev._ts) !== Number(r.updatedAt || r._ts)) {
+        _lastMergeConflicts.push({ id: r.id, kept: "cloud" });
       }
     });
     return Array.from(map.values()).sort(function (a, b) {
@@ -117,11 +168,21 @@
    */
   function applyTombstones(list, tombstones) {
     if (!tombstones || !tombstones.length) return list;
-    var hasClearAll = tombstones.some(function (t) { return t && t.type === "clear-all"; });
-    if (hasClearAll) return [];
+    var arr = list || [];
+    // clear-all 墓碑带 deletedAt：只清「清空时间点之前」的记录，
+    // 之后新建的记录不受影响（修复：之前直接 return [] 会把清空后新建的记录也一起抹掉，等于永久地雷）。
+    var clearAll = tombstones.filter(function (t) { return t && t.type === "clear-all"; })[0];
+    if (clearAll) {
+      var cutoff = Number(clearAll.deletedAt) || 0;
+      arr = arr.filter(function (r) {
+        var ts = Number(r._ts) || Date.parse(r.time || "") || 0;
+        return ts >= cutoff;
+      });
+    }
+    // 逐条墓碑：删除对应 id（不参与库存的记录也按 id 移除本地残留）
     var dead = {};
-    tombstones.forEach(function (t) { if (t && t.id) dead[t.id] = true; });
-    return (list || []).filter(function (r) { return !dead[r.id]; });
+    tombstones.forEach(function (t) { if (t && t.id && t.type !== "clear-all") dead[t.id] = true; });
+    return arr.filter(function (r) { return !dead[r.id]; });
   }
 
   /** CSV 序列化（与现网一致，含 BOM 由导出时添加）；出库记录列表含「状态」列，入库列表无 */
@@ -195,9 +256,11 @@
     create: create,
     update: update,
     remove: remove,
+    restore: restore,
     clear: clear,
     mergeAndSort: mergeAndSort,
     applyTombstones: applyTombstones,
+    getLastConflicts: function () { return _lastMergeConflicts; },
     getStatus: getStatus,
     toCsv: toCsv,
     exportCsv: exportCsv,

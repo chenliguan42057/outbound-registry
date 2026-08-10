@@ -236,6 +236,18 @@ input:focus, textarea:focus, select:focus, .search:focus {
 
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
 
+/* ---------- 批量操作条（勾选后出现） ---------- */
+.bulk-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 10px 0 2px; padding: 8px 12px;
+  background: #EFF4FF; border: 1px solid #B2CCFF; border-radius: 10px;
+}
+.bulk-count { font-size: 13px; font-weight: 600; color: #1D4ED8; margin-right: 4px; }
+/* 勾选列压到最窄：手机横向空间本来就紧张，多一列不能再挤掉正文 */
+.table th.check-col, .table td.check-col { width: 34px; padding-left: 8px; padding-right: 4px; text-align: center; }
+/* 手指点得到：原生 checkbox 在手机上默认 13px，太小容易点空 */
+.rec-check, #recCheckAll { width: 18px; height: 18px; cursor: pointer; }
+
 /* ---------- 表格 ---------- */
 .table-wrap {
   overflow: auto;
@@ -274,6 +286,31 @@ input:focus, textarea:focus, select:focus, .search:focus {
   z-index: 2;
 }
 .table th:last-child { background: #FAFBFF; }
+/* 手机端：压缩列宽减少横滑，操作列（删除/状态）始终钉在右侧并加阴影提示，保证零基础同事在 375px 屏也能点到 */
+@media (max-width: 560px) {
+  .table { min-width: 560px; font-size: 12px; }
+  .table th, .table td { padding: 8px 6px; }
+  .table th:last-child, .table td:last-child {
+    position: sticky; right: 0; background: #fff;
+    box-shadow: -8px 0 10px -8px rgba(60,72,69,0.25); z-index: 5;
+  }
+  .table th:last-child { background: #FAFBFF; }
+  .item-line { font-size: 12px; }
+}
+/* 备忘录提醒横幅（前端兜底，不依赖后台）：钉在顶部、醒目、可关闭 */
+.memo-reminder-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+  background: linear-gradient(135deg, #FFE7D6, #FFD2C2);
+  color: #6B3A1F; border-bottom: 2px solid #E8A87C;
+  padding: 12px 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  font-size: 14px; line-height: 1.6;
+}
+.memo-reminder-banner .mr-title { font-weight: 700; margin-bottom: 4px; }
+.memo-reminder-banner .mr-body { margin-bottom: 6px; }
+.memo-reminder-banner .mr-close {
+  background: #6B3A1F; color: #fff; border: none; border-radius: 8px;
+  padding: 4px 14px; cursor: pointer; font-size: 13px;
+}
 .items-cell { min-width: 200px; max-width: 260px; white-space: normal; }
 .item-line { white-space: nowrap; }
 .item-line.multi-line {
