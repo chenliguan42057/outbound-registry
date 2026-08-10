@@ -55,12 +55,13 @@
     return rec;
   }
 
-  /** 更新记录（保留原字段，强制刷新 _ts，affectsStock 恒为 true）
-      仅当 patch 自带新 items 数组时重打库存快照；status/photoUrls 等非货品更新保留原快照，避免覆盖。 */
+  /** 更新记录：保留原 _ts（创建时间——库存时序推算依赖，不能刷新），
+      改用 updatedAt 跟踪最后编辑时间；affectsStock 恒为 true。
+      仅当 patch 自带新 items 数组时重打库存快照；status/photoUrls 等非货品更新保留原快照。 */
   function update(id, patch) {
     var idx = State.list.findIndex(function (r) { return r.id === id; });
     if (idx < 0) return null;
-    var rec = Object.assign({}, State.list[idx], patch, { _ts: Date.now(), affectsStock: true });
+    var rec = Object.assign({}, State.list[idx], patch, { updatedAt: Date.now(), affectsStock: true });
     State.list[idx] = rec;
     if (patch && Object.prototype.hasOwnProperty.call(patch, "items")) stampStock(rec);
     State.save();

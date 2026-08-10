@@ -34,14 +34,16 @@
   }
 
   /**
-   * 历史记录库存：返回「该笔业务完成时」该货品的库存快照。
-   * - 新记录（item.stock 为数字）→ 直接返回快照，随后续出入库变动而固定不变。
-   * - 旧记录（无快照字段）→ 由 rec._ts 推算：当前实时库存 - 该记录之后记录的净变化。
+   * 历史记录库存：返回「基于当前记录的实时推算值」，不再优先返回 item.stock 死快照。
+   * - 始终按 _ts 推算：getStock(name) - 该记录之后记录的净变化。
+   * - 这样前面/中间的出入库记录被删改后，后面的"当时库存"自动跟着重算，
+   *   不会出现"删了前置单但下游还显示固定快照值"的失真。
+   * - 原始 item.stock 仍保存在记录文件里（弹窗明细单独读取用于历史追溯），
+   *   不再用它作为"当时库存"的快捷返回，避免历史快照覆盖实时推算。
    * - 无 _ts 极端情况 → 退回当前实时库存。
    */
   function getRecordStock(name, rec, item) {
     name = norm(name);
-    if (item && typeof item.stock === "number") return item.stock;
     var t = rec && rec._ts;
     if (t) {
       var netAfter = 0;
