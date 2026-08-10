@@ -35,7 +35,7 @@
         '</div>' +
         '<div class="stock-summary" id="stockSummary"></div>' +
         '<div id="stockTableBox"></div>' +
-        '<div class="hint" style="margin-top:10px">💡 <b>双击表格行</b>可查看该货品完整出入库流水，并支持导出 CSV。</div>' +
+        '<div class="hint" style="margin-top:10px">💡 点行内 <b>📊 流水</b> 按钮，或<b>双击</b>该行，可查看该货品完整出入库流水并导出 CSV。</div>' +
       '</div>' +
       '<div class="card">' +
         '<h2>全部库存排名 <span class="tag">全量</span></h2>' +
@@ -92,16 +92,17 @@
       return;
     }
     var html = '<div class="table-wrap"><table class="table stock-table"><thead><tr>' +
-      '<th>货品名称</th><th>当前库存</th><th>累计入库</th><th>累计出库</th><th>状态</th>' +
+      '<th>货品名称</th><th>当前库存</th><th>累计入库</th><th>累计出库</th><th>状态</th><th></th>' +
       '</tr></thead><tbody>';
     rows.forEach(function (s) {
       var low = s.stock < Config.LOW_STOCK_THRESHOLD;
-      html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击查看出入库流水" style="cursor:pointer">' +
+      html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + Util.esc(s.name) + '</td>' +
         '<td class="stock-num" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
         '<td>' + s.inQty + '</td>' +
         '<td>' + s.outQty + '</td>' +
         '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
+        '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -145,15 +146,16 @@
     }
     var arr = summary.slice().sort(rankCompare);
     var html = '<div class="table-wrap"><table class="table stock-table rank-table"><thead><tr>' +
-      '<th>排名</th><th>货品名称</th><th>当前库存</th><th>状态</th>' +
+      '<th>排名</th><th>货品名称</th><th>当前库存</th><th>状态</th><th></th>' +
       '</tr></thead><tbody>';
     arr.forEach(function (s, i) {
       var low = s.stock < Config.LOW_STOCK_THRESHOLD;
-      html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击查看出入库流水" style="cursor:pointer">' +
+      html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + (i + 1) + '</td>' +
         '<td>' + Util.esc(s.name) + '</td>' +
         '<td class="stock-num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
         '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
+        '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -164,13 +166,19 @@
   function wireHistory() {
     if (!container || container.getAttribute("data-his")) return;
     container.setAttribute("data-his", "1");
-    // 单击「当前库存」单元格 → 弹窗（与双击等价，兼容键盘/触屏）
+    // ① 点「📊 流水」按钮 → 弹窗（手机/电脑通用，主入口）
     container.addEventListener("click", function (e) {
+      var btn = e.target.closest(".flow-btn");
+      if (btn && btn.getAttribute("data-name")) {
+        e.stopPropagation();
+        showHistory(btn.getAttribute("data-name"));
+        return;
+      }
+      // ② 点「当前库存」数字 → 弹窗（兼容旧习惯）
       var el = e.target.closest(".stock-num");
-      if (!el || !el.getAttribute("data-name")) return;
-      showHistory(el.getAttribute("data-name"));
+      if (el && el.getAttribute("data-name")) showHistory(el.getAttribute("data-name"));
     });
-    // 双击整行 → 弹窗（用户主操作路径，提示文案同步强调）
+    // ③ 双击整行 → 弹窗（桌面端快捷操作；触屏无 dblclick，走按钮）
     container.addEventListener("dblclick", function (e) {
       var tr = e.target.closest("tr[data-name]");
       if (!tr) return;
