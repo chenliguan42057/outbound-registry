@@ -75,6 +75,28 @@ jobs:
             echo "::error::Service Worker 缺失或指纹未注入，已中止部署。"
             exit 1
           fi
+
+          # 优化完整性校验（2026-08-10 新增）：防止用户端旧工作区 sync 工具
+          # 回滚 src/ 关键文件后仍"静默部署成功"（曾发生：sync 推送旧 cloud.js 等
+          # 覆盖照片加固/增量拉取优化）。关键优化标记缺失即中止部署 + 告警。
+          if ! grep -q 'pushPhotoWithRetry' src/js/data/cloud.js || \
+             ! grep -q 'slimRecord' src/js/data/cloud.js || \
+             ! grep -q 'fetchTree' src/js/data/cloud.js ; then
+            echo "::error::检测到 cloud.js 被回滚（缺照片加固/增量拉取优化标记），疑似旧工作区 sync 覆盖，已中止部署。"
+            exit 1
+          fi
+          if ! grep -q 'capture="environment"' src/js/ui/components.js ; then
+            echo "::error::检测到 components.js 被回滚（缺拍照直调优化标记），已中止部署。"
+            exit 1
+          fi
+          if ! grep -q 'outbound_last_entity' src/js/views/out.js ; then
+            echo "::error::检测到 out.js 被回滚（缺记住法人单位优化标记），已中止部署。"
+            exit 1
+          fi
+          if ! grep -q 'wireOnlineOffline' src/js/views/app.js || ! grep -q 'sw.js' src/index.html ; then
+            echo "::error::检测到 PWA 离线优化被回滚（缺 wireOnlineOffline / SW 注册），已中止部署。"
+            exit 1
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
