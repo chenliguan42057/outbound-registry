@@ -357,12 +357,14 @@
     if (!el) return;
     var mp = monthPrefix();
     var stat = {};
+    var nmap = Config.NAME_MAP || {};
     (State.list || []).forEach(function (r) {
       if (String(r.time || "").slice(0, 7) !== mp) return;
       (r.items || []).forEach(function (it) {
         var q = Number(it.qty) || 0;
-        if (!stat[it.name]) stat[it.name] = 0;
-        stat[it.name] += q;
+        var key = nmap[it.name] || it.name;
+        if (!stat[key]) stat[key] = 0;
+        stat[key] += q;
       });
     });
     var arr = Object.keys(stat).map(function (k) { return { name: k, qty: stat[k] }; })

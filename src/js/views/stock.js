@@ -214,8 +214,12 @@
     });
   }
   function showHistory(name) {
+    var nm = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[name]) || name;
     var rows = (State.list || []).filter(function (r) {
-      return (r.items || []).some(function (it) { return it.name === name; });
+      return (r.items || []).some(function (it) {
+        var n = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[it.name]) || it.name;
+        return n === nm;
+      });
     });
     if (!rows.length) { Util.toast("该货品暂无出入记录", true); return; }
     var html = '<div class="table-wrap" style="max-height:50vh;overflow:auto">' +
@@ -224,7 +228,10 @@
       '</tr></thead><tbody>' +
       rows.map(function (r) {
         var it = null;
-        for (var x = 0; x < (r.items || []).length; x++) { if (r.items[x].name === name) { it = r.items[x]; break; } }
+        for (var x = 0; x < (r.items || []).length; x++) {
+          var n = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[r.items[x].name]) || r.items[x].name;
+          if (n === nm) { it = r.items[x]; break; }
+        }
         var isIn = (r.type || "out") === "in";
         var stock = (it && typeof it.stock === "number") ? it.stock : "-";
         return '<tr>' +

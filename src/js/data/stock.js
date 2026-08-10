@@ -9,14 +9,23 @@
   var Config = window.App.Config;
   var State = window.App.State;
 
+  /** 名称归一化：旧名（历史记录）折算到新名；已是新名则原样返回。
+      2026-08-10 商品改名后，data/records 里历史 items.name 仍是旧名，
+      而 INVENTORY/PRODUCTS 已用新名——库存计算必须统一口径，否则历史出入库不计入。 */
+  function norm(name) {
+    var m = Config.NAME_MAP || {};
+    return m[name] || name;
+  }
+
   /** 单货品当前库存 */
   function getStock(name, list) {
+    name = norm(name);
     var init = Config.INVENTORY[name] || 0;
     var inQty = 0, outQty = 0;
     (list || State.list).forEach(function (r) {
       if (r.affectsStock !== true) return; // 旧记录已包含在 INVENTORY 快照里，不再重复计算
       (r.items || []).forEach(function (it) {
-        if (it.name !== name) return;
+        if (norm(it.name) !== name) return;
         var q = Number(it.qty) || 0;
         if (r.type === "in") inQty += q; else outQty += q;
       });
@@ -31,6 +40,7 @@
    * - 无 _ts 极端情况 → 退回当前实时库存。
    */
   function getRecordStock(name, rec, item) {
+    name = norm(name);
     if (item && typeof item.stock === "number") return item.stock;
     var t = rec && rec._ts;
     if (t) {
@@ -40,7 +50,7 @@
         if (r.affectsStock !== true) return;        // 只统计参与库存的记录
         if ((r._ts || 0) <= t) return;              // 只统计该记录之后（_ts 更大）的记录
         (r.items || []).forEach(function (it) {
-          if (!it || it.name !== name) return;
+          if (!it || norm(it.name) !== name) return;
           var q = Number(it.qty) || 0;
           netAfter += (r.type === "in" ? q : -q);   // 之后入库 +，出库 -
         });
@@ -57,7 +67,7 @@
       (list || State.list).forEach(function (r) {
         if (r.affectsStock !== true) return;
         (r.items || []).forEach(function (it) {
-          if (it.name !== name) return;
+          if (norm(it.name) !== name) return;
           var q = Number(it.qty) || 0;
           if (r.type === "in") inQty += q; else outQty += q;
         });
