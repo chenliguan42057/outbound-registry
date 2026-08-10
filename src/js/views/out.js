@@ -25,17 +25,8 @@
   var selectedPurpose = "";
   /** 结算法人单位默认值：预设第一项「深圳细胞法人」，仅手动点击赛迪斯或自定义后才切换 */
   var DEFAULT_ENTITY = (Config.ENTITY_PRESETS && Config.ENTITY_PRESETS[0]) || "";
-  /** 记住上次使用的结算法人单位（体验优化 4c，2026-08-10） */
-  var LAST_ENTITY_KEY = "outbound_last_entity";
-  function loadLastEntity() {
-    try {
-      var v = localStorage.getItem(LAST_ENTITY_KEY);
-      if (v && (Config.ENTITY_PRESETS || []).indexOf(v) !== -1) return v;  // 仅恢复预设值，防脏数据
-    } catch (e) {}
-    return DEFAULT_ENTITY;
-  }
   /** 当前选中的结算法人单位值（chip 单选，互斥高亮；必填，默认深圳细胞法人） */
-  var selectedEntity = loadLastEntity();
+  var selectedEntity = DEFAULT_ENTITY;
 
   function render(container) {
     container.innerHTML =
@@ -501,7 +492,6 @@
     }
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
-    try { localStorage.setItem(LAST_ENTITY_KEY, entity); } catch (e) {}   // 记住本次法人单位
     resetForm();
     // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
     // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。
@@ -521,25 +511,18 @@
 
   /** 照片上传云端（可选）：将 photos 上传到 data/photos/ 并把 photoUrls 写回本地记录；不推送记录本身。
       返回更新后的记录（含 photoUrls），无照片或失败时返回原记录。
-      失败照片不静默：toast 明确提示 + 入本机补传队列（云同步页可补传），dataURL 保留不丢。
       由 submitPush 先 await 此函数再调 pushToCloud，确保首推已含 photoUrls。 */
   async function pushPhotosToCloud(rec) {
     if (!Cloud.hasToken() || !rec) return rec;
     var photos = (rec.photos || []);
     if (!photos.length) return rec;
-    if (Cloud.getRate && Cloud.getRate().low) {
-      Util.toast("⚠️ API 配额紧张，照片可能上传较慢或失败；失败可到「云同步」页补传", true);
-    }
-    var r = await Cloud.pushPhotosDetailed(rec);
-    if (r.urls && r.urls.length) {
-      var updated = Records.update(rec.id, { photoUrls: r.urls });
-      rec = updated || rec;
-    }
-    if (r.failedIndexes && r.failedIndexes.length) {
-      Cloud.markPhotoPending(rec.id, r.failedIndexes);
-      var names = r.failedIndexes.map(function (i) { return "第 " + (i + 1) + " 张"; }).join("、");
-      Util.toast("⚠️ 照片 " + names + " 上传失败（弱网/配额），已存本机，可到「云同步」页补传", true);
-    }
+    try {
+      var urls = await Cloud.pushPhotos(rec);
+      if (urls && urls.length) {
+        var updated = Records.update(rec.id, { photoUrls: urls });
+        return updated || rec;
+      }
+    } catch (e) {}
     return rec;
   }
 
