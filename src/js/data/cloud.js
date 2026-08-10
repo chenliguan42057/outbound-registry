@@ -91,98 +91,7 @@
     };
   }
 
-  /* ================= Git Trees 增量拉取（同步性能优化） =================
-     现状：syncPull 对 records/deleted/pickups/memos 各做 1 次目录列举 + 每文件 1 次读取
-     （N+1，约 49 次/轮），多设备共享 GitHub 5000/h 配额。
-     优化：用 Git Trees API 一次拿全量 {path: sha}（1 次请求），与本地缓存对比，
-     只拉 sha 变化/新增的文件（每轮约 1-4 次）；缓存存 localStorage。
-     fetchTree 失败/无缓存 → 降级回退现有全量逻辑，绝不破坏同步。 */
-
-  var TREE_CACHE_KEY = "outbound_tree_cache";
-
-  function loadTreeCache() {
-    try { return JSON.parse(localStorage.getItem(TREE_CACHE_KEY) || "null"); } catch (e) { return null; }
-  }
-  function saveTreeCache(cache) {
-    try { localStorage.setItem(TREE_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
-  }
-
-  /** Git Trees API：一次拿全量 path→sha（blob）。失败抛错由调用方降级。 */
-  async function fetchTree() {
-    var url = "https://api.github.com/repos/" + Config.GH.repo + "/git/trees/" + Config.GH.branch + "?recursive=1";
-    var j = await apiJson(url);
-    if (!j || !Array.isArray(j.tree)) throw new Error("tree empty");
-    var map = {};
-    (j.tree || []).forEach(function (t) {
-      if (t.type === "blob" && t.path) map[t.path] = t.sha;
-    });
-    return map;
-  }
-
-  /**
-   * 增量拉取某目录下全部 .json：先 fetchTree 拿全量 path+sha，对比缓存只拉变更文件。
-   * @param {string} dir 目录前缀，如 "data/records"
-   * @param {Object|null} tree 外部传入的 tree（syncPull 一次拉取复用）；null 时内部获取
-   * @returns {Promise<{recs: Array, fallback: boolean}>} fallback=true 表示走了全量兜底
-   */
-  async function pullDir(dir, tree) {
-    var gotTree = tree;
-    if (!gotTree) {
-      try { gotTree = await fetchTree(); } catch (e) { gotTree = null; }
-    }
-    var cache = loadTreeCache();
-    var prev = (cache && cache.tree) || {};
-    var prefix = dir + "/";
-
-    // 该目录下云端全部 .json 文件 {path: sha}
-    var cloudFiles = {};
-    Object.keys(gotTree || {}).forEach(function (p) {
-      if (p.indexOf(prefix) === 0 && p.slice(-5) === ".json") cloudFiles[p] = gotTree[p];
-    });
-
-    // 对比缓存：找出 sha 变化/新增的文件
-    var changed = [];
-    Object.keys(cloudFiles).forEach(function (p) {
-      if (prev[p] !== cloudFiles[p]) changed.push(p);
-    });
-
-    var recs = [];
-    // 无 tree（首次/失败）→ 全量拉取该目录（回退现有逻辑）
-    if (!gotTree) {
-      var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + dir + "?ref=" + Config.GH.branch;
-      var arr;
-      try { arr = await apiJson(url); }
-      catch (e) { if (String(e.message).indexOf("404") === 0) return { recs: [], fallback: true }; throw e; }
-      if (Array.isArray(arr)) {
-        var files = arr.filter(function (f) { return f.name.endsWith(".json") && f.size < 5 * 1024 * 1024; });
-        for (var i = 0; i < files.length; i++) {
-          try {
-            var j = await apiJson(files[i].url);
-            recs.push(JSON.parse(Util.b64dec(j.content)));
-          } catch (e) {}
-        }
-      }
-      // 全量后更新缓存（把拿到的文件 sha 写入，下次就能增量）
-      if (gotTree) {
-        var nc = { tree: Object.assign({}, prev, gotTree), ts: Date.now() };
-        saveTreeCache(nc);
-      }
-      return { recs: recs, fallback: true };
-    }
-
-    // 增量：只拉变更文件（并发 3 个，避免触发次级限流）
-    for (var i = 0; i < changed.length; i++) {
-      try {
-        var j = await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + changed[i] + "?ref=" + Config.GH.branch);
-        recs.push(JSON.parse(Util.b64dec(j.content)));
-      } catch (e) { /* 单条失败跳过 */ }
-    }
-    // 更新缓存：合并新 tree
-    saveTreeCache({ tree: Object.assign({}, prev, gotTree), ts: Date.now() });
-    return { recs: recs, fallback: false, changedCount: changed.length };
-  }
-
-  /** 拉取云端全部记录（目录 404 视为空）——保留原函数供降级/兼容调用 */
+  /** 拉取云端全部记录（目录 404 视为空） */
   async function pull() {
     var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.GH.dir + "?ref=" + Config.GH.branch;
     var arr;
@@ -200,28 +109,16 @@
     return recs;
   }
 
-  /** 推送前剥离 photos base64（只留 photoUrls CDN 链接）：
-      本地仍保留 photos 供编辑回填/补传，但云端记录不携带大段 base64，
-      记录文件从 100-300KB 瘦到 <20KB，同步/拉取更快。
-      剥离为纯副本，不修改调用方持有的原对象。 */
-  function slimRecord(rec) {
-    if (!rec) return rec;
-    if (!Array.isArray(rec.photos) || !rec.photos.length) return rec;
-    var slim = Object.assign({}, rec, { photos: [] });
-    return slim;
-  }
-
-  /** 推送单条记录（存在则更新，不存在则新增）；云端仅存 photoUrls，剥离 photos base64 */
+  /** 推送单条记录（存在则更新，不存在则新增） */
   async function push(rec) {
-    var slim = slimRecord(rec);
-    var path = Config.GH.dir + "/" + slim.id + ".json";
-    var content = Util.b64enc(JSON.stringify(slim));
+    var path = Config.GH.dir + "/" + rec.id + ".json";
+    var content = Util.b64enc(JSON.stringify(rec));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
     var body = sha
-      ? { message: "update " + slim.id, content: content, sha: sha, branch: Config.GH.branch }
-      : { message: "add " + slim.id, content: content, branch: Config.GH.branch };
+      ? { message: "update " + rec.id, content: content, sha: sha, branch: Config.GH.branch }
+      : { message: "add " + rec.id, content: content, branch: Config.GH.branch };
     await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
       method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
     });
@@ -261,9 +158,8 @@
 
   /** 推送单条待取货（存在则更新，不存在则新增） */
   async function pushPickup(rec) {
-    var slim = slimRecord(rec);
-    var path = "data/pickups/" + slim.id + ".json";
-    var content = Util.b64enc(JSON.stringify(slim));
+    var path = "data/pickups/" + rec.id + ".json";
+    var content = Util.b64enc(JSON.stringify(rec));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
@@ -320,9 +216,8 @@
 
   /** 推送单条备忘录（存在则更新，不存在则新增） */
   async function pushMemo(rec) {
-    var slim = slimRecord(rec);
-    var path = "data/memos/" + slim.id + ".json";
-    var content = Util.b64enc(JSON.stringify(slim));
+    var path = "data/memos/" + rec.id + ".json";
+    var content = Util.b64enc(JSON.stringify(rec));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
@@ -439,25 +334,6 @@
     return toms;
   }
 
-  /** 照片上传云端（带重试）：data/photos/<id>-<index>.jpg；返回公网 URL（jsdelivr CDN）。
-      与 pushWithRetry 同模式：最多 attempts 次指数退避（800ms/1600ms），
-      401/403 令牌失效立即放弃（避免白等配额/权限问题）。 */
-  async function pushPhotoWithRetry(id, index, dataUrl, attempts) {
-    attempts = attempts || 3;
-    var lastErr = null;
-    for (var i = 0; i < attempts; i++) {
-      try {
-        return await pushPhoto(id, index, dataUrl);
-      } catch (e) {
-        lastErr = e;
-        var msg = String((e && e.message) || "");
-        if (/^401 |^403 /.test(msg)) break;           // 令牌失效/配额：不再重试
-        if (i < attempts - 1) await new Promise(function (r) { setTimeout(r, 800 * Math.pow(2, i)); });
-      }
-    }
-    throw lastErr || new Error("photo upload failed");
-  }
-
   /** 照片上传云端：data/photos/<id>-<index>.jpg；返回公网 URL（jsdelivr CDN） */
   async function pushPhoto(id, index, dataUrl) {
     var m = /^data:image\/[^;]+;base64,(.+)$/.exec(String(dataUrl || ""));
@@ -475,85 +351,18 @@
     return "https://cdn.jsdelivr.net/gh/" + Config.GH.repo + "@" + Config.GH.branch + "/" + path;
   }
 
-  /* ================= 照片上传失败追踪 =================
-     照片是业务凭证，绝不能静默丢失。失败时把 {id, failedIndexes} 记入本机队列，
-     云同步页可一键补传；dataURL 始终保留在记录 photos 字段（不丢原始数据）。 */
-
-  var PHOTO_PENDING_KEY = "outbound_photo_pending";
-
-  function loadPhotoPending() {
-    try { return JSON.parse(localStorage.getItem(PHOTO_PENDING_KEY) || "[]"); } catch (e) { return []; }
-  }
-  function savePhotoPending(arr) {
-    try { localStorage.setItem(PHOTO_PENDING_KEY, JSON.stringify(arr)); } catch (e) {}
-  }
-  /** 记录照片失败项（合并同 id 的 failedIndexes） */
-  function markPhotoPending(id, failedIndexes) {
-    if (!id || !failedIndexes || !failedIndexes.length) return;
-    var q = loadPhotoPending();
-    var hit = q.filter(function (x) { return x.id === id; })[0];
-    if (!hit) { q.push({ id: id, failedIndexes: failedIndexes.slice() }); }
-    else {
-      hit.failedIndexes = Array.from(new Set(hit.failedIndexes.concat(failedIndexes))).sort(function (a, b) { return a - b; });
-    }
-    savePhotoPending(q);
-  }
-  /** 清除某记录的照片失败项 */
-  function clearPhotoPending(id) {
-    savePhotoPending(loadPhotoPending().filter(function (x) { return x.id !== id; }));
-  }
-
-  /** 批量上传记录照片（带重试，不再静默吞错）。
-      返回 { urls, failedIndexes }；failedIndexes 为失败的照片下标（从 0 计），
-      调用方据此 toast 提示并调用 markPhotoPending 入补传队列。
-      limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖）。 */
-  async function pushPhotosDetailed(rec, limit) {
-    var urls = [], failed = [];
+  /** 批量上传记录照片，返回 photoUrls 数组（失败跳过）；limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖） */
+  async function pushPhotos(rec, limit) {
+    var urls = [];
     var photos = (rec && rec.photos) || [];
     var slice = limit ? photos.slice(0, limit) : photos;
     for (var i = 0; i < slice.length; i++) {
       try {
-        var u = await pushPhotoWithRetry(rec.id, i + 1, slice[i]);
-        if (u) urls.push(u); else failed.push(i);
-      } catch (e) {
-        failed.push(i);
-      }
+        var u = await pushPhoto(rec.id, i + 1, slice[i]);
+        if (u) urls.push(u);
+      } catch (e) {}
     }
-    return { urls: urls, failedIndexes: failed };
-  }
-
-  /** 批量上传记录照片，返回 photoUrls 数组（兼容旧调用方；失败项自动入补传队列）。
-      limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖） */
-  async function pushPhotos(rec, limit) {
-    var r = await pushPhotosDetailed(rec, limit);
-    if (r.failedIndexes.length) markPhotoPending(rec.id, r.failedIndexes);
-    return r.urls;
-  }
-
-  /** 补传某条记录的全部缺失照片：对比 photos 与 photoUrls，只传未传成功的。
-      返回 { ok, fail }。成功全部后清补传队列项。 */
-  async function retryPhotosFor(rec) {
-    if (!rec || !Array.isArray(rec.photos) || !rec.photos.length) return { ok: 0, fail: 0 };
-    var have = (rec.photoUrls || []).length;      // 已成功的照片数（索引 0..have-1）
-    var missing = [];
-    for (var i = have; i < rec.photos.length; i++) missing.push(i);
-    if (!missing.length) { clearPhotoPending(rec.id); return { ok: 0, fail: 0 }; }
-    var urls = rec.photoUrls ? rec.photoUrls.slice() : [];
-    var failed = [];
-    for (var i = 0; i < missing.length; i++) {
-      var idx = missing[i];
-      try {
-        var u = await pushPhotoWithRetry(rec.id, idx + 1, rec.photos[idx]);
-        if (u) urls.push(u); else failed.push(idx);
-      } catch (e) { failed.push(idx); }
-    }
-    if (!failed.length && window.App.Records) {
-      var updated = window.App.Records.update(rec.id, { photoUrls: urls });
-      clearPhotoPending(rec.id);
-      return { ok: urls.length - have, fail: 0, updated: updated || rec };
-    }
-    markPhotoPending(rec.id, failed);
-    return { ok: urls.length - have, fail: failed.length, updated: rec };
+    return urls;
   }
 
   /** 逐条推送本地全部记录 */
@@ -777,18 +586,14 @@
     var onStatus = opts.onStatus || function () {};
     onStatus("同步中…", false);
     try {
-      // Git Trees 增量拉取：1 次 tree + 仅变更文件，替代 4 目录 N+1 全量
-      var tree = null;
-      try { tree = await fetchTree(); } catch (e) { tree = null; }
-      var r1 = await pullDir("data/records", tree);
-      var recs = r1.recs;
+      var recs = await pull();
       // 待取货同步：拉取失败（非 404 网络异常）不影响 records 同步，单独降级为空
       var pks = [];
-      try { pks = (await pullDir("data/pickups", tree)).recs; } catch (e) { pks = []; }
+      try { pks = await pullPickups(); } catch (e) { pks = []; }
       // 备忘录同步：与待取货一致，失败降级为空，不影响 records
       var mms = [];
-      try { mms = (await pullDir("data/memos", tree)).recs; } catch (e) { mms = []; }
-      var toms = (await pullDir("data/deleted", tree)).recs;
+      try { mms = await pullMemos(); } catch (e) { mms = []; }
+      var toms = await pullTombstones();
       var merged = window.App.Records.mergeAndSort(window.App.State.list, recs);
       // 应用墓碑：删除本地已标记删除的记录
       if (toms && toms.length) {
@@ -830,19 +635,12 @@
     waitWpsReceipt: waitWpsReceipt,
     describeWpsReceipt: describeWpsReceipt,
     syncPull: syncPull,
-    fetchTree: fetchTree,
-    pullDir: pullDir,
     pushTombstone: pushTombstone,
     delWithTombstone: delWithTombstone,
     clearAllWithReason: clearAllWithReason,
     pullTombstones: pullTombstones,
     pushPhoto: pushPhoto,
-    pushPhotoWithRetry: pushPhotoWithRetry,
     pushPhotos: pushPhotos,
-    pushPhotosDetailed: pushPhotosDetailed,
-    retryPhotosFor: retryPhotosFor,
-    loadPhotoPending: loadPhotoPending,
-    clearPhotoPending: clearPhotoPending,
     pullPickups: pullPickups,
     pushPickup: pushPickup,
     delPickup: delPickup,
