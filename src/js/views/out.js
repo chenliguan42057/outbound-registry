@@ -91,11 +91,11 @@
           '<div id="outProductPicker" role="group" aria-labelledby="outProductLabel"></div>' +
         '</div>' +
         '<div class="field">' +
-          '<label for="outNote">备注</label>' +
+          '<label for="outNote">备注（<small style="color:var(--ink-500);font-weight:400;">如有特殊情况请备注，如暂借、先借后还等</small>）</label>' +
           '<textarea id="outNote" rows="2" maxlength="500" placeholder="如有任何补充说明…" autocomplete="off" enterkeyhint="enter"></textarea>' +
         '</div>' +
         '<div class="field">' +
-          '<label>现场照片（留存）</label>' +
+          '<label>现场照片（选填）</label>' +
           '<div id="outPhotoUpload"></div>' +
         '</div>' +
         '<div class="actions">' +
@@ -357,13 +357,31 @@
     saveDraft();
   }
 
-  /** 历史补全（部门 / 领取人），与现网一致 */
+  /** 历史补全（部门 / 领取人）
+   *  2026-08-11 升级：合并「本地提交历史(lcoalStorage)」+「仓库所有登记记录中的字段全集(State.list)」
+   *  全用户共享，新设备/清缓存后 也能看到全公司以往填过的 dept/picker。去重、本地优先。*/
   function setupHistorySuggest(inputId, suggestId, historyKey) {
     var inp = Util.$(inputId), sug = Util.$(suggestId);
+    var field = historyKey === Config.PICKER_HISTORY_KEY ? "picker" : "dept";
+    function getEffectiveHistory() {
+      var local = Store.getHistory(historyKey) || [];
+      var global = (State.list || [])
+        .filter(function (r) { return r && typeof r[field] === "string" && r[field].trim(); })
+        .map(function (r) { return r[field].trim(); });
+      var seen = new Set();
+      var merged = [];
+      local.concat(global).forEach(function (v) {
+        if (typeof v === "string" && v.trim() && !seen.has(v)) {
+          seen.add(v);
+          merged.push(v);
+        }
+      });
+      return merged;
+    }
     function render() {
       var q = inp.value.trim().toLowerCase();
       if (!q) { sug.style.display = "none"; return; }
-      var matches = Store.getHistory(historyKey).filter(function (v) { return v.toLowerCase().includes(q); });
+      var matches = getEffectiveHistory().filter(function (v) { return v.toLowerCase().includes(q); });
       if (!matches.length) { sug.style.display = "none"; return; }
       sug.innerHTML = "";
       matches.slice(0, 30).forEach(function (v) {
