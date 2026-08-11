@@ -129,6 +129,15 @@
       检测到双方都改过（时间戳不同）会记入 _lastMergeConflicts，供同步状态提示。
       排序 = time 降序，次 _ts 降序（与现网一致） */
   var _lastMergeConflicts = [];
+  /** 合并两条记录的 photoUrls：跨设备各加图时取并集、按 url 去重，避免先传的永久丢 */
+  function mergePhotoUrls(a, b) {
+    var out = [];
+    ((a || []).concat(b || [])).forEach(function (u) {
+      if (u && out.indexOf(u) === -1) out.push(u);
+    });
+    return out;
+  }
+
   function mergeAndSort(local, remote) {
     _lastMergeConflicts = [];
     var map = new Map();
@@ -137,18 +146,21 @@
       var prev = map.get(r.id);
       if (!prev) { map.set(r.id, r); return; }
       var win = newerOf(prev, r);
+      // 跨设备各加图：photoUrls 取并集并按 url 去重，先传的不被覆盖丢失
+      var mergedUrls = mergePhotoUrls(prev.photoUrls, r.photoUrls);
       if (win === prev) {
-        // 本地较新：保留本地，不反向被云端旧版覆盖（杜绝静默吞改）
+        // 本地较新：保留本地，不反向被云端旧版覆盖（杜绝静默吞改）；合并 photoUrls
+        map.set(r.id, Object.assign({}, prev, { photoUrls: mergedUrls }));
         if (Number(prev.updatedAt || prev._ts) !== Number(r.updatedAt || r._ts)) {
           _lastMergeConflicts.push({ id: r.id, kept: "local" });
         }
         return;
       }
-      // 云端较新：用云端，但保留本地 photos（云端瘦身后不应反向抹掉原始凭证）
+      // 云端较新：用云端，但保留本地 photos（云端瘦身后不应反向抹掉原始凭证），合并 photoUrls
       if (prev.photos && prev.photos.length && !(r.photos && r.photos.length) && (r.photoUrls && r.photoUrls.length)) {
-        map.set(r.id, Object.assign({}, r, { photos: prev.photos }));
+        map.set(r.id, Object.assign({}, r, { photos: prev.photos, photoUrls: mergedUrls }));
       } else {
-        map.set(r.id, r);
+        map.set(r.id, Object.assign({}, r, { photoUrls: mergedUrls }));
       }
       if (Number(prev.updatedAt || prev._ts) !== Number(r.updatedAt || r._ts)) {
         _lastMergeConflicts.push({ id: r.id, kept: "cloud" });
