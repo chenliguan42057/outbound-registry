@@ -94,20 +94,6 @@ def goods_lines_of(data):
     )
 
 
-def goods_summary_line(data):
-    """货品明细合计行：共 N 种 / M 件；无货品返回空串（由 _layout_record 直接拼接在明细后）。"""
-    items = [it for it in (data.get("items") or []) if it.get("name")]
-    if not items:
-        return ""
-    total_qty = 0
-    for it in items:
-        try:
-            total_qty += int(it.get("qty") or 0)
-        except (ValueError, TypeError):
-            pass
-    return "\n- 📊 **合计**：共 {} 种 / {} 件".format(len(items), total_qty)
-
-
 # 低库存阈值（与前端 Config.LOW_STOCK_THRESHOLD 一致）
 LOW_STOCK_THRESHOLD = 95
 
@@ -186,7 +172,7 @@ def _layout_record(title, fields, data, status_label=None):
         md += "\n" + photos
     if fields:
         md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
-    md += "\n\n**货品明细**：\n" + goods_lines_of(data) + goods_summary_line(data)
+    md += "\n\n**货品明细**：\n" + goods_lines_of(data)
     note = str((data or {}).get("note") or "").strip()
     if note:
         md += "\n- **备注**：{}".format(note)
@@ -295,7 +281,7 @@ def build_pickup_new_markdown(data):
     ]
     md = "### 📦 出入库登记 · 新待取货登记"
     md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
-    md += "\n\n**货品明细**：\n" + goods_lines_of(data) + goods_summary_line(data)
+    md += "\n\n**货品明细**：\n" + goods_lines_of(data)
     note = str((data.get("note") or "")).strip()
     if note:
         md += "\n- **备注**：{}".format(note)
