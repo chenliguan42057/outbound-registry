@@ -10,13 +10,17 @@
 <meta name="theme-color" content="#6FA08A" />
 <meta name="color-scheme" content="light dark" />
 <meta name="build-ver" content="__CACHE_BUST__" />
-<link rel="stylesheet" href="css/base.css?v=__CACHE_BUST__" />
-<link rel="stylesheet" href="css/layout.css?v=__CACHE_BUST__" />
-<link rel="stylesheet" href="css/views.css?v=__CACHE_BUST__" />
-<link rel="stylesheet" href="css/ai.css?v=__CACHE_BUST__" />
-<link rel="stylesheet" href="css/fresh-mint-theme.css?v=__CACHE_BUST__" />
-<link rel="stylesheet" href="css/ux.css?v=__CACHE_BUST__" />
-<link rel="stylesheet" href="css/patch.css?v=__CACHE_BUST__" />
+<meta name="description" content="进销存管理系统 — 出库/入库/借用/领用登记与看板，支持 AI 助手、库存核对、云端同步" />
+<meta property="og:title" content="进销存管理系统" />
+<meta property="og:description" content="出库/入库/借用/领用登记与看板，AI 助手辅助库存核对" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://chenliguan42057.github.io/outbound-registry/" />
+<meta property="og:image" content="https://chenliguan42057.github.io/outbound-registry/icon-512.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="进销存管理系统" />
+<meta name="twitter:description" content="出库/入库/借用/领用登记与看板" />
+<link rel="stylesheet" href="css/core.css?v=__CACHE_BUST__" />
+<link rel="stylesheet" href="css/theme.css?v=__CACHE_BUST__" />
 <script>
   /* 应急回退：?legacy=1 直接跳转冻结的旧版单页 legacy.html */
   (function () {
@@ -35,9 +39,13 @@
       : "";
     if (!cur || cur.indexOf("__") !== -1 || !/^[0-9a-f]{8}$/.test(cur)) return;
     var done = false;
+    var lastCheck = 0;
     function check() {
       if (done) return;
-      fetch("version.txt?_=" + Date.now(), { cache: "no-store" })
+      var now = Date.now();
+      if (now - lastCheck < 300000) return;
+      lastCheck = now;
+      fetch("version.txt?_=" + now, { cache: "no-store" })
         .then(function (r) { return r.ok ? r.text() : ""; })
         .then(function (txt) {
           var ver = String(txt || "").trim();
@@ -149,8 +157,32 @@
 </head>
 <body>
   <!-- 双页容器：落地页（免密出库表单）/ 管理页（Windows 桌面壳） -->
-  <div id="view-landing" class="view-page"></div>
-  <div id="view-app" class="view-page" style="display:none"></div>
+  <div id="view-landing" class="view-page">
+    <div class="landing-skeleton" style="min-height:100vh;background:var(--bg, linear-gradient(160deg,#EEF2FF,#FDF2F8,#F0FDF4));display:flex;flex-direction:column;align-items:center;padding:80px 20px;gap:24px;animation:sk-fade .5s ease-out;">
+      <div style="width:160px;height:22px;border-radius:999px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+      <div style="width:100%;max-width:760px;height:320px;border-radius:24px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+      <div style="width:100%;max-width:760px;height:160px;border-radius:24px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+    </div>
+    <style>
+      @keyframes sk-fade { from { opacity:0 } to { opacity:1 } }
+      @keyframes sk-shimmer { to { background-position:-200% 0 } }
+    </style>
+  </div>
+  <div id="view-app" class="view-page" style="display:none">
+    <div class="app-skeleton" style="height:100vh;display:flex;flex-direction:column;background:var(--bg, linear-gradient(160deg,#EEF2FF,#FDF2F8,#F0FDF4));">
+      <div style="height:50px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+      <div style="flex:1;display:flex;">
+        <div style="width:232px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+        <div style="flex:1;padding:20px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;">
+          <div style="width:calc(25% - 11px);min-width:160px;height:100px;border-radius:12px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+          <div style="width:calc(25% - 11px);min-width:160px;height:100px;border-radius:12px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+          <div style="width:calc(25% - 11px);min-width:160px;height:100px;border-radius:12px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+          <div style="width:calc(25% - 11px);min-width:160px;height:100px;border-radius:12px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+          <div style="width:100%;height:300px;border-radius:12px;background:linear-gradient(90deg,var(--mint-100,#EAF4EF) 25%,var(--mint-200,#D9EADF) 50%,var(--mint-100,#EAF4EF) 75%);background-size:200% 100%;animation:sk-shimmer 1.4s infinite;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- 弹窗与提示容器 -->
   <div id="modal-root"></div>
@@ -166,47 +198,47 @@
   </script>
 
   <!-- 经典 <script> 顺序加载（不用 ES Module，保证 file:// 调试与加载顺序） -->
-  <script src="qrcode.js?v=__CACHE_BUST__"></script>
+  <script defer src="qrcode.js?v=__CACHE_BUST__"></script>
   <!-- 商品映射「单一真相源」：前后端共用，须在 config.js 之前加载 -->
-  <script src="js/data/product-map.js?v=__CACHE_BUST__"></script>
-  <script src="js/core/config.js?v=__CACHE_BUST__"></script>
-  <script src="js/core/util.js?v=__CACHE_BUST__"></script>
-  <script src="js/core/store.js?v=__CACHE_BUST__"></script>
-  <script src="js/data/stock.js?v=__CACHE_BUST__"></script>
-  <script src="js/data/cloud.js?v=__CACHE_BUST__"></script>
-  <script src="js/data/catalog.js?v=__CACHE_BUST__"></script>
-  <script src="js/data/audit.js?v=__CACHE_BUST__"></script>
-  <script src="js/data/records.js?v=__CACHE_BUST__"></script>
-  <script src="js/data/pickups.js?v=__CACHE_BUST__"></script>
-  <script src="js/data/memos.js?v=__CACHE_BUST__"></script>
-  <script src="js/auth/auth.js?v=__CACHE_BUST__"></script>
-  <script src="js/router/router.js?v=__CACHE_BUST__"></script>
-  <script src="js/ui/components.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/landing.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/app.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/dashboard.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/out.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/in.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/stock.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/records.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/remind.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/pickups.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/memos.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/borrow.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/trash.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/report.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/sync.js?v=__CACHE_BUST__"></script>
-  <script src="js/ai/knowledge.js?v=__CACHE_BUST__"></script>
-  <script src="js/ai/tools.js?v=__CACHE_BUST__"></script>
-  <script src="js/ai/check.js?v=__CACHE_BUST__"></script>
-  <script src="js/ai/engine.js?v=__CACHE_BUST__"></script>
-  <script src="js/ai/llm.js?v=__CACHE_BUST__"></script>
-  <script src="js/ai/web.js?v=__CACHE_BUST__"></script>
-  <script src="js/ai/chat.js?v=__CACHE_BUST__"></script>
-  <script src="js/views/ai.js?v=__CACHE_BUST__"></script>
-  <script src="js/main.js?v=__CACHE_BUST__"></script>
-  <script src="js/ui/shortcuts.js?v=__CACHE_BUST__"></script>
-  <script src="js/ui/ux.js?v=__CACHE_BUST__"></script>
-  <script src="js/ui/dingtalk.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/data/product-map.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/core/config.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/core/util.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/core/store.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/data/stock.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/data/cloud.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/data/catalog.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/data/audit.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/data/records.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/data/pickups.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/data/memos.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/auth/auth.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/router/router.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ui/components.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/landing.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/app.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/dashboard.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/out.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/in.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/stock.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/records.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/remind.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/pickups.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/memos.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/borrow.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/trash.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/report.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/sync.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ai/knowledge.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ai/tools.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ai/check.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ai/engine.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ai/llm.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ai/web.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ai/chat.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/views/ai.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/main.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ui/shortcuts.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ui/ux.js?v=__CACHE_BUST__"></script>
+  <script defer src="js/ui/dingtalk.js?v=__CACHE_BUST__"></script>
 </body>
 </html>
