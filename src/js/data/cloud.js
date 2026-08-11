@@ -475,15 +475,20 @@
     return toms;
   }
 
-  /** 照片上传云端（带重试）：data/photos/<id>-<index>.jpg；返回公网 URL（jsdelivr CDN）。
+  /** 照片文件名随机短后缀：跨设备唯一，避免多设备对同一记录各加图时索引冲突互相覆盖 */
+  function genPhotoSuffix() {
+    return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+  }
+
+  /** 照片上传云端（带重试）：data/photos/<id>-<suffix>.jpg（suffix 随机短串，跨设备唯一）；返回公网 URL（raw.githubusercontent.com，钉钉/国内微信可达，近实时不裂图）。
       与 pushWithRetry 同模式：最多 attempts 次指数退避（800ms/1600ms），
       401/403 令牌失效立即放弃（避免白等配额/权限问题）。 */
-  async function pushPhotoWithRetry(id, index, dataUrl, attempts) {
+  async function pushPhotoWithRetry(id, suffix, dataUrl, attempts) {
     attempts = attempts || 3;
     var lastErr = null;
     for (var i = 0; i < attempts; i++) {
       try {
-        return await pushPhoto(id, index, dataUrl);
+        return await pushPhoto(id, suffix, dataUrl);
       } catch (e) {
         lastErr = e;
         var msg = String((e && e.message) || "");
@@ -494,11 +499,12 @@
     throw lastErr || new Error("photo upload failed");
   }
 
-  /** 照片上传云端：data/photos/<id>-<index>.jpg；返回公网 URL（jsdelivr CDN） */
-  async function pushPhoto(id, index, dataUrl) {
+  /** 照片上传云端：data/photos/<id>-<suffix>.jpg（suffix 随机短串，跨设备唯一，避免并发同名覆盖）；
+      返回公网 URL（raw.githubusercontent.com，钉钉/国内微信可达，近实时不裂图）。 */
+  async function pushPhoto(id, suffix, dataUrl) {
     var m = /^data:image\/[^;]+;base64,(.+)$/.exec(String(dataUrl || ""));
     if (!m) return "";
-    var path = "data/photos/" + id + "-" + index + ".jpg";
+    var path = "data/photos/" + id + "-" + suffix + ".jpg";
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
@@ -508,7 +514,8 @@
     await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
       method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
     });
-    return "https://cdn.jsdelivr.net/gh/" + Config.GH.repo + "@" + Config.GH.branch + "/" + path;
+    // 基址改用 raw.githubusercontent.com（把 /gh/ 换成 /、去掉 @main 并把分支放到路径里），钉钉/微信内近实时可达
+    return "https://raw.githubusercontent.com/" + Config.GH.repo + "/" + Config.GH.branch + "/" + path;
   }
 
   /* ================= 照片上传失败追踪 =================
@@ -542,7 +549,7 @@
   /** 批量上传记录照片（带重试，不再静默吞错）。
       返回 { urls, failedIndexes }；failedIndexes 为失败的照片下标（从 0 计），
       调用方据此 toast 提示并调用 markPhotoPending 入补传队列。
-      limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖）。 */
+      limit 可选：只传前 limit 张（文件名带随机短后缀，跨设备唯一、互不覆盖）。 */
   async function pushPhotosDetailed(rec, limit) {
     var photos = (rec && rec.photos) || [];
     var slice = limit ? photos.slice(0, limit) : photos;
@@ -551,7 +558,8 @@
     var failed = [];
     for (var i = 0; i < slice.length; i++) {
       try {
-        var u = await pushPhotoWithRetry(rec.id, i + 1, slice[i]);
+        // 随机短后缀文件名：跨设备唯一，互不覆盖（钉钉图片走 raw.githubusercontent 近实时可达）
+        var u = await pushPhotoWithRetry(rec.id, genPhotoSuffix(), slice[i]);
         if (u) urls[i] = u; else failed.push(i);
       } catch (e) {
         failed.push(i);
@@ -561,7 +569,7 @@
   }
 
   /** 批量上传记录照片，返回 photoUrls 数组（兼容旧调用方；失败项自动入补传队列）。
-      limit 可选：只传前 limit 张（文件名索引与原位置一致，幂等覆盖） */
+      limit 可选：只传前 limit 张（文件名带随机短后缀，跨设备唯一、互不覆盖） */
   async function pushPhotos(rec, limit) {
     var r = await pushPhotosDetailed(rec, limit);
     if (r.failedIndexes.length) markPhotoPending(rec.id, r.failedIndexes);
@@ -583,7 +591,8 @@
     for (var k = 0; k < missing.length; k++) {
       var idx = missing[k];
       try {
-        var u = await pushPhotoWithRetry(rec.id, idx + 1, rec.photos[idx]);
+        // 随机短后缀文件名：跨设备唯一，互不覆盖
+        var u = await pushPhotoWithRetry(rec.id, genPhotoSuffix(), rec.photos[idx]);
         if (u) urls[idx] = u; else failed.push(idx);
       } catch (e) { failed.push(idx); }
     }
