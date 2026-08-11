@@ -98,6 +98,23 @@
     return map;
   }
 
+  /** 轻量字符串哈希（FNV-1a，转 36 进制），用于派生确定性 id */
+  function simpleHash(s) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = (h * 0x01000193) >>> 0;
+    }
+    return h.toString(36);
+  }
+
+  /** 归还入库记录的确定性 id：ret-<借出单id>-<本次归还内容哈希>。
+      同一笔归还（同借出单、同累计已还）在不同设备并发点归还 → 算出的 id 相同 → 合并按 id 只留一条 → 库存只加一次；
+      不同次（部分）归还累计已还不同 → id 不同 → 各自累加，不互相覆盖。仍保留 fromBorrowId 用于追溯。 */
+  function returnRecordId(r, newRet) {
+    return "ret-" + r.id + "-" + simpleHash(JSON.stringify({ b: r.id, ret: newRet }));
+  }
+
   /** 每货品剩余应还：[{name, qty}]，qty>0 才保留 */
   function remainingItems(r) {
     var ret = returnedMap(r);
@@ -298,10 +315,17 @@
   /** 归还核心：生成归还入库 + 差额出库 + 更新原单（本地保存 + 云端推送，全部幂等） */
   async function doReturn(r, returns) {
     var ret = returnedMap(r);
-    // 1) 归还>0 → 入库记录（加回库存）
+    // 2) 先计算新累计已还 + 剩余（供下方归还入库记录生成确定性 id 使用）
+    var newRet = {};
+    Object.keys(ret).forEach(function (k) { newRet[k] = ret[k]; });
+    returns.forEach(function (x) { newRet[x.name] = (newRet[x.name] || 0) + x.qty; });
+    // 1) 归还>0 → 入库记录（加回库存）。
+    //    用确定性 id（ret-<借出单id>-<本次归还内容哈希>）：同一笔并发归还多次提交 → 同 id → 合并只留一条 → 库存只加一次；
+    //    不同次部分归还内容不同 → 不同 id → 各自累加。仍保留 fromBorrowId 用于追溯，原单标记逻辑不变。
     var inRec = null;
     if (returns.length) {
       inRec = Records.create({
+        id: returnRecordId(r, newRet),
         type: "in", affectsStock: true, purpose: "先借后还归还",
         note: "归还借出单 " + r.id, time: Util.nowLocal(),
         picker: r.picker || "", dept: r.dept || "",
@@ -309,10 +333,6 @@
         fromBorrowId: r.id
       });
     }
-    // 2) 计算新累计已还 + 剩余
-    var newRet = {};
-    Object.keys(ret).forEach(function (k) { newRet[k] = ret[k]; });
-    returns.forEach(function (x) { newRet[x.name] = (newRet[x.name] || 0) + x.qty; });
     var borrowReturned = Object.keys(newRet).map(function (k) { return { name: k, qty: newRet[k] }; });
     var diffItems = (r.items || []).map(function (it) {
       return { name: it.name, qty: Math.max(0, (Number(it.qty) || 0) - (newRet[it.name] || 0)) };
