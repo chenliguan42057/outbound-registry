@@ -504,7 +504,8 @@
     files.forEach(function (file) {
       var reader = new FileReader();
       reader.onload = function () {
-        self.compress(reader.result, file.name, function () {
+        // 传入 file 而非仅 name：HEIC 兜底需用 createImageBitmap(file) 解码
+        self.compress(reader.result, file, function () {
           if (--pending === 0) { self.render(); self.emit(); }
         });
       };
@@ -513,27 +514,85 @@
     this.inputEl.value = "";
   };
 
-  /** 压缩：最大边 1024px / JPEG 0.6（2026-08-10 调优：原 1280/0.72，单张约减半） */
-  PhotoUpload.prototype.compress = function (dataUrl, name, done) {
+  /** 压缩：最大边 1024px / JPEG 0.6（2026-08-10 调优：原 1280/0.72，单张约减半）
+      修复 P0：iPhone/微信拍的 HEIC 照片被静默丢弃。
+      - new Image() 加载失败（HEIC 等）时，优先用 createImageBitmap(file) 兜底解码上传，让 iPhone 用户真能传成功；
+      - 若 createImageBitmap 也不可用/失败，明确 toast 并跳过该文件（绝不静默丢、也不阻塞其它照片）；
+      - settled 哨兵保证 done() 只调用一次，单张坏图不会让整次提交卡死或丢其它数据。 */
+  PhotoUpload.prototype.compress = function (dataUrl, file, done) {
     var self = this;
-    var img = new Image();
-    img.onload = function () {
+    var name = (file && file.name) || "";
+    var type = (file && file.type) || "";
+
+    function toastFail(msg) {
+      try { if (Util && Util.toast) Util.toast(msg, true); } catch (e) {}
+    }
+
+    // 把图像源（Image 或 ImageBitmap）画到 canvas 压缩为 JPEG dataURL 并压入 photos
+    function drawAndPush(src) {
       var max = Config.PHOTO_MAX_EDGE;
-      var w = img.width, h = img.height;
+      var w = src.width || src.naturalWidth || 0;
+      var h = src.height || src.naturalHeight || 0;
+      if (!w || !h) throw new Error("empty image dimension");
       if (w > max || h > max) {
         var r = Math.min(max / w, max / h);
         w = Math.round(w * r);
         h = Math.round(h * r);
+      } else {
+        w = Math.round(w);
+        h = Math.round(h);
       }
       var canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      canvas.getContext("2d").drawImage(src, 0, 0, w, h);
       var out = canvas.toDataURL("image/jpeg", Config.PHOTO_QUALITY);
-      self.photos.push({ src: out, name: name || "" });
-      done();
+      self.photos.push({ src: out, name: name });
+    }
+
+    var settled = false;
+    function finish() { if (!settled) { settled = true; done(); } }
+
+    // HEIC / 不兼容格式兜底：优先 createImageBitmap(file)；失败则清晰报错并跳过该文件（不静默丢、不阻塞其它）
+    function tryBitmapFallback() {
+      if (typeof createImageBitmap === "function" && file) {
+        var timedOut = false;
+        var t = setTimeout(function () {
+          if (!settled) {
+            timedOut = true;
+            toastFail("该照片处理超时，已跳过，请换 JPG/PNG 或重拍");
+            finish();
+          }
+        }, 15000);
+        createImageBitmap(file).then(function (bmp) {
+          if (timedOut) { try { bmp.close && bmp.close(); } catch (e) {} return; }
+          clearTimeout(t);
+          try {
+            drawAndPush(bmp);
+            try { bmp.close && bmp.close(); } catch (e) {}
+            finish();
+          } catch (e) {
+            toastFail("该照片处理失败，已跳过，请换 JPG/PNG 或重拍");
+            finish();
+          }
+        }).catch(function () {
+          clearTimeout(t);
+          toastFail("该照片处理失败，已跳过，请换 JPG/PNG 或重拍");
+          finish();
+        });
+      } else {
+        toastFail("该照片格式不支持，已跳过，请换 JPG/PNG 或重拍");
+        finish();
+      }
+    }
+
+    var img = new Image();
+    img.onload = function () {
+      try { drawAndPush(img); finish(); }
+      catch (e) { tryBitmapFallback(); }
     };
-    img.onerror = function () { done(); };
+    // 加载失败（HEIC 等）：走 createImageBitmap 兜底；兜底也失败则明确报错并跳过
+    img.onerror = function () { tryBitmapFallback(); };
     img.src = dataUrl;
   };
 
