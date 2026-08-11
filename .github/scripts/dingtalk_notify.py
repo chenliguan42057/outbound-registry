@@ -158,11 +158,12 @@ def entity_line(data):
     return "- **结算法人单位**：{}\n".format(entity) if entity else ""
 
 
-def _layout_record(title, fields, data, status_label=None):
-    """统一布局：标题 → 照片（顶部）→ 字段（每行一项）→ 货品明细（每行一项）→ 出库后库存 → 预警 → 备注。
+def _layout_record(title, fields, data, status_label=None, tail_fields=None):
+    """统一布局：标题 → 照片（顶部）→ 字段（每行一项）→ 货品明细（每行一项）→ 备注 → 尾部字段（时间/状态，置于明细之后）。
 
     fields: [(k, v), ...] 顺序即展示顺序。
     status_label: 标题里附加的状态角标（"未提单"/"已提单" 等），可空。
+    tail_fields: [(k, v), ...] 拼在货品明细与备注之后，用于把时间/状态放到明细下方、状态压在最后。
     """
     photos = photos_markdown(data)
     md = title
@@ -176,19 +177,21 @@ def _layout_record(title, fields, data, status_label=None):
     note = str((data or {}).get("note") or "").strip()
     if note:
         md += "\n- **备注**：{}".format(note)
+    if tail_fields:
+        md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in tail_fields)
     return md
 
 
 def build_new_markdown(data):
-    """新增记录：新登记通知。结构：标题 → 照片 → 字段 → 货品明细（每行）→ 备注。"""
+    """新增记录：新登记通知。结构：标题 → 照片 → 字段（领取人/部门/用途）→ 货品明细 → 尾部（时间/状态，置于明细之后，状态在最后）。"""
     kind = str(data.get("type", "")).lower()
     if kind == "in":
         title = "### 📥 出入库登记 · 新入库登记"
         fields = [
-            ("时间", data.get("time", "") or "-"),
             ("用途/来源", data.get("purpose", "") or "-")
         ]
-        return _layout_record(title, fields, data)
+        tail = [("时间", data.get("time", "") or "-")]
+        return _layout_record(title, fields, data, tail_fields=tail)
     # 出库
     title = "### 📦 出入库登记 · 新出库登记"
     fields = [
@@ -199,9 +202,11 @@ def build_new_markdown(data):
     if entity:
         fields.append(("结算法人单位", entity))
     fields.append(("用途", data.get("purpose", "") or "-"))
-    fields.append(("时间", data.get("time", "") or "-"))
-    fields.append(("状态", "未提单" if data.get("status") == "pending" else "已提单"))
-    return _layout_record(title, fields, data)
+    tail = [
+        ("时间", data.get("time", "") or "-"),
+        ("状态", "未提单" if data.get("status") == "pending" else "已提单")
+    ]
+    return _layout_record(title, fields, data, tail_fields=tail)
 
 
 def build_update_markdown(data, old):
@@ -224,30 +229,30 @@ def build_update_markdown(data, old):
         entity = str(data.get("entity") or "").strip()
         if entity:
             fields.append(("结算法人单位", entity))
-        fields += [
-            ("用途", data.get("purpose", "") or "-"),
+        fields += [("用途", data.get("purpose", "") or "-")]
+        tail = [
             ("时间", data.get("time", "") or "-"),
             ("状态", "✅ 已提单")
         ]
-        return _layout_record("### 📤 出入库登记 · 出库已提单", fields, data)
+        return _layout_record("### 📤 出入库登记 · 出库已提单", fields, data, tail_fields=tail)
     # 取消提单（已提单→未提单）
     if old_st == "submitted" and new_st == "pending":
         fields = [("领取人", data.get("picker", "") or "-")]
         entity = str(data.get("entity") or "").strip()
         if entity:
             fields.append(("结算法人单位", entity))
-        fields += [("时间", data.get("time", "") or "-")]
-        return _layout_record("### ↩️ 出入库登记 · 已撤回未提单", fields, data)
+        tail = [("时间", data.get("time", "") or "-")]
+        return _layout_record("### ↩️ 出入库登记 · 已撤回未提单", fields, data, tail_fields=tail)
     # 其他修改（编辑用途/货品等）
     fields = [("领取人", data.get("picker", "") or "-")]
     entity = str(data.get("entity") or "").strip()
     if entity:
         fields.append(("结算法人单位", entity))
-    fields += [
+    tail = [
         ("时间", data.get("time", "") or "-"),
         ("状态", "未提单" if new_st == "pending" else "已提单")
     ]
-    return _layout_record("### 📝 出入库登记 · 记录已更新", fields, data)
+    return _layout_record("### 📝 出入库登记 · 记录已更新", fields, data, tail_fields=tail)
 
 
 def build_tombstone_markdown(data):
