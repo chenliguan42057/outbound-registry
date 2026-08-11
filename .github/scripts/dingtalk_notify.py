@@ -199,6 +199,7 @@ def build_new_markdown(data):
     if entity:
         fields.append(("结算法人单位", entity))
     fields.append(("用途", data.get("purpose", "") or "-"))
+    fields.append(("时间", data.get("time", "") or "-"))
     fields.append(("状态", "未提单" if data.get("status") == "pending" else "已提单"))
     return _layout_record(title, fields, data)
 
