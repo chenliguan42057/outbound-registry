@@ -159,7 +159,19 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
     if not parts:
         return None
     now_str = now.strftime("%Y-%m-%d %H:%M")
-    header = "### 📌 出入库登记 · 待处理提醒\n⏱ 实际推送：{}（北京时间）".format(now_str)
+    # 对账（P2）：统计今日新增登记数，帮助核对"今天提交的都推送到群了吗"。
+    # _ts 是毫秒时间戳 → 换算北京日期；旧记录无 _ts 则用 time 字段前缀判断。
+    today_prefix = now.strftime("%Y-%m-%d")
+    today_count = 0
+    for r in load_dir(os.path.join(records_dir, "*.json")):
+        ts = r.get("_ts")
+        if isinstance(ts, (int, float)) and ts > 0:
+            if datetime.fromtimestamp(ts / 1000, CST).strftime("%Y-%m-%d") == today_prefix:
+                today_count += 1
+        elif str(r.get("time", "")).startswith(today_prefix):
+            today_count += 1
+    header = "### 📌 出入库登记 · 待处理提醒\n⏱ 实际推送：{}（北京时间）\n📊 今日新增登记：**{}** 条".format(
+        now_str, today_count)
     return header + "\n\n" + "\n\n".join(parts)
 
 

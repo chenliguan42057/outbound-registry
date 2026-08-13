@@ -24,6 +24,32 @@
 
   var API_TIMEOUT_MS = 15000;
 
+  /* ===== 写请求串行链（P3 防 409） =====
+     背景：一次提交可能并发 PUT 照片 + record + audit（out.js 先传照片、再推记录），
+     同一文件的并发写会让 GitHub Contents API 抛 409（"sha 校验失败"），
+     表现为"记录明明提交了却从仓库消失"。用一条全局 promise 链把所有写请求串行化，
+     任何时刻只有 1 个 PUT/DELETE 在途。读请求（GET）不排队，保持拉取性能。 */
+  var writeChain = Promise.resolve();
+  function serialWrite(fn) {
+    var run = writeChain.then(fn, fn);   // 前一个失败也要继续执行下一个，不卡死整条链
+    writeChain = run.catch(function () {});  // 吞掉错误防链断，调用方拿到的 run 仍能捕获
+    return run;
+  }
+  function isWrite(opts) {
+    var m = (opts && opts.method) || "GET";
+    return m === "PUT" || m === "DELETE" || m === "POST" || m === "PATCH";
+  }
+
+  /** 配额水位检查（P3）：余量低于阈值时返回描述，调用方可决定是否提示 */
+  function quotaWarn() {
+    var r = getRate();
+    if (r.remaining === null || r.remaining === undefined) return "";
+    if (r.remaining <= 0) return "API 调用额度已用尽，约 " + Math.max(1, Math.ceil((r.reset - Date.now()) / 60000)) + " 分钟后自动恢复";
+    if (r.remaining < 50) return "API 额度仅剩 " + r.remaining + " 次，非常紧张";
+    if (r.remaining < 200) return "API 额度剩余 " + r.remaining + " 次，请注意用量";
+    return "";
+  }
+
   /**
    * API 配额水位。GitHub 认证请求限额 5000 次/小时，且同一令牌下所有设备共用。
    * 每次响应都会刷新这里，自动同步据此决定是否暂时停表，避免把额度耗光后全站写入瘫痪。
@@ -56,6 +82,15 @@
   }
 
   async function apiJson(url, opts) {
+    opts = opts || {};
+    // 写请求走全局串行链：同一时刻只有一个 PUT/DELETE 在途，从源头消除 409
+    if (isWrite(opts)) {
+      return serialWrite(function () { return apiJsonInner(url, opts); });
+    }
+    return apiJsonInner(url, opts);
+  }
+
+  async function apiJsonInner(url, opts) {
     // 原实现无超时：移动端弱网下 fetch 会一直挂着，同步按钮永远转圈。
     // AbortController 比 AbortSignal.timeout 兼容性更好（后者需要 Chrome 103+/Safari 16+）。
     var ctrl = new AbortController();
@@ -626,6 +661,19 @@
 
   var SYNC_QUEUE_KEY = "outbound_sync_queue";
 
+  /* 队列变更通知：UI（落地页徽标 / 云同步页列表 / 底部状态栏）实时刷新。
+     不再让"提交失败"静默——队列一旦变化就推给所有监听者。 */
+  var queueListeners = [];
+  function onQueueChange(cb) {
+    if (typeof cb === "function" && queueListeners.indexOf(cb) === -1) queueListeners.push(cb);
+  }
+  function notifyQueueChange() {
+    var n = loadQueue().length;
+    queueListeners.forEach(function (cb) {
+      try { cb(n); } catch (e) { console.warn("[cloud] queue listener error", e); }
+    });
+  }
+
   function loadQueue() {
     try { return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || "[]"); } catch (e) { return []; }
   }
@@ -636,9 +684,22 @@
     var q = loadQueue();
     if (q.indexOf(id) === -1) q.push(id);
     saveQueue(q);
+    notifyQueueChange();
   }
   function dequeue(id) {
     saveQueue(loadQueue().filter(function (x) { return x !== id; }));
+    notifyQueueChange();
+  }
+
+  /** 队列详情（供云同步页 / 徽标展示）：每条返回 { id, rec }；rec 为本地记录（已删则为 null） */
+  function getQueue() {
+    return loadQueue().map(function (id) {
+      var rec = null;
+      try {
+        rec = (window.App.State.list || []).find(function (r) { return r.id === id; }) || null;
+      } catch (e) {}
+      return { id: id, rec: rec };
+    });
   }
 
   /** 带退避重试的单条推送；成功返回 true，失败（含令牌失效）返回 false */
@@ -670,14 +731,15 @@
     var q = loadQueue();
     if (!q.length) return { ok: 0, remain: 0 };
     if (!hasToken()) return { ok: 0, remain: q.length };
-    var ok = 0, remain = 0;
+    var ok = 0, remain = 0, errors = [];
     for (var i = 0; i < q.length; i++) {
       var id = q[i];
       var rec = (window.App.State.list || []).find(function (r) { return r.id === id; });
       if (!rec) { dequeue(id); continue; }            // 本地已删，出队
-      if (await pushWithRetry(rec, 2)) { dequeue(id); ok++; } else { remain++; }
+      if (await pushWithRetry(rec, 2)) { dequeue(id); ok++; }
+      else { remain++; errors.push(id); }
     }
-    return { ok: ok, remain: remain };
+    return { ok: ok, remain: remain, errors: errors };
   }
 
   /* ================= 本地删除墓碑队列 =================
@@ -926,6 +988,7 @@
   window.App.Cloud = {
     hasToken: hasToken,
     getRate: getRate,
+    quotaWarn: quotaWarn,
     pull: pull,
     push: push,
     del: del,
@@ -934,6 +997,9 @@
     pushRecord: pushRecord,
     pushWithRetry: pushWithRetry,
     flushQueue: flushQueue,
+    loadQueue: loadQueue,
+    getQueue: getQueue,
+    onQueueChange: onQueueChange,
     enqueueTomb: enqueueTomb,
     dequeueTomb: dequeueTomb,
     flushTombQueue: flushTombQueue,

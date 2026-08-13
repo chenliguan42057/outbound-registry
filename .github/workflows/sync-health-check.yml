@@ -1,0 +1,25 @@
+name: Sync Health Check
+on:
+  schedule:
+    # 北京 09:00 / 14:00 / 18:00（UTC 01:00 / 06:00 / 10:00）；GitHub schedule 实测可能延迟数小时，
+    # 兜底职责可被手动触发 / 外部 cron 覆盖
+    - cron: '0 1 * * 1-5'
+    - cron: '0 6 * * 1-5'
+    - cron: '0 10 * * 1-5'
+  workflow_dispatch:      # 支持手动触发（例如排查"今天没收到推送"时立即自检）
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # 需要 git log 查当日 commits
+      - name: Run sync health check
+        env:
+          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          SECRET: ${{ secrets.DINGTALK_SECRET }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: python3 .github/scripts/sync_health_check.py

@@ -60,11 +60,18 @@
 
   var pad2 = Util.pad2;   // 统一走 Util，避免各文件各写一份补零逻辑
   var routeBound = false;  // hashchange 只绑一次：壳被移除后重渲染不得重复叠加监听
+  var queueBound = false;  // 队列变更监听只绑一次：状态栏徽标实时刷新
 
   /** 渲染应用壳；已挂载则仅切换模块并保持壳状态 */
   function render(module) {
     var el = Util.$("view-app");
     if (!el) return;
+    if (!queueBound && Cloud.onQueueChange) {
+      queueBound = true;
+      Cloud.onQueueChange(function () {
+        if (State.appMounted) updateStatusBar();
+      });
+    }
     if (State.appMounted && shellEl && document.body.contains(shellEl)) {
       el.style.display = "";
       mount(module || State.nav.active || "stock");
@@ -181,15 +188,17 @@
     updateStatusBar();
   }
 
-  /* 底部状态栏：就绪｜本地N条｜已同步HH:MM */
+  /* 底部状态栏：就绪｜本地N条｜已同步HH:MM（含待同步队列计数） */
   function updateStatusBar() {
     var el = Util.$("winStatus");
     if (!el) return;
     var sync = State.lastSync
       ? "已同步" + pad2(State.lastSync.getHours()) + ":" + pad2(State.lastSync.getMinutes())
       : "未同步";
-    el.textContent = (statusText || "就绪") + "｜本地" + State.list.length + "条｜" + sync;
-    el.className = "win-status" + (statusIsErr ? " err" : "");
+    var q = (Cloud.loadQueue ? Cloud.loadQueue() : []);
+    var pending = q.length ? "｜⚠️待同步" + q.length + "条" : "";
+    el.textContent = (statusText || "就绪") + "｜本地" + State.list.length + "条｜" + sync + pending;
+    el.className = "win-status" + (statusIsErr || q.length ? " err" : "");
   }
 
   /** 同步状态（out/in/records 调用）：更新底部状态栏 */

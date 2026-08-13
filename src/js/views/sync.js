@@ -81,6 +81,16 @@
         '<div class="hint">提交时因弱网/配额上传失败的照片会列在这里（原始照片保留在本机不会丢）。点击「补传照片」自动重试。</div>' +
       '</div>' +
       '<div class="card">' +
+        '<h2>待推送队列 <span class="tag">未同步恢复</span></h2>' +
+        '<div class="sync-row"><span class="sync-k">待推送</span><span class="sync-v" id="syncQueueCount">—</span></div>' +
+        '<div class="sync-queue-list" id="syncQueueList"></div>' +
+        '<div class="actions">' +
+          '<button type="button" class="btn sm" id="syncFlushQueue">↻ 一键重推</button>' +
+        '</div>' +
+        '<div class="hint">提交时因网络/配额/令牌问题未推上云端的记录会暂存在本机队列（不丢数据）。' +
+          '点击「一键重推」立即补推并触发钉钉通知；也可完全关闭页面后重新打开自动补推。</div>' +
+      '</div>' +
+      '<div class="card">' +
         '<h2>云端令牌设置 <span class="tag">Contents API</span></h2>' +
         '<div class="field">' +
           '<label>设置 GitHub 令牌</label>' +
@@ -112,6 +122,9 @@
     Util.$("syncNow").addEventListener("click", doSync);
     Util.$("syncRetryPhotos").addEventListener("click", retryAllPhotos);
     renderPhotoPending();
+    renderSyncQueue();
+    var flushBtn = Util.$("syncFlushQueue");
+    if (flushBtn) flushBtn.addEventListener("click", flushSyncQueue);
     Util.$("syncLogout").addEventListener("click", async function () {
       var ok = await UI.confirmDialog("退出登录后需重新输入密码。确定退出？", "退出登录");
       if (!ok) return;
@@ -373,6 +386,9 @@
     else stopCountdown();
   });
 
+  // 队列变化实时刷新本页列表（模块级只绑一次；去重由 cloud.js onQueueChange 保证）
+  if (Cloud.onQueueChange) Cloud.onQueueChange(function () { if (syncPanelVisible()) renderSyncQueue(); });
+
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
   // destroy：由 app.mount 在切换模块前调用，回收本视图持有的定时器
@@ -394,6 +410,61 @@
     });
     var n = q.length + extra;
     el.textContent = n > 0 ? n + " 条记录（" + (q.length ? "队列 " + q.length : "") + (q.length && extra ? " + " : "") + (extra ? "缺失 " + extra : "") + "）" : "无";
+  }
+
+  /** 渲染「待推送队列」列表：每条显示领取人 + 时间 + 货品摘要 */
+  function renderSyncQueue() {
+    var cnt = Util.$("syncQueueCount");
+    var listEl = Util.$("syncQueueList");
+    if (!cnt) return;
+    var items = (Cloud.getQueue ? Cloud.getQueue() : []) || [];
+    cnt.textContent = items.length ? items.length + " 条" : "无";
+    if (!listEl) return;
+    if (!items.length) { listEl.innerHTML = ""; return; }
+    listEl.innerHTML = items.map(function (it) {
+      var rec = it.rec;
+      var head = "⚠️ " + Util.esc(it.id.slice(0, 12));
+      if (rec) {
+        head = "⚠️ " + Util.esc(rec.picker || "-") +
+          (rec.time ? "　📅 " + Util.esc(String(rec.time).replace("T", " ")) : "");
+      }
+      var goods = "";
+      if (rec && (rec.items || []).length) {
+        goods = '<div class="hint" style="margin:4px 0 0 0">' + Util.esc(
+          (rec.items || []).map(function (x) { return x.name + "×" + x.qty; }).join("、")
+        ) + '</div>';
+      }
+      return '<div style="border:1px solid var(--line-soft,#DCE6E0);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:13px">' +
+        head + goods + '</div>';
+    }).join("");
+  }
+
+  /** 一键重推待推送队列（无令牌 / 无队列给明确提示） */
+  async function flushSyncQueue() {
+    if (!Cloud.hasToken()) { Util.toast("未配置云端令牌，无法重推", true); return; }
+    var items = (Cloud.getQueue ? Cloud.getQueue() : []) || [];
+    if (!items.length) { Util.toast("没有待推送的记录"); return; }
+    var btn = Util.$("syncFlushQueue");
+    if (btn) { btn.disabled = true; btn.textContent = "重推中…"; }
+    try {
+      var r = await Cloud.flushQueue();
+      renderSyncQueue();
+      updateStatusBar();
+      var msg = r.ok > 0 ? "已重推 " + r.ok + " 条" : "本次无成功";
+      if (r.remain > 0) msg += "，剩 " + r.remain + " 条仍失败（可稍后再试或检查令牌/网络）";
+      Util.toast(msg, r.remain > 0);
+      // 重推成功后刷新记录列表，让「已提单」状态及时体现
+      try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
+      try { if (window.App.Views.landing && window.App.Views.landing.renderRecent) window.App.Views.landing.renderRecent(); } catch (e) {}
+    } catch (e) {
+      Util.toast("重推失败：" + ((e && e.message) || "未知错误"), true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "↻ 一键重推"; }
+    }
+  }
+
+  function updateStatusBar() {
+    try { if (window.App.Views.app && window.App.Views.app.updateStatusBar) window.App.Views.app.updateStatusBar(); } catch (e) {}
   }
 
   /** 补传全部缺失照片：队列项 + 本机 photos > photoUrls 的记录/备忘录 */

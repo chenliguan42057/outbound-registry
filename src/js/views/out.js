@@ -578,13 +578,15 @@
       window.App.Views.app.setSyncStatus("已同步 " + State.lastSync.toLocaleString(), false);
       var remain = (fres && fres.remain) || 0;
       if (remain > 0) {
-        window.App.Views.app.setSyncStatus("部分待补推（" + remain + " 条稍后自动重试）", true);
-        Util.toast("已存本地，云端稍后自动补推", true);
+        // 失败可见（P1）：明确提示数量 + 指引去「云同步 → 一键重推」，而不是模糊的"稍后自动补推"
+        window.App.Views.app.setSyncStatus("⚠️ " + remain + " 条未推上云端（已存本机队列），可在「云同步」页一键重推", true);
+        Util.toast("⚠️ 有 " + remain + " 条记录未同步到云端，已存本机队列；打开「管理 → 云同步 → 一键重推」即可补推", true);
         return;
       }
       if (r.pushed) watchWpsReceipt(rec);
     }).catch(function (e) {
-      window.App.Views.app.setSyncStatus("云端同步失败：" + e.message + "（已存本地，稍后重试）", true);
+      window.App.Views.app.setSyncStatus("云端同步失败：" + e.message + "（已存本机队列，可在「云同步」页一键重推）", true);
+      Util.toast("⚠️ 云端同步失败：" + e.message + "，已存本机队列，可在「云同步」页一键重推", true);
     });
   }
 

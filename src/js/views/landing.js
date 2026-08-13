@@ -46,8 +46,13 @@
     }).join("，");
   }
 
-  /** 状态徽标 HTML：pending 红点「未提单」/ submitted 绿点「已提单」/ 入库无徽标 */
+  /** 状态徽标 HTML：pending 红点「未提单」/ submitted 绿点「已提单」/ 入库无徽标
+      P1 增强：记录若在本机待同步队列（未推上云端）→ 显示「⚠️ 待同步」，优先于「未提单」，
+      让用户一眼看出这条没同步上去，而不是误以为只是流程上未提单。 */
   function statusBadge(rec) {
+    if (rec && Cloud.loadQueue && Cloud.loadQueue().indexOf(rec.id) !== -1) {
+      return '<span class="status-pill static pending"><span class="dot"></span>待同步</span>';
+    }
     var st = Records.getStatus(rec);
     if (st === "pending") return '<span class="status-pill static pending"><span class="dot"></span>未提单</span>';
     if (st === "submitted") return '<span class="status-pill static submitted"><span class="dot"></span>已提单</span>';
@@ -185,6 +190,9 @@
     recentLoading = Cloud.hasToken();
     renderRecent();
     refreshRecentWithCloud();
+
+    // 队列变更 → 刷新最近提交徽标（提交失败入队时立刻把「未提单」换成「待同步」）
+    if (Cloud.onQueueChange) Cloud.onQueueChange(renderRecent);
   }
 
   window.App = window.App || {};
