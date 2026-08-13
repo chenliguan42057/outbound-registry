@@ -209,12 +209,52 @@ def build_new_markdown(data):
     return _layout_record(title, fields, data, tail_fields=tail)
 
 
+def _build_borrow_new_markdown(data):
+    """借出动作：borrowed false→true → 新借出登记通知（复用出库布局，标题/状态更明确）。"""
+    title = "### 🔄 出入库登记 · 新借出登记"
+    fields = [
+        ("领取人", data.get("picker", "") or "-"),
+        ("部门/客户", data.get("dept", "") or "-")
+    ]
+    entity = str(data.get("entity") or "").strip()
+    if entity:
+        fields.append(("结算法人单位", entity))
+    fields.append(("用途", data.get("purpose", "") or "-"))
+    tail = [
+        ("时间", data.get("time", "") or "-"),
+        ("状态", "🔄 借出中")
+    ]
+    return _layout_record(title, fields, data, tail_fields=tail)
+
+
+def _build_borrow_unborrow_markdown(data):
+    """退回动作：borrowed true→false → 已退回出库记录通知。"""
+    title = "### 🔙 出入库登记 · 已退回出库记录"
+    fields = [("领取人", data.get("picker", "") or "-")]
+    entity = str(data.get("entity") or "").strip()
+    if entity:
+        fields.append(("结算法人单位", entity))
+    tail = [
+        ("时间", data.get("time", "") or "-"),
+        ("状态", "未提单" if data.get("status") == "pending" else "已提单")
+    ]
+    return _layout_record(title, fields, data, tail_fields=tail)
+
+
 def build_update_markdown(data, old):
-    """修改记录：识别「提单」（status pending→submitted）等状态变化。"""
-    # 元字段写回抑制：仅涉及先借后还账目/照片缓存的系统内部变更不发通知
-    # （转入 borrowed、归还账目 borrowReturned/borrowDone、追溯 fromBorrowId、photoUrls 缓存回写）
+    """修改记录：识别「提单」「借出」「退回」等状态变化；仅借还内部状态变化不发通知。"""
     old = old or {}
-    BORROW_META = {"borrowed", "borrowReturned", "borrowDone", "fromBorrowId", "photoUrls"}
+    # 借出动作：borrowed 从非 true 变为 true → 「新借出登记」专用通知（优先于白名单抑制）
+    if old.get("borrowed") is not True and data.get("borrowed") is True:
+        return _build_borrow_new_markdown(data)
+    # 退回动作：borrowed 从 true 变为非 true → 「已退回出库记录」通知
+    if old.get("borrowed") is True and data.get("borrowed") is not True:
+        return _build_borrow_unborrow_markdown(data)
+    # 元字段写回抑制：仅涉及先借后还账目/照片缓存/时间戳的系统内部变更不发通知
+    # （转入 borrowed、归还账目 borrowReturned/borrowDone、追溯 fromBorrowId、photoUrls 缓存回写、
+    #   updatedAt 每次 Records.update 都会刷新，必须一并纳入，否则任何借还操作都会误发「记录已更新」）
+    old = old or {}
+    BORROW_META = {"borrowed", "borrowReturned", "borrowDone", "fromBorrowId", "photoUrls", "updatedAt"}
     changed = {k for k in set(data) | set(old) if k != "_ts" and data.get(k) != old.get(k)}
     if changed and changed.issubset(BORROW_META):
         return None
