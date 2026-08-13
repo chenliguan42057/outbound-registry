@@ -18,6 +18,8 @@
   var picker = null;
   var photos = null;
   var editingId = null;
+  /** 进入编辑时的原始照片（base64 数组）快照：提交时若照片未变则复用已有 photoUrls，避免重复上传 */
+  var editingOriginalPhotos = null;
   var els = null;
   /** 提交互斥锁：防止移动端双击 / 快速连点产生重复出库单（编号也会随之错乱） */
   var submitting = false;
@@ -495,6 +497,12 @@
 
     setSubmitting(true);
     var wasEditing = !!editingId;
+    // 照片去重后再入库：同一张照片重复选中/重复压缩只保留一份（P4 防重复上传）
+    var photoList = dedupePhotos(photos.getPhotos());
+    if (photos.getPhotos().length !== photoList.length) {
+      Util.toast("⚠️ 检测到重复照片，已自动去重", true);
+      photos.setPhotos(photoList);
+    }
     var payload = {
       time: time,
       picker: pickerVal,
@@ -503,7 +511,7 @@
       purpose: purpose,
       entity: entity,                                    // 结算法人单位必填，纯追加字段（与 note 同类，不破坏 schema）
       items: items,
-      photos: photos.getPhotos(),
+      photos: photoList,
       affectsStock: true  // 新记录才参与库存计算
     };
     if (!wasEditing) {
@@ -540,15 +548,30 @@
   /** 照片上传云端（可选）：将 photos 上传到 data/photos/ 并把 photoUrls 写回本地记录；不推送记录本身。
       返回更新后的记录（含 photoUrls），无照片或失败时返回原记录。
       失败照片不静默：toast 明确提示 + 入本机补传队列（云同步页可补传），dataURL 保留不丢。
-      由 submitPush 先 await 此函数再调 pushToCloud，确保首推已含 photoUrls。 */
+      由 submitPush 先 await 此函数再调 pushToCloud，确保首推已含 photoUrls。
+      P4 修复：编辑场景照片未变时，复用已有 photoUrls，不重复上传——
+      旧逻辑每次编辑都重新上传全部照片生成新 URL，叠加旧版 mergeAndSort 的 photoUrls 并集
+      → 钉钉推送同一张图出现两份。 */
   async function pushPhotosToCloud(rec) {
     if (!Cloud.hasToken() || !rec) return rec;
-    var photos = (rec.photos || []);
-    if (!photos.length) return rec;
+    var photos = dedupePhotos(rec.photos || []);
+    if (!photos.length) {
+      // 照片已清空：同步清掉 photoUrls，否则钉钉/记录仍展示已删除的旧图
+      var emptyRec = Records.update(rec.id, { photoUrls: [] });
+      return emptyRec || rec;
+    }
     if (Cloud.getRate && Cloud.getRate().low) {
       Util.toast("⚠️ API 配额紧张，照片可能上传较慢或失败；失败可到「云同步」页补传", true);
     }
-    var r = await Cloud.pushPhotosDetailed(rec);
+    // 编辑场景且照片数组与进入编辑时完全一致（用户没动照片）→ 直接复用已有 photoUrls
+    if (editingOriginalPhotos && photosEqual(photos, editingOriginalPhotos)) {
+      var oldUrls = (rec.photoUrls || []).filter(function (u) { return u; });
+      if (oldUrls.length >= photos.length) {
+        var keptRec = Records.update(rec.id, { photoUrls: oldUrls.slice(0, photos.length) });
+        return keptRec || rec;
+      }
+    }
+    var r = await Cloud.pushPhotosDetailed(Object.assign({}, rec, { photos: photos }));
     if (r.urls && r.urls.length) {
       var updated = Records.update(rec.id, { photoUrls: r.urls });
       rec = updated || rec;
@@ -559,6 +582,22 @@
       Util.toast("⚠️ 照片 " + names + " 上传失败（弱网/配额），已存本机，可到「云同步」页补传", true);
     }
     return rec;
+  }
+
+  /** base64 去重：同一照片被重复选中/重复压缩时只保留一份，杜绝上传重复图 */
+  function dedupePhotos(arr) {
+    var out = [];
+    (arr || []).forEach(function (src) {
+      if (src && out.indexOf(src) === -1) out.push(src);
+    });
+    return out;
+  }
+
+  /** 比较两组照片 base64 是否完全一致（用户编辑时是否动过照片） */
+  function photosEqual(a, b) {
+    if ((a || []).length !== (b || []).length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
   }
 
   function pushToCloud(rec, msg) {
@@ -617,6 +656,7 @@
     picker.setSelected([]);
     photos.setPhotos([]);
     editingId = null;
+    editingOriginalPhotos = null;
     els.submit.textContent = "提交登记";
     els.cancelEdit.style.display = "none";
     UI.clearFieldErrors(els.submit.closest(".card") || document);
@@ -628,6 +668,7 @@
     var r = State.list.find(function (x) { return x.id === id; });
     if (!r) return;
     editingId = id;
+    editingOriginalPhotos = (r.photos || []).slice();   // 记录编辑前的照片快照（编辑时复用 photoUrls 的依据）
     els.time.value = r.time || Util.nowLocal();
     els.picker.value = r.picker || "";
     els.dept.value = r.dept || "";

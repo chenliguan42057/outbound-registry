@@ -230,7 +230,10 @@ def _build_borrow_new_markdown(data):
 def _build_borrow_unborrow_markdown(data):
     """退回动作：borrowed true→false → 已退回出库记录通知。"""
     title = "### 🔙 出入库登记 · 已退回出库记录"
-    fields = [("领取人", data.get("picker", "") or "-")]
+    fields = [
+        ("领取人", data.get("picker", "") or "-"),
+        ("部门/客户", data.get("dept", "") or "-")
+    ]
     entity = str(data.get("entity") or "").strip()
     if entity:
         fields.append(("结算法人单位", entity))
@@ -277,14 +280,20 @@ def build_update_markdown(data, old):
         return _layout_record("### 📤 出入库登记 · 出库已提单", fields, data, tail_fields=tail)
     # 取消提单（已提单→未提单）
     if old_st == "submitted" and new_st == "pending":
-        fields = [("领取人", data.get("picker", "") or "-")]
+        fields = [
+            ("领取人", data.get("picker", "") or "-"),
+            ("部门/客户", data.get("dept", "") or "-")
+        ]
         entity = str(data.get("entity") or "").strip()
         if entity:
             fields.append(("结算法人单位", entity))
         tail = [("时间", data.get("time", "") or "-")]
         return _layout_record("### ↩️ 出入库登记 · 已撤回未提单", fields, data, tail_fields=tail)
     # 其他修改（编辑用途/货品等）
-    fields = [("领取人", data.get("picker", "") or "-")]
+    fields = [
+        ("领取人", data.get("picker", "") or "-"),
+        ("部门/客户", data.get("dept", "") or "-")
+    ]
     entity = str(data.get("entity") or "").strip()
     if entity:
         fields.append(("结算法人单位", entity))
