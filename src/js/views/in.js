@@ -61,7 +61,8 @@
     picker = new UI.ProductPicker({
       showInStock: true,
       showStock: false,
-      placeholder: "搜索并选择货品（可多选，每个单独填数量）"
+      batchFields: ["batchNo", "prodDate", "expDate"],   // 入库批次：生产批号/生产日期/到期时间（2026-08-14）
+      placeholder: "搜索并选择货品（可多选，每个单独填数量与批次）"
     });
     picker.attach(Util.$("inProductPicker"));
     photos = new UI.PhotoUpload({});
@@ -142,6 +143,12 @@
       });
     } else if (qtyProblems.length) {
       errs.push({ el: Util.$("inProductPicker"), msg: "以下货品数量无效：" + qtyProblems.join("、") });
+    }
+    // 批次轻校验（2026-08-14）：填了生产批号必须填到期时间，避免批次台账出现无到期日的批次
+    var batchBad = (items || []).filter(function (it) { return it.batchNo && !it.expDate; })
+      .map(function (it) { return it.name; });
+    if (batchBad.length) {
+      errs.push({ el: Util.$("inProductPicker"), msg: "以下货品已填批号但未填到期时间：" + batchBad.join("、") });
     }
     if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) return;
 
