@@ -35,11 +35,30 @@
     var inv = cat.inventory || {};
     Object.keys(Config.INVENTORY).forEach(function (k) { delete Config.INVENTORY[k]; });
     Object.keys(inv).forEach(function (k) { Config.INVENTORY[k] = Number(inv[k]) || 0; });
+    // 每个货品独立预警线（2026-08-14）：用户在目录管理里设的 warnAt，缺省回退全局阈值
+    Config.WARN_AT = Config.WARN_AT || {};
+    Object.keys(Config.WARN_AT).forEach(function (k) { delete Config.WARN_AT[k]; });
+    cat.products.forEach(function (p) {
+      var w = Number(p.warnAt);
+      Config.WARN_AT[p.name] = (!isNaN(w) && w >= 0) ? w : Config.LOW_STOCK_THRESHOLD;
+    });
     // 类目归组保持可用：只保留仍在目录里的货品（新增货品归「其他」）
     var cm = Config.CATEGORY_MAP || {};
     Object.keys(cm).forEach(function (catKey) {
       cm[catKey] = (cm[catKey] || []).filter(function (n) { return names.indexOf(n) !== -1; });
     });
+  }
+
+  /** 异步加载完成后，刷新依赖目录的视图（库存/仪表盘/报表），避免首次进入页面时短暂显示统一阈值。
+      catalog.js 加载顺序早于 views/*，refresh 时机延后到下一个宏任务，确保 Views 已注册。 */
+  function refreshDependents() {
+    var fire = function () {
+      try { if (window.App.Views.stock && window.App.Views.stock.refresh) window.App.Views.stock.refresh(); } catch (e) {}
+      try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
+      try { if (window.App.Views.report && window.App.Views.report.refresh) window.App.Views.report.refresh(); } catch (e) {}
+    };
+    if (typeof setTimeout === "function") setTimeout(fire, 0);
+    else fire();
   }
 
   /** 读取云端 catalog.json；404 返回 null */
@@ -72,6 +91,7 @@
       catalog = cloud;
       applyToConfig(cloud);
       try { localStorage.setItem(LS_KEY, JSON.stringify(cloud)); } catch (e) {}
+      refreshDependents();
       return;
     }
     try {
@@ -79,11 +99,13 @@
       if (cached && Array.isArray(cached.products)) {
         catalog = cached;
         applyToConfig(cached);
+        refreshDependents();
         return;
       }
     } catch (e) {}
     catalog = defaultCatalog();
     applyToConfig(catalog);
+    refreshDependents();
   }
 
   /* ---------- 保存 ---------- */
