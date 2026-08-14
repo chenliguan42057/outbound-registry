@@ -18,12 +18,16 @@
   var State = window.App.State;
 
   var CLOUD_PATH = "data/batches/initial.json";
+  var NAME_MAP_PATH = "data/batches/name-map.json";   // 吉客云全名 → 前端精简名（2026-08-14）
   var LS_KEY = "outbound_batches_v1";
+  var LS_NAME_MAP_KEY = "outbound_batches_namemap_v1";
   var initial = null;          // {warehouse, unit, importedAt, batches:[]}
+  var fullNameMap = {};        // 全名 → 精简名（保证初始批次与出入库记录可匹配）
   var loaded = false;
 
   var SLUGGISH_DAYS = 180;     // 6 个月（呆滞线）
   var MID_DAYS = 90;           // 3 个月（三档分界）
+  var loadPromise = null;      // 缓存进行中的加载，重复调用返回同一 Promise（幂等且可 await）
 
   /* ---------- 加载 ---------- */
 
@@ -31,23 +35,41 @@
     return window.App.Cloud && window.App.Cloud.hasToken();
   }
 
-  /** 名称归一化：旧名折算到新名（与 Stock 口径一致） */
+  /** 名称归一化：先查 Config.NAME_MAP（旧名→新名），再查全名映射（吉客云全名→精简名） */
   function norm(name) {
+    if (!name) return name;
     var m = Config.NAME_MAP || {};
-    return m[name] || name;
+    if (m[name]) return m[name];
+    if (fullNameMap[name]) return fullNameMap[name];
+    return name;
   }
 
-  /** 读取云端 initial.json；404 返回 null */
-  async function fetchCloud() {
+  /** 读取云端指定 json；404 返回 null */
+  async function fetchCloudJson(path) {
     if (!hasToken()) return null;
     try {
-      var res = await fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + CLOUD_PATH +
+      var res = await fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path +
         "?ref=" + Config.GH.branch, { headers: { "Accept": "application/vnd.github+json",
         "Authorization": "Bearer " + Config.GH.token } });
       if (!res.ok) return null;
       var j = await res.json();
       return JSON.parse(Util.b64dec(j.content));
     } catch (e) { return null; }
+  }
+
+  /** 读取 name-map.json（全名→精简名），失败回落 localStorage/空 */
+  async function loadNameMap() {
+    var cloud = await fetchCloudJson(NAME_MAP_PATH);
+    if (cloud && cloud.nameMap) {
+      fullNameMap = cloud.nameMap;
+      try { localStorage.setItem(LS_NAME_MAP_KEY, JSON.stringify(cloud.nameMap)); } catch (e) {}
+      return;
+    }
+    try {
+      var cached = JSON.parse(localStorage.getItem(LS_NAME_MAP_KEY) || "null");
+      if (cached) { fullNameMap = cached; return; }
+    } catch (e) {}
+    fullNameMap = {};
   }
 
   /** 加载完成后刷新依赖视图（batch.js 加载顺序早于 views/*，延迟到下一个宏任务） */
@@ -59,27 +81,33 @@
     else fire();
   }
 
-  /** 启动加载：云端优先 → localStorage 缓存 → 空台账 */
-  async function load() {
-    if (loaded) return;
-    loaded = true;
-    var cloud = await fetchCloud();
-    if (cloud && Array.isArray(cloud.batches)) {
-      initial = cloud;
-      try { localStorage.setItem(LS_KEY, JSON.stringify(cloud)); } catch (e) {}
-      refreshDependents();
-      return;
-    }
-    try {
-      var cached = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-      if (cached && Array.isArray(cached.batches)) {
-        initial = cached;
+  /** 启动加载：云端优先 → localStorage 缓存 → 空台账。返回 Promise，幂等（重复调用返回同一加载）。 */
+  function load() {
+    if (!loadPromise) {
+      loadPromise = (async function () {
+        if (loaded) return;
+        loaded = true;
+        await loadNameMap();
+        var cloud = await fetchCloudJson(CLOUD_PATH);
+        if (cloud && Array.isArray(cloud.batches)) {
+          initial = cloud;
+          try { localStorage.setItem(LS_KEY, JSON.stringify(cloud)); } catch (e) {}
+          refreshDependents();
+          return;
+        }
+        try {
+          var cached = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+          if (cached && Array.isArray(cached.batches)) {
+            initial = cached;
+            refreshDependents();
+            return;
+          }
+        } catch (e) {}
+        initial = { warehouse: "深圳细胞-时空仓", unit: "件", importedAt: "", batches: [] };
         refreshDependents();
-        return;
-      }
-    } catch (e) {}
-    initial = { warehouse: "深圳细胞-时空仓", unit: "件", importedAt: "", batches: [] };
-    refreshDependents();
+      })();
+    }
+    return loadPromise;
   }
 
   /* ---------- 派生计算 ---------- */
@@ -126,10 +154,10 @@
       map[key] = row;
       return row;
     }
-    // 1) 初始批次快照
+    // 1) 初始批次快照（名称归一为精简名，与出入库记录同口径）
     ((initial && initial.batches) || []).forEach(function (b) {
       upsert({
-        name: b.name, batchNo: b.batchNo, qty: Number(b.qty) || 0,
+        name: norm(b.name), batchNo: b.batchNo, qty: Number(b.qty) || 0,
         unit: (initial && initial.unit) || "件",
         inTime: b.inTime || "", expDate: b.expDate || "", prodDate: b.prodDate || ""
       });
@@ -217,12 +245,18 @@
 
   /* ---------- Excel 行生成（供前端导出 / 周报脚本同构参考） ---------- */
 
-  /** 生成两 sheet 数据行：{ledgerRows, summaryRows}，每行首元素为表头。 */
+  /** 生成两 sheet 数据行：{ledgerRows, summaryRows}，每行首元素为表头。
+      台账行按「产品名 → 入库时间」排序，保证同产品多批次连续（导出时按参考格式合并产品名列）。 */
   function toExcelRows() {
     var wh = (initial && initial.warehouse) || "深圳细胞-时空仓";
     var unit = (initial && initial.unit) || "件";
     var ledgerRows = [[wh, "产品名称", "生产批号", "库存数量", "呆滞预警", "单位", "入库时间", "库龄(天)", "到期时间", "剩余天数"]];
-    getLedger().forEach(function (r) {
+    var sorted = getLedger().slice().sort(function (a, b) {
+      var cmp = String(a.name).localeCompare(String(b.name), "zh-Hans-CN");
+      return (isNaN(cmp) ? (a.name < b.name ? -1 : 1) : cmp) ||
+        String(a.inTime).localeCompare(String(b.inTime));
+    });
+    sorted.forEach(function (r) {
       ledgerRows.push([wh, r.name, r.batchNo, r.qty, r.sluggish, unit, r.inTime, r.ageDays, r.expDate || "", r.expLeftDays]);
     });
     var summaryRows = [[wh, "产品名称", "批号数", "库存总数量", "最早入库时间", "最近到期时间"]];
