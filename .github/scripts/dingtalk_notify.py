@@ -325,6 +325,43 @@ def build_tombstone_markdown(data):
     return md
 
 
+def build_catalog_event_markdown(data):
+    """货品目录事件通知（2026-08-14 增量）。
+
+    由前端 Catalog.pushCatalogEvent 写入 data/catalog/notifications/{ts}.json，
+    内容为 {type, name, unit, stock, warnAt, price, barcode, time}。
+    当前仅处理「product-added」（库存查询页"+ 新增货品"动作）；其他 type 一律忽略返回 None。
+    """
+    if not data:
+        return None
+    kind = str(data.get("type", "") or "")
+    if kind == "product-added":
+        title = "### 🆕 出入库登记 · 新货品已添加"
+        unit = str(data.get("unit", "") or "").strip()
+        stock = data.get("stock", 0)
+        try:
+            stock_str = "{} {}".format(int(stock), unit or "件")
+        except (TypeError, ValueError):
+            stock_str = "{} {}".format(stock, unit or "件")
+        warn = data.get("warnAt", 0)
+        price = data.get("price", 0)
+        time_ms = data.get("time", 0)
+        add_time = fmt_ts(time_ms) if isinstance(time_ms, (int, float)) and time_ms else datetime.now(CST).strftime("%Y-%m-%d %H:%M")
+        fields = [
+            ("货品名称", data.get("name", "") or "-"),
+            ("单位", unit or "-"),
+            ("初始库存", stock_str),
+            ("预警线", "{} 件".format(int(warn)) if isinstance(warn, (int, float)) else "-"),
+            ("单价", "¥{:.2f}".format(float(price)) if isinstance(price, (int, float)) and price else "-"),
+            ("添加时间", add_time),
+        ]
+        md = title
+        md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
+        return md
+    # 预留其它类型：catalog-updated / catalog-deleted 等扩展位
+    return None
+
+
 def build_pickup_new_markdown(data):
     """新增待取货登记通知（标题 → 字段 → 货品明细）。"""
     fields = [
@@ -500,6 +537,11 @@ def main():
                 md = build_memo_update_markdown(data, git_show_old(path))
             else:  # A 新增
                 md = build_memo_new_markdown(data)
+        # 货品目录事件 → 货品目录通知（data/catalog/notifications/ 前缀，2026-08-14 增量）
+        #   文件名形如 <ts>.json，内容为 {type, name, unit, stock, warnAt, price, time, ...}
+        #   由前端 Catalog.pushCatalogEvent 写入（仅在「+ 新增货品」成功时），不涉及 catalog.json 本体变更。
+        elif path.startswith("data/catalog/notifications/"):
+            md = build_catalog_event_markdown(data)
         elif path.startswith("data/deleted/"):
             md = build_tombstone_markdown(data)
         elif action == "M":
