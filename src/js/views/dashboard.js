@@ -77,7 +77,7 @@
           '<div class="chart-card"><h3>🔥 近30天出库热力</h3><div class="chart-scroll" id="dashHeatmap"></div></div>' +
         '</div>' +
         '<div class="grid2">' +
-          '<div class="card"><h2>低库存分布 <span class="tag">&lt;' + Config.LOW_STOCK_THRESHOLD + '</span></h2><div id="dashLowBars"></div></div>' +
+          '<div class="card"><h2>低库存分布 <span class="tag">各货品独立</span></h2><div id="dashLowBars"></div></div>' +
           '<div class="card"><h2>近期活动时序</h2><div id="dashTimeline"></div></div>' +
         '</div>' +
         '<div class="grid2">' +
@@ -85,7 +85,7 @@
           '<div class="card"><h2>🔥 高频货品 <span class="tag">本月</span></h2><div id="dashHot"></div></div>' +
         '</div>' +
         '<div class="grid2">' +
-          '<div class="card"><h2>低库存预警 <span class="tag">&lt;' + Config.LOW_STOCK_THRESHOLD + '</span></h2><div id="dashLow"></div></div>' +
+          '<div class="card"><h2>低库存预警 <span class="tag">各货品独立</span></h2><div id="dashLow"></div></div>' +
           '<div class="card"><h2>最近出库</h2><div id="dashRecent"></div></div>' +
         '</div>' +
       '</div>';
@@ -93,6 +93,12 @@
   }
 
   /* ================= 聚合（单遍 O(n)） ================= */
+
+  /** 单个货品独立预警线（2026-08-14）：用户在目录管理里设的 warnAt；缺省时回退全局 LOW_STOCK_THRESHOLD */
+  function getWarnAt(name) {
+    var w = Number((Config.WARN_AT || {})[name]);
+    return (!isNaN(w) && w >= 0) ? w : Config.LOW_STOCK_THRESHOLD;
+  }
 
   /** 类目归组：summary → {类目: 库存合计}；未命中兜底「其他」；全 0 类目剔除 */
   function catAggregate(summary, map) {
@@ -119,7 +125,7 @@
   function aggregate(list) {
     list = list || State.list;
     var summary = Stock.summarize(list);
-    var low = summary.filter(function (s) { return s.stock < Config.LOW_STOCK_THRESHOLD; })
+    var low = summary.filter(function (s) { return s.stock < getWarnAt(s.name); })
       .sort(function (a, b) { return a.stock - b.stock; });
     var totalOut = 0, totalIn = 0, todayOut = 0, todayIn = 0;
     var todayActive = {};
@@ -336,7 +342,7 @@
 
   function renderLow() {
     var low = Stock.summarize()
-      .filter(function (s) { return s.stock < Config.LOW_STOCK_THRESHOLD; })
+      .filter(function (s) { return s.stock < getWarnAt(s.name); })
       .sort(function (a, b) { return a.stock - b.stock; })
       .slice(0, 8);
     var html = low.map(function (s) {
