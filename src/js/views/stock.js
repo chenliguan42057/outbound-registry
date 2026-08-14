@@ -32,6 +32,7 @@
           '<input type="text" id="stockSearch" class="search" placeholder="搜索货品名称…" autocomplete="off" />' +
         '</div>' +
         '<div class="actions" style="margin:-6px 0 14px">' +
+          '<button type="button" class="btn sm" id="stockAddBtn">＋ 新增货品</button>' +
           '<button type="button" class="btn ghost sm" id="stockCatalogBtn">📋 货品目录</button>' +
           '<button type="button" class="btn ghost sm" id="stockTakeBtn">📊 盘点平账</button>' +
         '</div>' +
@@ -64,6 +65,7 @@
       else Util.toast("目录模块未加载", true);
     });
     Util.$("stockTakeBtn").addEventListener("click", openStocktake);
+    Util.$("stockAddBtn").addEventListener("click", openQuickAdd);
     wireHistory();
     renderTable();
     renderRank();
@@ -347,6 +349,83 @@
       refresh();
       try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
       try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
+    });
+  }
+
+  /* ================= ＋ 新增货品（2026-08-14） =================
+     在库存查询页提供「+ 新增货品」按钮 → 弹窗填名称/单位/初始库存/预警线/单价/条码
+     → Catalog.quickAdd() 写入云端 catalog.json → 全站生效 → 钉钉推送"新货品已添加"通知。
+     与 Catalog.openManager 全功能编辑（增删改）并存：openManager 给管理员维护用，
+     本弹窗只做"快速新增一条"，覆盖高频轻量场景。 */
+  function openQuickAdd() {
+    var body =
+      '<div class="hint" style="margin-bottom:10px">新增货品并设置初始库存；保存后立即在出库登记、落地页登记表、库存表中可见，并推送钉钉群通知。</div>' +
+      '<div class="field"><label for="qaName">货品名称<span class="req">*</span></label>' +
+      '<input type="text" id="qaName" maxlength="60" autocomplete="off" placeholder="例：神仙水 150ml" /></div>' +
+      '<div class="grid2">' +
+        '<div class="field"><label for="qaUnit">单位</label>' +
+        '<input type="text" id="qaUnit" maxlength="10" placeholder="盒/支/瓶/箱" autocomplete="off" /></div>' +
+        '<div class="field"><label for="qaStock">初始库存<span class="req">*</span></label>' +
+        '<input type="number" id="qaStock" min="0" step="any" value="0" inputmode="decimal" /></div>' +
+      '</div>' +
+      '<div class="grid2">' +
+        '<div class="field"><label for="qaWarn">预警线（低于即标红）</label>' +
+        '<input type="number" id="qaWarn" min="0" step="any" value="' + Config.LOW_STOCK_THRESHOLD + '" inputmode="decimal" /></div>' +
+        '<div class="field"><label for="qaPrice">单价（元，可选）</label>' +
+        '<input type="number" id="qaPrice" min="0" step="0.01" value="0" inputmode="decimal" /></div>' +
+      '</div>' +
+      '<div class="field"><label for="qaBarcode">条码（可选）</label>' +
+      '<input type="text" id="qaBarcode" maxlength="40" autocomplete="off" /></div>' +
+      '<div class="modal-actions" style="margin-top:14px">' +
+        '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+        '<button type="button" class="btn sm" id="qaSave">保存并通知钉钉</button>' +
+      '</div>';
+    UI.Modal.show("＋ 新增货品", body, { width: "560px" });
+    var mBody = UI.Modal.body();
+    mBody.querySelector('[data-act="cancel"]').addEventListener('click', function () { UI.Modal.hide(); });
+    setTimeout(function () { try { mBody.querySelector('#qaName').focus(); } catch (e) {} }, 50);
+
+    // Enter 在 qaSave 之外触发表单提交（点 qaSave 同理）
+    var saveBtn = mBody.querySelector('#qaSave');
+    saveBtn.addEventListener('click', async function () {
+      var btn = saveBtn;
+      if (btn.dataset.busy === '1') return;
+      btn.dataset.busy = '1';
+      btn.disabled = true;
+      try {
+        var name = (mBody.querySelector('#qaName').value || '').trim();
+        var unit = (mBody.querySelector('#qaUnit').value || '').trim();
+        var stock = Number(mBody.querySelector('#qaStock').value) || 0;
+        var warn = Number(mBody.querySelector('#qaWarn').value) || Config.LOW_STOCK_THRESHOLD;
+        var price = Number(mBody.querySelector('#qaPrice').value) || 0;
+        var barcode = (mBody.querySelector('#qaBarcode').value || '').trim();
+
+        if (!name) { Util.toast('请填写货品名称', true); try { mBody.querySelector('#qaName').focus(); } catch (e) {} return; }
+        if ((Config.PRODUCTS || []).indexOf(name) !== -1) { Util.toast('该货品已存在，请改用其他名称', true); try { mBody.querySelector('#qaName').focus(); } catch (e) {} return; }
+
+        var ok = await UI.confirmDialog(
+          '新增货品「' + Util.esc(name) + '」（初始库存 ' + stock + ' ' + (unit || '件') + '），保存后立即全站生效并推送钉钉通知。确认？',
+          '确认新增');
+        if (!ok) return;
+        UI.Modal.hide();
+
+        if (!window.App.Catalog || !window.App.Catalog.quickAdd) {
+          Util.toast('目录模块未加载，无法新增', true); return;
+        }
+        var result = await window.App.Catalog.quickAdd({
+          name: name, unit: unit, stock: stock,
+          warnAt: warn, price: price, barcode: barcode
+        });
+        if (!result.ok) { Util.toast(result.msg || '保存失败', true); return; }
+
+        Util.toast(result.msg || ('已添加「' + name + '」'));
+        refresh();
+        try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
+        try { if (window.App.Views.report && window.App.Views.report.refresh) window.App.Views.report.refresh(); } catch (e) {}
+      } finally {
+        btn.dataset.busy = '0';
+        btn.disabled = false;
+      }
     });
   }
 
