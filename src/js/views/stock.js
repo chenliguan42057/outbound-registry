@@ -83,23 +83,29 @@
     return s.length > n ? s.slice(0, n) + "…" : s;
   }
 
+  /** 单个货品独立预警线（2026-08-14）：用户在目录管理里设的 warnAt；缺省时回退全局 LOW_STOCK_THRESHOLD */
+  function getWarnAt(name) {
+    var w = Number((Config.WARN_AT || {})[name]);
+    return (!isNaN(w) && w >= 0) ? w : Config.LOW_STOCK_THRESHOLD;
+  }
+
   function renderTable() {
     if (!tableBox) return;
     var summary = Stock.summarize();
     var rows = summary.filter(function (s) { return q === "" || s.name.toLowerCase().includes(q); });
-    var lowCount = summary.filter(function (s) { return s.stock < Config.LOW_STOCK_THRESHOLD; }).length;
+    var lowCount = summary.filter(function (s) { return s.stock < getWarnAt(s.name); }).length;
     Util.$("stockSummary").innerHTML =
       '<span class="badge">货品总数 ' + summary.length + '</span> ' +
-      '<span class="badge low">低库存（&lt;' + Config.LOW_STOCK_THRESHOLD + '）' + lowCount + ' 项</span>';
-    // 低库存醒目 banner（体验优化 4d，2026-08-10）
+      '<span class="badge low">低库存 ' + lowCount + ' 项</span>';
+    // 低库存醒目 banner：每个货品显示「剩余/预警线」，不再用统一阈值
     var banner = Util.$("stockLowBanner");
     if (banner) {
-      var lowItems = summary.filter(function (s) { return s.stock < Config.LOW_STOCK_THRESHOLD; })
-        .map(function (s) { return Util.esc(s.name) + "(" + s.stock + ")"; });
+      var lowItems = summary.filter(function (s) { return s.stock < getWarnAt(s.name); })
+        .map(function (s) { return Util.esc(s.name) + "(剩" + s.stock + "/预警" + getWarnAt(s.name) + ")"; });
       if (lowItems.length) {
         banner.style.display = "block";
         banner.innerHTML = '<div class="stock-low-banner" style="margin:0 0 12px;padding:10px 14px;border:1px solid #f5c6c0;border-radius:10px;background:#fff1f0;color:#a8071a;font-size:13.5px;line-height:1.7">' +
-          '⚠️ <b>低库存预警（低于 ' + Config.LOW_STOCK_THRESHOLD + ' 件）：</b>' + lowItems.join("、") +
+          '⚠️ <b>低库存预警：</b>' + lowItems.join("、") +
           '</div>';
       } else {
         banner.style.display = "none";
@@ -113,7 +119,7 @@
       '<th>货品名称</th><th>当前库存</th><th>累计入库</th><th>累计出库</th><th>状态</th><th></th>' +
       '</tr></thead><tbody>';
     rows.forEach(function (s) {
-      var low = s.stock < Config.LOW_STOCK_THRESHOLD;
+      var low = s.stock < getWarnAt(s.name);
       html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + Util.esc(s.name) + '</td>' +
         '<td class="stock-num" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
@@ -167,7 +173,7 @@
       '<th>排名</th><th>货品名称</th><th>当前库存</th><th>状态</th><th></th>' +
       '</tr></thead><tbody>';
     arr.forEach(function (s, i) {
-      var low = s.stock < Config.LOW_STOCK_THRESHOLD;
+      var low = s.stock < getWarnAt(s.name);
       html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + (i + 1) + '</td>' +
         '<td>' + Util.esc(s.name) + '</td>' +
