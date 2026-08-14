@@ -143,7 +143,7 @@
       return;
     }
     var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
-      '<th>序号</th><th>时间</th><th>领取人</th><th>部门</th><th>货品明细（借出｜已还｜剩余）</th><th>状态</th><th>操作</th>' +
+      '<th>序号</th><th>时间</th><th>领取人</th><th>部门</th><th>货品明细（借出｜已还｜剩余）</th><th>备注</th><th>状态</th><th>操作</th>' +
       '</tr></thead><tbody>';
     shown.forEach(function (r, i) {
       var ret = returnedMap(r);
@@ -153,12 +153,18 @@
         var rem = Math.max(0, out - back);
         return '<div class="item-line">' + Util.esc(it.name) + '：借出' + out + '｜已还' + back + '｜剩余' + rem + '</div>';
       }).join("");
+      // 备注列：超长截断（>24 字加省略号），鼠标悬停看完整；空时显示「-」
+      var noteRaw = String(r.note || '').trim();
+      var noteShort = noteRaw
+        ? (noteRaw.length > 24 ? noteRaw.slice(0, 24) + '…' : noteRaw)
+        : '-';
       html += '<tr>' +
         '<td><div>' + (shown.length - i) + '</div></td>' +
         '<td>' + Util.esc(r.time || "-") + '</td>' +
         '<td>' + Util.esc(r.picker || "-") + '</td>' +
         '<td>' + Util.esc(r.dept || "-") + '</td>' +
         '<td class="items-cell">' + lines + '</td>' +
+        '<td class="note-cell" title="' + Util.esc(noteRaw || '无备注') + '" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + Util.esc(noteShort) + '</td>' +
         '<td>' + (isDone(r)
           ? '<span class="status-pill submitted static"><span class="dot"></span>已完成</span>'
           : '<span class="status-pill pending static"><span class="dot"></span>借出中</span>') + '</td>' +
@@ -207,6 +213,10 @@
       '<div class="table-wrap"><table class="table"><thead><tr>' +
       '<th style="width:34px;"><input type="checkbox" id="borrowAll" /></th><th>序号</th><th>时间</th><th>领取人</th><th>状态</th><th>部门</th><th>货品</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="field" style="margin-top:14px">' +
+        '<label for="borrowNoteInput">借出备注（选填，用于特殊情况说明，如：暂借5天/下周还等）</label>' +
+        '<textarea id="borrowNoteInput" rows="2" maxlength="200" placeholder="例：暂借5天，预计 8/20 归还；或：先领用，待审批后补单" autocomplete="off" enterkeyhint="enter"></textarea>' +
+      '</div>' +
       '<div class="modal-actions"><button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
       '<button type="button" class="btn sm" data-act="ok">确认借出</button></div>';
     UI.Modal.show("选择要转入先借后还的出库记录（未提单优先）", body, { width: "720px" });
@@ -221,6 +231,7 @@
       try {
         var ids = Array.from(mBody.querySelectorAll(".borrow-check")).filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
         if (!ids.length) { Util.toast("请至少勾选一条记录", true); return; }
+        var borrowNote = (mBody.querySelector('#borrowNoteInput').value || '').trim();
         var ok = await UI.confirmDialog("将所选 " + ids.length + " 条记录转入先借后还？\n转入后将从出库记录页隐藏，库存扣减保留。", "确认借出");
         if (!ok) return;
         UI.Modal.hide();
@@ -228,6 +239,13 @@
         for (var i = 0; i < ids.length; i++) {
           var rec = Records.update(ids[i], { borrowed: true });
           if (rec) {
+            // 借出备注非空时：附加到原 note（保留原备注，不覆盖；空则用「借出备注：xxx」起头）
+            if (borrowNote) {
+              var oldNote = String(rec.note || '').trim();
+              var newNote = oldNote ? (oldNote + '；借出备注：' + borrowNote) : ('借出备注：' + borrowNote);
+              var updated = Records.update(ids[i], { note: newNote });
+              if (updated) rec = updated;
+            }
             if (Cloud.hasToken()) {
               try { await Cloud.pushRecord(rec); } catch (e) { fail++; }
             }
