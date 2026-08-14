@@ -21,6 +21,7 @@
     n: { hash: "/app/in-records", label: "入库记录" },
     r: { hash: "/app/report", label: "报表" },
     b: { hash: "/app/borrow", label: "先借后还" },
+    z: { hash: "/app/batch", label: "呆滞管理" },
     m: { hash: "/app/memos", label: "备忘录" },
     a: { hash: "/app/ai", label: "AI 助手" },
     y: { hash: "/app/sync", label: "云端同步" }
@@ -61,7 +62,7 @@
   }
   function showGoHint() {
     var el = ensureHint();
-    el.textContent = "g + 字母跳转：d 仪表盘 · s 库存 · i 入库 · p 待取货 · o 出库记录 · n 入库记录 · r 报表 · b 借用 · m 备忘录 · a AI · y 同步 · l 落地页";
+    el.textContent = "g + 字母跳转：d 仪表盘 · s 库存 · i 入库 · p 待取货 · o 出库记录 · n 入库记录 · r 报表 · b 借用 · z 呆滞 · m 备忘录 · a AI · y 同步 · l 落地页";
     el.style.opacity = "1";
     el.style.transform = "translateX(-50%) translateY(0)";
   }
@@ -84,7 +85,7 @@
           Util.esc(r[0]) + '</td><td>' + Util.esc(r[1]) + '</td></tr>';
       }).join("") +
       '</table>' +
-      '<div class="hint" style="margin-top:10px;color:var(--ink-500,#74837E)">g+字母：d 仪表盘 · s 库存 · i 入库 · p 待取货 · o 出库记录 · n 入库记录 · r 报表 · b 借用 · m 备忘录 · a AI · y 同步 · l 落地页</div>';
+      '<div class="hint" style="margin-top:10px;color:var(--ink-500,#74837E)">g+字母：d 仪表盘 · s 库存 · i 入库 · p 待取货 · o 出库记录 · n 入库记录 · r 报表 · b 借用 · z 呆滞 · m 备忘录 · a AI · y 同步 · l 落地页</div>';
     window.App.UI.Modal.show("⌨️ 快捷键", html, { width: "400px" });
   }
 
