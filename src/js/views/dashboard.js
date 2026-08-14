@@ -15,9 +15,59 @@
   var Stock = window.App.Stock;
 
   var container = null;
+  var activeTab = "main";   // "main" 仪表盘 | "report" 报表统计（合并入仪表盘内的 tab，2026-08-14）
 
   function render(el) {
     container = el;
+    el.innerHTML =
+      '<div class="card" style="padding:14px 18px">' +
+        '<div class="actions" style="margin-bottom:0;gap:8px">' +
+          '<button type="button" class="btn sm active dash-tab" data-tab="main">📊 仪表盘</button>' +
+          '<button type="button" class="btn ghost sm dash-tab" data-tab="report">📈 报表统计</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="dashTabBody"></div>';
+    // tab 切换
+    el.querySelectorAll('.dash-tab').forEach(function (b) {
+      b.addEventListener('click', function () {
+        activeTab = b.getAttribute('data-tab');
+        el.querySelectorAll('.dash-tab').forEach(function (x) {
+          x.classList.toggle('active', x === b);
+        });
+        renderTab();
+      });
+    });
+    renderTab();
+  }
+
+  /** 仪表盘 / 报表统计 tab 分发。报表统计调用 Views.report.render；refresh() 同步联动。 */
+  function renderTab() {
+    var body = container ? container.querySelector('#dashTabBody') : null;
+    if (!body) return;
+    body.innerHTML = '';
+    if (activeTab === 'report') {
+      if (window.App.Views.report && window.App.Views.report.render) {
+        window.App.Views.report.render(body);
+      } else {
+        body.innerHTML = '<div class="empty">报表模块未加载</div>';
+      }
+      return;
+    }
+    renderMain(body);
+  }
+
+  /** 云端同步后刷新：按当前 tab 分发——仪表盘走自己的 renderAll；报表统计走 Views.report.refresh（保持筛选状态） */
+  function refresh() {
+    if (!container) return;
+    if (activeTab === 'report' && window.App.Views.report && window.App.Views.report.refresh) {
+      window.App.Views.report.refresh();
+      return;
+    }
+    renderTab();
+  }
+
+  /** 仪表盘主视图（KPI 卡 + 4 图表 + 业绩榜 / 高频 / 低库存 / 最近出库），渲染到传入容器 */
+  function renderMain(el) {
     el.innerHTML =
       '<div class="dash-page">' +
         '<div class="dash-cards" id="dashCards"></div>' +
@@ -39,12 +89,6 @@
           '<div class="card"><h2>最近出库</h2><div id="dashRecent"></div></div>' +
         '</div>' +
       '</div>';
-    renderAll();
-  }
-
-  /** 云端同步后刷新：整体重建（聚合单遍 O(n) + 常量级 DOM 输出） */
-  function refresh() {
-    if (!container) return;
     renderAll();
   }
 
