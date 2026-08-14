@@ -215,10 +215,11 @@
    */
   function ProductPicker(opts) {
     opts = opts || {};
-    this.selected = [];               // [{name, qty}]
+    this.selected = [];               // [{name, qty, batchNo?, prodDate?, expDate?}]
     this.showStock = opts.showStock !== false;
     this.showInStock = !!opts.showInStock;
     this.placeholder = opts.placeholder || "搜索并选择货品（可多选，每个单独填数量）";
+    this.batchFields = opts.batchFields || null;   // 批次字段数组，如 ["batchNo","prodDate","expDate"]；开启则每行渲染批次输入
     this.onChange = opts.onChange || null;
     this.container = null;
     this.searchEl = null;
@@ -308,6 +309,13 @@
       if (inp) {
         self.selected[Number(inp.getAttribute("data-i"))].qty = inp.value;
         self.emit();
+        return;
+      }
+      // 批次字段输入（生产批号/生产日期/到期时间）：实时写回 selected
+      var bin = e.target.closest(".batch-in");
+      if (bin) {
+        self.selected[Number(bin.getAttribute("data-i"))][bin.getAttribute("data-f")] = bin.value;
+        self.emit();
       }
     });
     this.render();
@@ -361,12 +369,30 @@
 
   ProductPicker.prototype.addProduct = function (name) {
     if (this.selected.some(function (s) { return s.name === name; })) return;
-    this.selected.push({ name: name, qty: 1 });
+    var it = { name: name, qty: 1 };
+    if (this.batchFields) { it.batchNo = ""; it.prodDate = ""; it.expDate = ""; }
+    this.selected.push(it);
     this.searchEl.value = "";
     this.suggestEl.style.display = "none";
     this.render();
     this.emit();
   };
+
+  /** 每行批次输入区 HTML（batchFields 开启时追加在数量步进器之后，换行占整行） */
+  function batchFieldsHtml(self, it, i) {
+    var labels = { batchNo: "生产批号", prodDate: "生产日期", expDate: "到期时间" };
+    var html = '<div style="flex:1 0 100%;display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:6px;margin-top:6px" class="batch-fields">';
+    self.batchFields.forEach(function (f) {
+      var isDate = f === "prodDate" || f === "expDate";
+      var ph = labels[f] || f;
+      html += '<input type="' + (isDate ? "date" : "text") + '" class="batch-in" data-i="' + i + '" data-f="' + f + '"' +
+        ' placeholder="' + ph + '"' + ' title="' + ph + '"' +
+        ' value="' + Util.esc(it[f] || "") + '"' +
+        ' style="min-width:0;padding:7px 8px;font-size:12.5px;border:1px solid var(--input-line,#C6DAD1);border-radius:8px;background:var(--input-bg,#FBFCFA)"' +
+        ' aria-label="' + ph + '" />';
+    });
+    return html + '</div>';
+  }
 
   ProductPicker.prototype.render = function () {
     var self = this;
@@ -374,7 +400,7 @@
     this.selected.forEach(function (it, i) {
       var row = document.createElement("div");
       row.className = "sel-item";
-      // 库存展示已隐藏，避免挤占货品名称完整显示空间
+      row.style.flexWrap = "wrap";   // 批次输入区换行占整行
       row.innerHTML =
         '<span class="name">' + Util.esc(it.name) + '</span>' +
         '<div class="qty-stepper">' +
@@ -382,20 +408,30 @@
           '<input type="number" min="0" max="999999" step="any" inputmode="decimal" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 数量" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
           '<button type="button" class="qty-btn" data-act="inc" data-i="' + i + '" aria-label="增加">+</button>' +
         '</div>' +
-        '<span class="x" data-i="' + i + '">&times;</span>';
+        '<span class="x" data-i="' + i + '">&times;</span>' +
+        (self.batchFields ? batchFieldsHtml(self, it, i) : "");
       self.listEl.appendChild(row);
     });
     this.hintEl.textContent = this.selected.length
-      ? "已选 " + this.selected.length + " 项货品，请逐项确认数量。"
+      ? (this.batchFields ? "已选 " + this.selected.length + " 项，请逐项确认数量并填写批号/生产日期/到期时间。" : "已选 " + this.selected.length + " 项货品，请逐项确认数量。")
       : "尚未选择货品，请在上方搜索并选择。";
   };
 
-  /** 获取有效货品 [{name, qty}]（qty >= MIN_QTY 且 <= MAX_QTY，过滤掉 0.0001 这类误填） */
+  /** 获取有效货品 [{name, qty, batchNo?, prodDate?, expDate?}]（qty >= MIN_QTY 且 <= MAX_QTY，过滤掉 0.0001 这类误填） */
   ProductPicker.MIN_QTY = 0.001;
   ProductPicker.MAX_QTY = 999999;
   ProductPicker.prototype.getItems = function () {
+    var self = this;
     return this.selected
-      .map(function (s) { return { name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }; })
+      .map(function (s) {
+        var o = { name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) };
+        if (self.batchFields) {
+          o.batchNo = s.batchNo || "";
+          o.prodDate = s.prodDate || "";
+          o.expDate = s.expDate || "";
+        }
+        return o;
+      })
       .filter(function (s) {
         return s.name && isFinite(s.qty)
           && s.qty >= ProductPicker.MIN_QTY && s.qty <= ProductPicker.MAX_QTY;
@@ -415,7 +451,16 @@
   };
 
   ProductPicker.prototype.setSelected = function (arr) {
-    this.selected = (arr || []).map(function (it) { return { name: it.name, qty: it.qty }; });
+    var self = this;
+    this.selected = (arr || []).map(function (it) {
+      var o = { name: it.name, qty: it.qty };
+      if (self.batchFields) {
+        o.batchNo = it.batchNo || "";
+        o.prodDate = it.prodDate || "";
+        o.expDate = it.expDate || "";
+      }
+      return o;
+    });
     this.render();
   };
 
