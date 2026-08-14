@@ -106,6 +106,12 @@
     });
   }
 
+  /** 单个货品独立预警线（2026-08-14）：用户在目录管理里设的 warnAt；缺省时回退全局 LOW_STOCK_THRESHOLD */
+  function getWarnAt(name) {
+    var w = Number((Config.WARN_AT || {})[name]);
+    return (!isNaN(w) && w >= 0) ? w : Config.LOW_STOCK_THRESHOLD;
+  }
+
   /** 预设快捷范围：本周/本月/全部 */
   function applyPreset(kind) {
     var now = new Date();
@@ -145,7 +151,7 @@
       var q = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
       if (r.type === "in") totalIn += q; else totalOut += q;
     });
-    var lowCount = summary.filter(function (s) { return s.stock < Config.LOW_STOCK_THRESHOLD; }).length;
+    var lowCount = summary.filter(function (s) { return s.stock < getWarnAt(s.name); }).length;
     var cards = [
       { label: "区间出库数量", value: totalOut, icon: "out" },
       { label: "区间入库数量", value: totalIn, icon: "in" },
