@@ -21,6 +21,7 @@
       '<div class="card">' +
         '<h2>呆滞管理 <span class="tag">批次台账</span></h2>' +
         '<div class="actions" style="margin-bottom:10px">' +
+          '<button type="button" class="btn sm" id="batchExport">&#128229; 导出 xlsx</button>' +
           '<button type="button" class="btn ghost sm" id="batchSync">&#128260; 立即同步</button>' +
         '</div>' +
         '<div class="dash-cards" id="batchKpi"></div>' +
@@ -33,8 +34,48 @@
         '<h2>产品维度汇总</h2>' +
         '<div id="batchSummaryBox"></div>' +
       '</div>';
+    Util.$("batchExport").addEventListener("click", exportExcel);
     Util.$("batchSync").addEventListener("click", doSync);
     renderAll();
+  }
+
+  /** 导出 xlsx（SheetJS，格式与吉客云参考文件一致：两 sheet + 产品名合并单元格） */
+  function exportExcel() {
+    if (!window.XLSX || !window.XLSX.utils) { Util.toast("导出组件未加载，请刷新页面重试", true); return; }
+    if (!window.App.Batch) { Util.toast("批次模块未加载", true); return; }
+    var rows = window.App.Batch.toExcelRows();
+    var XLSX = window.XLSX;
+    var wb = XLSX.utils.book_new();
+    // Sheet1 库存台账（10 列，产品名列合并）
+    var ws1 = XLSX.utils.aoa_to_sheet(rows.ledgerRows);
+    applyMerges(ws1, rows.ledgerRows, 1);
+    ws1["!cols"] = [{ wch: 16 }, { wch: 34 }, { wch: 20 }, { wch: 9 }, { wch: 10 }, { wch: 6 }, { wch: 20 }, { wch: 9 }, { wch: 20 }, { wch: 9 }];
+    XLSX.utils.book_append_sheet(wb, ws1, "库存台账");
+    // Sheet2 产品维度汇总（6 列）
+    var ws2 = XLSX.utils.aoa_to_sheet(rows.summaryRows);
+    ws2["!cols"] = [{ wch: 16 }, { wch: 34 }, { wch: 8 }, { wch: 12 }, { wch: 20 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "产品维度汇总");
+    var d = new Date();
+    var ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
+    XLSX.writeFile(wb, "产品批号库存库龄汇总_深圳细胞时空仓_" + ymd + ".xlsx");
+    Util.toast("已导出「产品批号库存库龄汇总_深圳细胞时空仓_" + ymd + ".xlsx」");
+  }
+
+  /** 合并产品名列（colIdx）：同产品连续行合并、只在首行显示（参考吉客云导出格式） */
+  function applyMerges(ws, rows, colIdx) {
+    var merges = [];
+    var segStart = 1;   // 跳过表头（rows[0]）
+    for (var i = 1; i <= rows.length; i++) {
+      var cur = i < rows.length ? rows[i][colIdx] : null;
+      var prev = i > 1 ? rows[i - 1][colIdx] : null;
+      if (i === rows.length || cur !== prev) {
+        if (i - 1 > segStart) {
+          merges.push({ s: { r: segStart, c: colIdx }, e: { r: i - 1, c: colIdx } });
+        }
+        segStart = i;
+      }
+    }
+    if (merges.length) ws["!merges"] = merges;
   }
 
   /** 云端同步后刷新：整体重建 */
