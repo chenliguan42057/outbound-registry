@@ -22,7 +22,6 @@
     { id: "pickups", icon: "box", label: "待取货" },
     { id: "out-records", icon: "records", label: "出库记录" },
     { id: "in-records", icon: "records", label: "入库记录" },
-    { id: "report", icon: "report", label: "报表统计" },
     { id: "borrow", icon: "box", label: "先借后还" },
     { id: "memos", icon: "edit", label: "备忘录" },
     { id: "trash", icon: "box", label: "回收站" },
