@@ -497,14 +497,6 @@
 
     setSubmitting(true);
     var wasEditing = !!editingId;
-    // FIFO 批次分配（2026-08-14）：出库时按批次早（入库时间 asc）/生产时间早（prodDate asc）自动扣减，
-    // 把实际扣减的批次明细（batchAlloc）记入 items，供呆滞管理台账追溯；无批次/批次不足退化为普通扣减。
-    if (window.App.Batch && window.App.Batch.allocate) {
-      items.forEach(function (it) {
-        var alloc = window.App.Batch.allocate(it.name, it.qty);
-        if (alloc.length) it.batchAlloc = alloc;
-      });
-    }
     // 照片去重后再入库：同一张照片重复选中/重复压缩只保留一份（P4 防重复上传）
     var photoList = dedupePhotos(photos.getPhotos());
     if (photos.getPhotos().length !== photoList.length) {
