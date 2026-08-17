@@ -44,7 +44,7 @@
       '<div class="card">' +
         '<h2>出库登记 <span class="tag">基础登记</span></h2>' +
         '<div class="field">' +
-          '<span class="field-label" id="outEntityLabel">结算法人单位<span class="req">*</span></span>' +
+          '<span class="field-label" id="outEntityLabel">结算法人单位（已默认选择深圳细胞）<span class="req">*</span></span>' +
           '<div id="outEntityChips" class="chip-group" role="group" aria-labelledby="outEntityLabel"></div>' +
           '<div class="purpose-add-row">' +
             '<button type="button" class="chip-add" id="outEntityAdd">+ 添加</button>' +
@@ -69,9 +69,9 @@
             '<div class="hint"><span class="auto" id="outFillNow">📎 自动填入当前时间</span></div>' +
           '</div>' +
           '<div class="field">' +
-            '<label for="outPicker">领取人 / 工号 / 手机<span class="req">*</span></label>' +
+            '<label for="outPicker">领取人+工号/电话<span class="req">*</span></label>' +
             '<div class="search-wrap">' +
-              '<input type="text" id="outPicker" placeholder="请输入领取人姓名、工号或手机" autocomplete="name" inputmode="text" enterkeyhint="next" />' +
+              '<input type="text" id="outPicker" placeholder="请输入领取人姓名+工号或手机" autocomplete="name" inputmode="text" enterkeyhint="next" />' +
               '<div class="suggest" id="outPickerSuggest"></div>' +
             '</div>' +
           '</div>' +
