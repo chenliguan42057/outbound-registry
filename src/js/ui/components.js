@@ -361,7 +361,8 @@
 
   ProductPicker.prototype.addProduct = function (name) {
     if (this.selected.some(function (s) { return s.name === name; })) return;
-    this.selected.push({ name: name, qty: 1 });
+    // 新选的货品插到最前面，最后选的永远在第一位显示
+    this.selected.unshift({ name: name, qty: 1 });
     this.searchEl.value = "";
     this.suggestEl.style.display = "none";
     this.render();
