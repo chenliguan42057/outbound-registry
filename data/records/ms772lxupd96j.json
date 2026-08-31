@@ -1,1 +1,1 @@
-{"id":"ms772lxupd96j","time":"2026-07-30T15:30","type":"in","items":[{"name":"洁面慕斯 150ml","qty":4,"stock":89},{"name":"洁面慕斯 50ml","qty":1,"stock":78},{"name":"舒缓精粹水 30ml","qty":1,"stock":53}],"_ts":1785396657810,"affectsStock":true}
+{"id": "ms772lxupd96j", "time": "2026-07-30T15:30", "type": "in", "items": [{"name": "洁面慕斯 150ml", "qty": 4, "stock": 89}, {"name": "洁面慕斯 50ml", "qty": 1, "stock": 78}, {"name": "舒缓精粹水 30ml", "qty": 1, "stock": 53}], "_ts": 1785396657810, "affectsStock": false, "updatedAt": 1785396657810}

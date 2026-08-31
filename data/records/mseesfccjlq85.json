@@ -1,1 +1,1 @@
-{"id":"mseesfccjlq85","_ts":1785833678786,"affectsStock":true,"items":[{"name":"舒缓精粹霜 50g","qty":4,"stock":57}],"photos":[],"time":"2026-08-04T16:40","picker":"黄莹","dept":"华大细胞 谢志奇","purpose":"归还货品","status":"submitted"}
+{"id": "mseesfccjlq85", "_ts": 1785833678786, "affectsStock": false, "items": [{"name": "舒缓精粹霜 50g", "qty": 4, "stock": 57}], "photos": [], "time": "2026-08-04T16:40", "picker": "黄莹", "dept": "华大细胞 谢志奇", "purpose": "归还货品", "status": "submitted", "updatedAt": 1785833678786}
