@@ -321,6 +321,15 @@ def process_record(rec, synced):
         log("⏭ 跳过先借后还差额单 %s（不进金山台账，避免重复扣减）" % rid)
         return 0, 0
 
+    # 库存盘点平账产生的调整记录不进金山台账（盘盈→入库、盘亏→出库，两种都跳过）。
+    # 盘点只是把账面库存校准到实际清点值，并非真实的采购入库或领用出库；
+    # 记进金山会让台账凭空多出一笔货物流动，与真实业务流水对不上。
+    # 识别特征：purpose 固定为「盘点调整」（stock.js openStocktake 生成，picker/dept 同为「盘点」）。
+    if (rec.get("purpose") or "").strip() == "盘点调整":
+        synced[rid] = {"skip": 1, "reason": "stocktake", "at": now_iso()}
+        log("⏭ 跳过盘点调整记录 %s（盘盈/盘亏不进金山台账）" % rid)
+        return 0, 0
+
     by_sheet, skipped = collect_jobs(rec)
     if not by_sheet:
         # 没有可同步的鹿茸商品（例如只领了手提袋），也要标记，
