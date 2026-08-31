@@ -57,12 +57,21 @@
   }
 
   /** 更新记录：保留原 _ts（创建时间——库存时序推算依赖，不能刷新），
-      改用 updatedAt 跟踪最后编辑时间；affectsStock 恒为 true。
+      改用 updatedAt 跟踪最后编辑时间。
+      P1 修复：affectsStock 保留原值（仅 patch 显式指定时才覆盖），不再恒写 true。
+      旧逻辑会造成两类库存错账：
+        1) 先借后还差额单创建时为 false（借出原单已扣过，不能重复扣），
+           用户在出库记录页点一下「已提单」→ 被改成 true → 这笔差额又扣一次，库存凭空变少；
+        2) 无 affectsStock 的旧记录（数量已含在 INVENTORY 基准里）一被编辑就被纳入实时计算 → 重复计入。
       仅当 patch 自带新 items 数组时重打库存快照；status/photoUrls 等非货品更新保留原快照。 */
   function update(id, patch) {
     var idx = State.list.findIndex(function (r) { return r.id === id; });
     if (idx < 0) return null;
-    var rec = Object.assign({}, State.list[idx], patch, { updatedAt: Date.now(), affectsStock: true });
+    var prev = State.list[idx];
+    var nextAffects = (patch && Object.prototype.hasOwnProperty.call(patch, "affectsStock"))
+      ? patch.affectsStock
+      : prev.affectsStock;
+    var rec = Object.assign({}, prev, patch, { updatedAt: Date.now(), affectsStock: nextAffects });
     State.list[idx] = rec;
     if (patch && Object.prototype.hasOwnProperty.call(patch, "items")) {
       if (window.App.Stock) window.App.Stock.markDirty();

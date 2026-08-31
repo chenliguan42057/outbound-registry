@@ -171,10 +171,18 @@
     submitPush(rec, wasEditing)["catch"](function () {})["finally"](function () { setSubmitting(false); });
   }
 
-  /** 异步推送：先写回 photoUrls，再推记录，确保通知含图 */
+  /** 异步推送：先写回 photoUrls，再推记录，确保通知含图。
+      P1 修复（与 out.js 同源问题）：照片上传失败绝不能阻断记录推送，
+      否则照片已进仓库、记录 JSON 却没推 → 系统看不到、钉钉收不到、本地与云端分叉。 */
   async function submitPush(rec, wasEditing) {
-    rec = await pushPhotosToCloud(rec);
-    pushToCloud(rec, wasEditing ? "修改已保存，正在同步到云端…" : "入库成功，正在同步到云端…");
+    var finalRec = rec;
+    try {
+      finalRec = (await pushPhotosToCloud(rec)) || rec;
+    } catch (e) {
+      Util.toast("⚠️ 照片上传失败，记录仍会照常保存（照片可到「云同步」页补传）", true);
+      finalRec = rec;
+    }
+    pushToCloud(finalRec, wasEditing ? "修改已保存，正在同步到云端…" : "入库成功，正在同步到云端…");
   }
 
   /** 照片上传云端（可选）：将 photos 上传到 data/photos/ 并把 photoUrls 写回本地记录；不推送记录本身。

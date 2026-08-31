@@ -539,10 +539,21 @@
     UI.celebrate({ orderNo: rec.orderNo || "" });
   }
 
-  /** 异步推送：先写回 photoUrls，再推记录，确保通知含图 */
+  /** 异步推送：先写回 photoUrls，再推记录，确保通知含图。
+      P1 修复：照片上传失败绝不能阻断记录推送。
+      旧逻辑 `rec = await pushPhotosToCloud(rec)` 一旦抛异常（弱网/配额/超时），
+      后续 pushToCloud 被整个跳过 → 照片已进仓库、记录 JSON 却没推 →
+      系统里看不到这单、钉钉也收不到，且本地与云端就此分叉。
+      现在改为：照片环节整体 try/catch，失败也照常推记录，失败照片走本机补传队列。 */
   async function submitPush(rec, wasEditing) {
-    rec = await pushPhotosToCloud(rec);
-    pushToCloud(rec, wasEditing ? "修改已保存，正在同步到云端…" : "登记成功，正在同步到云端…");
+    var finalRec = rec;
+    try {
+      finalRec = (await pushPhotosToCloud(rec)) || rec;
+    } catch (e) {
+      Util.toast("⚠️ 照片上传失败，记录仍会照常保存（照片可到「云同步」页补传）", true);
+      finalRec = rec;
+    }
+    pushToCloud(finalRec, wasEditing ? "修改已保存，正在同步到云端…" : "登记成功，正在同步到云端…");
   }
 
   /** 照片上传云端（可选）：将 photos 上传到 data/photos/ 并把 photoUrls 写回本地记录；不推送记录本身。
