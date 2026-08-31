@@ -238,10 +238,18 @@
      调 save 写云端 catalog.json → pushCatalogEvent 推钉钉"新货品已添加"通知。
      与 openManager（增删改全功能）并存：openManager 给维护用，本函数只做"新增一条"。
      返回 Promise<{ok, msg}>。 */
+  /** 新货品未配置金山台账映射时的提示（防呆：避免"系统有、金山没有"的静默分叉） */
+  function wpsMapHint(name) {
+    try {
+      var wm = window.APP_PRODUCT_MAP && window.APP_PRODUCT_MAP.wpsMap;
+      if (wm && typeof wm[name] !== "undefined") return "";
+    } catch (e) {}
+    return "；⚠️ 该货品未配置金山台账映射，出入库不会同步到金山（如需同步请管理员在 product-map.js 登记）";
+  }
+
   function quickAdd(data) {
     return new Promise(function (resolve) {
-      if (!data || !data.name) { resolve({ ok: false, msg: "货品名称不能为空" }); return; }
-      var work = JSON.parse(JSON.stringify(catalog || defaultCatalog()));
+      if (!data || !data.name) { resolve({ ok: false, msg: "货品名称不能为空" }); return; }      var work = JSON.parse(JSON.stringify(catalog || defaultCatalog()));
       if ((work.products || []).some(function (p) { return p.name === data.name; })) {
         resolve({ ok: false, msg: "该货品已存在，请改用其他名称" });
         return;
@@ -268,10 +276,10 @@
           barcode: data.barcode || "",
           time: Date.now()
         }).then(function () {
-          resolve({ ok: true, msg: msg || "已添加" });
+          resolve({ ok: true, msg: (msg || "已添加") + wpsMapHint(data.name) });
         })["catch"](function () {
           // 通知失败不影响主流程（catalog 已保存成功）
-          resolve({ ok: true, msg: msg || "已添加（钉钉通知未发出）" });
+          resolve({ ok: true, msg: (msg || "已添加（钉钉通知未发出）") + wpsMapHint(data.name) });
         });
       });
     });

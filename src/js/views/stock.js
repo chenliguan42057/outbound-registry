@@ -318,7 +318,7 @@
       '</div>';
     }).join("");
     var body =
-      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量，保存后自动生成差异记录（多=入库、少=出库，用途=盘点调整）。</div>' +
+      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量，保存后直接校准库存基准到实存数（不生成出入库记录、不进金山台账）。</div>' +
       '<div style="max-height:46vh;overflow:auto">' + rows + '</div>' +
       '<div class="modal-actions" style="margin-top:14px">' +
       '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
@@ -338,26 +338,32 @@
       if (!diffs.length) { Util.toast("盘点数与当前库存一致，无需调整"); UI.Modal.hide(); return; }
       var inSum = 0, outSum = 0;
       diffs.forEach(function (d) { if (d.diff > 0) inSum += d.diff; else outSum -= d.diff; });
+      // P1 改进：盘点改为「校准库存基准」，不再生成出入库记录。
+      // 旧逻辑生成 affectsStock=true 的调整记录：系统多一笔流水、金山又没有 → 每次盘点后系统就偏离金山一笔。
+      // 直接改 catalog.inventory 基准则：1) 不产生流水记录，流水干净；2) 不进金山，金山不变，两边长期一致；
+      // 3) 系统库存 = 用户输入的实存数。
       var ok = await UI.confirmDialog(
-        "差异汇总：需入库 +" + inSum + "，需出库 -" + outSum + "。将自动生成盘点调整记录（用途=盘点调整）。确认执行？", "盘点平账确认");
+        "差异汇总：实存比账面多 +" + inSum + "、少 -" + outSum + "。\n将直接校准库存基准到实存数（不生成出入库记录、不进金山台账）。确认执行？", "盘点校准确认");
       if (!ok) { UI.Modal.hide(); return; }
-      var now = Util.nowLocal();
+      var Catalog = window.App.Catalog;
+      var cat = Catalog && Catalog.get();
+      if (!cat || !cat.inventory) { Util.toast("目录未就绪，无法校准", true); return; }
       diffs.forEach(function (d) {
-        var payload = {
-          time: now, picker: "盘点", dept: "盘点", purpose: "盘点调整",
-          note: "盘点平账（实存调整 " + (d.diff > 0 ? "+" : "") + d.diff + "）",
-          items: [{ name: d.name, qty: Math.abs(d.diff) }],
-          photos: [], affectsStock: true
-        };
-        if (d.diff > 0) payload.type = "in";
-        var rec = Records.create(payload);
-        try { if (Cloud && Cloud.pushRecord) Cloud.pushRecord(rec); } catch (e) {}
+        var base = Number(cat.inventory[d.name]) || 0;
+        cat.inventory[d.name] = base + d.diff;
       });
-      UI.Modal.hide();
-      Util.toast("盘点完成：入库 +" + inSum + "，出库 -" + outSum);
-      refresh();
-      try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
-      try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
+      if (window.App.Stock) window.App.Stock.markDirty();
+      Catalog.save(cat, function (okSave, msg) {
+        UI.Modal.hide();
+        if (okSave) {
+          Util.toast("盘点校准完成：库存基准已更新为实存数");
+          refresh();
+          try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
+          try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
+        } else {
+          Util.toast("目录保存失败：" + (msg || ""), true);
+        }
+      });
     });
   }
 
