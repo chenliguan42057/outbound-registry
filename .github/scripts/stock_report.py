@@ -297,7 +297,6 @@ def build_report():
 
     total_items = len(stock)
     total_qty = sum(max(0, v) for v in stock.values())
-    low = [(n, v) for n, v in sorted(stock.items(), key=lambda x: x[1]) if v < LOW_STOCK_THRESHOLD]
 
     lines = [
         "### 📊 出入库登记 · 库存周报",
@@ -305,74 +304,38 @@ def build_report():
             time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() + 8 * 3600))
         ),
         "- **货品种类**：{} 种 ｜ **库存总量**：{} 件".format(total_items, total_qty),
+        "",
+        "**📦 库存明细（{} 种，按系列分组）：**".format(total_items),
     ]
 
-    # 本周出入库汇总图（图 1：横向分组条形图）
-    rows, monday_str, has_week = week_summary(records)
-    if has_week:
-        fname = "stock_week_{}.png".format(time.strftime("%Y%m%d", time.localtime(time.time() + 8 * 3600)))
-        out_path = os.path.join("/tmp", fname)
-        if generate_week_chart(rows, monday_str, out_path):
-            chart_url = upload_chart(out_path)
-            if chart_url:
-                lines.append("")
-                lines.append("**📊 本周出入库汇总（{} 起）：**".format(monday_str[5:]))
-                lines.append("![本周出入库汇总]({})".format(chart_url))
-            else:
-                # 上传失败降级为文字表格
-                lines.append("")
-                lines.append(week_summary_fallback(rows, monday_str))
-
-    # 按规格分组展示（同一系列放一起；未匹配兜底「其他」）—— 表格 + 状态色点
-    lines.append("")
-    lines.append("**📦 库存明细（{} 种）：**".format(total_items))
-    grouped = False
-
-    def status_emoji(v):
-        """库存状态：< 阈值 红低库存；< 2×阈值 黄偏紧；否则 绿充足。"""
-        if v < LOW_STOCK_THRESHOLD:
-            return "🔴 低库存"
-        if v < LOW_STOCK_THRESHOLD * 2:
-            return "🟡 偏紧"
-        return "🟢 充足"
-
+    # 手机端优化：不用 markdown 表格（列宽被压得很乱），改用紧凑列表。
+    # 只显示「现剩余库存量」，不再展示低库存/偏紧/充足等状态。
+    has_any = False
     for cat, specs in CATEGORY_MAP.items():
         srows = [(s, stock.get(s)) for s in specs if s in stock]
         if not srows:
             continue
-        grouped = True
+        has_any = True
         lines.append("")
         lines.append("**▸ {}（{}）**".format(cat, len(srows)))
-        lines.append("| 货品 | 库存 | 状态 |")
-        lines.append("| --- | ---: | --- |")
         for name, v in srows:
-            lines.append("| {} | **{}** 件 | {} |".format(name, v, status_emoji(v)))
+            lines.append("- {}：**{}** 件".format(name, v))
+
     # 兜底未匹配的货品
     known = set()
     for specs in CATEGORY_MAP.values():
         known.update(specs)
     others = [(n, v) for n, v in stock.items() if n not in known]
     if others:
-        grouped = True
+        has_any = True
         lines.append("")
         lines.append("**▸ 其他（{}）**".format(len(others)))
-        lines.append("| 货品 | 库存 | 状态 |")
-        lines.append("| --- | ---: | --- |")
         for name, v in sorted(others, key=lambda x: x[1], reverse=True):
-            lines.append("| {} | **{}** 件 | {} |".format(name, v, status_emoji(v)))
-    if not grouped:
+            lines.append("- {}：**{}** 件".format(name, v))
+
+    if not has_any:
         lines.append("")
         lines.append("- 暂无库存数据")
-
-    # 低库存预警汇总
-    if low:
-        lines.append("")
-        lines.append("**⚠️ 低库存预警（< {} 件）共 {} 种：**".format(LOW_STOCK_THRESHOLD, len(low)))
-        for name, v in low:
-            lines.append("- 🔴 {}：**{}** 件".format(name, v))
-    else:
-        lines.append("")
-        lines.append("✅ 暂无低库存货品（阈值 {} 件）".format(LOW_STOCK_THRESHOLD))
 
     lines.append("")
     lines.append("— 每周五自动推送 · 数据实时来自云端登记")
