@@ -246,7 +246,7 @@
       var it = info.item;
       if (!it) return;
       var isIn = (r.type || "out") === "in";
-      var stockCell = (it && typeof it.stock === "number") ? String(it.stock) : "";
+      var stockCell = it ? String(Stock.getRecordStock(name, r, it)) : "";
       var row = [
         esc(String(r.time || "").replace("T", " ")),
         esc(isIn ? "入库" : "出库"),
@@ -282,7 +282,10 @@
         var info = findItemFor([r], name);
         var it = info.item;
         var isIn = (r.type || "out") === "in";
-        var stock = (it && typeof it.stock === "number") ? it.stock : "-";
+        // P1 修复：流水"当时库存"必须按当前事件实时推算，不能再用 it.stock 死快照——
+        // 死快照与 INVENTORY 基准、事件归一化、affectsStock 修正后的口径都不一致，
+        // 会显示 134+14≠165 这种"对不上"的怪现象。
+        var stock = Stock.getRecordStock(name, r, it);
         return '<tr>' +
           '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
           '<td>' + (isIn ? '<span class="tag ok-tag">入库</span>' : '<span class="tag danger-tag">出库</span>') + '</td>' +
