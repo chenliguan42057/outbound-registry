@@ -311,6 +311,16 @@ def process_record(rec, synced):
     if rid in synced:
         return 0, 0
 
+    # 先借后还「差额单」不进金山台账（归还入库单 type=in 不受影响，照常记）。
+    # 账务口径说明：借出时原单已记一笔出库（全量），归还时已记一笔入库（归还量），
+    # 差额 = 借出 − 归还，系统库存已由前两笔自然体现（差额单 affectsStock=false，不参与库存计算）。
+    # 若差额单再往金山记一笔出库，金山台账会比系统库存整整多扣一倍差额，两边账对不上。
+    # 同理，差额单后续被标为「已提单」也只是改状态，不产生新的货物流动，无需再记。
+    if rec.get("fromBorrowId") and str(rec.get("type", "out")).lower() != "in":
+        synced[rid] = {"skip": 1, "reason": "borrow_diff", "at": now_iso()}
+        log("⏭ 跳过先借后还差额单 %s（不进金山台账，避免重复扣减）" % rid)
+        return 0, 0
+
     by_sheet, skipped = collect_jobs(rec)
     if not by_sheet:
         # 没有可同步的鹿茸商品（例如只领了手提袋），也要标记，
