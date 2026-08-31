@@ -8,6 +8,16 @@
   function init() {
     try {
       window.App.State.init();
+      // 启动一致性修复：已提单的先借后还差额出库单 → 原借出单自动完成
+      try {
+        var closed = 0;
+        (window.App.State.list || []).forEach(function (r) {
+          if (r && r.fromBorrowId && window.App.Records.getStatus(r) === "submitted") {
+            if (window.App.Records.tryCloseBorrowFromDiff(r)) closed++;
+          }
+        });
+        if (closed) console.log("[main] 启动修复：已自动结清 " + closed + " 笔先借后还差额单");
+      } catch (e) {}
       // 首版遗留 #/verify 链接兼容：一律回落 #/（router.parse 亦兜底）
       if (location.hash.indexOf("#/verify") === 0) {
         location.replace("#/");

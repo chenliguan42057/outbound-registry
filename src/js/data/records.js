@@ -72,6 +72,23 @@
     return rec;
   }
 
+  /**
+   * 若 rec 是先借后还的差额出库单且已提单，自动把原借出单标记为已完成。
+   * 实现「差额未提单 → 提交后账平」的闭环；多次调用幂等。
+   * @returns {string|null} 被关闭的借出单 id，无则返回 null
+   */
+  function tryCloseBorrowFromDiff(rec) {
+    if (!rec || !rec.fromBorrowId || (rec.type || "out") === "in") return null;
+    if (getStatus(rec) !== "submitted") return null;
+    var idx = State.list.findIndex(function (r) { return r.id === rec.fromBorrowId && r.borrowed === true; });
+    if (idx < 0) return null;
+    var borrowRec = State.list[idx];
+    if (borrowRec.borrowDone === true) return null;
+    State.list[idx] = Object.assign({}, borrowRec, { borrowDone: true, updatedAt: Date.now() });
+    State.save();
+    return borrowRec.id;
+  }
+
   /** 删除记录（本地） */
   function remove(id) {
     var gone = null;
@@ -270,6 +287,7 @@
     applyTombstones: applyTombstones,
     getLastConflicts: function () { return _lastMergeConflicts; },
     getStatus: getStatus,
+    tryCloseBorrowFromDiff: tryCloseBorrowFromDiff,
     toCsv: toCsv,
     exportCsv: exportCsv,
     toReconCsv: toReconCsv,

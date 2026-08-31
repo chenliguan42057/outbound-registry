@@ -197,8 +197,13 @@
       if (!ok) return;
       var rec = Records.update(id, { status: next });
       if (!rec) { Util.toast("记录不存在", true); return; }
+      // 先借后还差额单提交后 → 原借出单自动结清
+      if (next === "submitted" && Records.tryCloseBorrowFromDiff(rec)) {
+        Util.toast("已标记为已提单，对应借出单已结清");
+      } else {
+        Util.toast("已标记为" + label);
+      }
       renderList();
-      Util.toast("已标记为" + label);
       if (Cloud.hasToken()) {
         // 走队列式推送：推送失败自动入队，下次同步/操作冲刷补推，避免状态改动丢失
         Cloud.pushRecord(rec).then(function (ok) {
@@ -289,9 +294,18 @@
         var rec = Records.update(r.id, { status: next });
         if (rec) updated.push(rec);
       });
+      // 批量提交已提单时，自动结清对应的先借后还差额原单
+      var closedBorrow = 0;
+      if (next === "submitted") {
+        updated.forEach(function (rec) {
+          if (Records.tryCloseBorrowFromDiff(rec)) closedBorrow++;
+        });
+      }
       selected = {};
       renderList();
-      Util.toast("已标记 " + updated.length + " 条为" + label);
+      var msg = "已标记 " + updated.length + " 条为" + label;
+      if (closedBorrow) msg += "，" + closedBorrow + " 笔借出单已结清";
+      Util.toast(msg);
       if (Cloud.hasToken()) {
         // 队列式推送：失败自动入队，下次同步补推，不会静默丢状态
         var fail = 0;
