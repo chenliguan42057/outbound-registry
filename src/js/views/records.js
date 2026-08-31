@@ -148,7 +148,7 @@
     function filter() {
       var from = searchState.from ? new Date(searchState.from + "T00:00:00").getTime() : null;
       var to = searchState.to ? new Date(searchState.to + "T23:59:59").getTime() : null;
-      return State.list.filter(function (r) {
+      var list = State.list.filter(function (r) {
         var recType = r.type || "out";
         if (isIn ? recType !== "in" : recType === "in") return false;
         if (r.borrowed === true) return false;   // 已转入先借后还的出库单，不在普通出库记录列表显示
@@ -163,6 +163,15 @@
           if (isNaN(t2) || t2 > to) return false;
         }
         return true;
+      });
+      // 置顶记录固定在最前（多条置顶按置顶时间倒序），其余保持 State.list 原顺序（time 降序）。
+      // Array.sort 自 ES2019 起稳定，返回 0 即保留原相对顺序，不会打乱未置顶记录。
+      return list.sort(function (a, b) {
+        var pa = a.pinned === true ? 1 : 0;
+        var pb = b.pinned === true ? 1 : 0;
+        if (pa !== pb) return pb - pa;
+        if (pa === 1) return (Number(b.pinnedAt) || 0) - (Number(a.pinnedAt) || 0);
+        return 0;
       });
     }
 
@@ -243,10 +252,11 @@
             }).join("") + (photos.length > 4 ? '<span class="badge">+' + (photos.length - 4) + '</span>' : "")
           : '<span class="badge">无</span>';
         var inMark = r.type === "in" ? '<span class="in-tag">入库</span>' : "";
+        var pinMark = r.pinned === true ? ' <span title="已置顶" style="color:#BA7517;">📌</span>' : "";
         html += '<tr data-act="detail" data-id="' + r.id + '">' +
           '<td class="check-col"><input type="checkbox" class="rec-check" data-id="' + r.id + '"' +
             (selected[r.id] ? " checked" : "") + ' /></td>' +
-          '<td><div>' + (list.length - i) + inMark + '</div></td>' +
+          '<td><div>' + (list.length - i) + pinMark + inMark + '</div></td>' +
           '<td>' + Util.esc(r.time || "-") + '</td>' +
           '<td>' + Util.esc(r.picker || "-") + '</td>' +
           (!isIn ? '<td>' + statusPill(r) + '</td>' : '') +
@@ -388,6 +398,8 @@
       // 2026-08-08：操作按钮（打印/编辑/删除）从列表行移入详情弹窗，列表行只展示数据
       rows += '<div class="detail-row" style="display:block;border-bottom:none;padding-top:16px">' +
         '<div class="modal-actions">' +
+          '<button type="button" class="btn ' + (r.pinned === true ? "" : "ghost") + ' sm" data-detail-act="pin">' +
+            (r.pinned === true ? '📌 取消置顶' : '📌 置顶') + '</button> ' +
           '<button type="button" class="btn ghost sm" data-detail-act="print">🖨 打印</button> ' +
           '<button type="button" class="btn sm" data-detail-act="edit">编辑</button> ' +
           '<button type="button" class="btn danger sm" data-detail-act="del">删除</button>' +
@@ -402,7 +414,26 @@
             if (act === "print") doPrint(id);
             else if (act === "edit") doEdit(id);
             else if (act === "del") doDel(id);
+            else if (act === "pin") doTogglePin(id);
           });
+        });
+      }
+    }
+
+    /** 置顶 / 取消置顶：置顶记录固定在列表最前，方便快速找到重点单据（对账、待跟进等）。
+        纯追加字段 pinned / pinnedAt——不含 items，不会重打库存快照；不影响库存与既有 schema。 */
+    function doTogglePin(id) {
+      var r = State.list.find(function (x) { return x.id === id; });
+      if (!r) return;
+      var next = !(r.pinned === true);
+      var rec = Records.update(id, { pinned: next, pinnedAt: next ? Date.now() : 0 });
+      if (!rec) { Util.toast("记录不存在", true); return; }
+      UI.Modal.hide();
+      renderList();
+      Util.toast(next ? "已置顶，该单固定在列表最前" : "已取消置顶");
+      if (Cloud.hasToken()) {
+        Cloud.pushRecord(rec).then(function (ok) {
+          window.App.Views.app.setSyncStatus(ok ? "已同步" : "云端同步失败（已入队，稍后自动补推）", !ok);
         });
       }
     }
