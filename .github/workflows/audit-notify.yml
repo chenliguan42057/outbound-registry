@@ -1,0 +1,14 @@
+name: Audit Report Notify (manual)
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Push audit report to DingTalk
+        env:
+          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          SECRET: ${{ secrets.DINGTALK_SECRET }}
+        run: python3 .github/scripts/audit_report_push.py
