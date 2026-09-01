@@ -97,40 +97,45 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
 
     now 仅用于测试注入固定北京时间；线上默认取当前北京时间。
     2026-08-07 起不再限定「当日登记」：所有未完成项（含历史跨天）都要提醒。
+    2026-09-01 调整：登记距今 ≤7 天的待处理项每天推；超过 7 天未处理的
+    不每天推（避免刷屏），改为「每周五」集中提醒一次（不忽略）。
     """
     now = now or datetime.now(CST)
+    STALE_DAYS = 7
+    is_friday = now.weekday() == 4
 
-    pending_out = []          # 普通出库待提单（不含借还差额单）
-    borrow_diff = []          # 借还差额未提单（fromBorrowId 且 pending）
-    borrowed_open = []        # 借出未归还（borrowed 且未结清）
+    pending_out = []          # 普通出库待提单（不含借还差额单，≤7 天）
+    borrow_diff = []          # 借还差额未提单（fromBorrowId 且 pending，≤7 天）
+    borrowed_open = []        # 借出未归还（borrowed 且未结清，≤7 天）
     unconfirmed = []
     unshipped = []
+    stale = []                # 超期未处理（>7 天），仅每周五展示
 
     for rec in load_dir(os.path.join(records_dir, "*.json")):
         kind = str(rec.get("type", "")).lower()
         status = str(rec.get("status", "submitted"))
-        # A1（2026-09-01）：超过 7 天仍未处理的项不再提醒。
-        # 这类多为已线下处理但系统状态没更新/已过期无意义的旧账，继续每日推送只会打扰。
-        if age_days(rec.get("time"), now) > 7:
-            continue
+        days = age_days(rec.get("time"), now)
         if rec.get("borrowed") is True and rec.get("borrowDone") is not True:
-            borrowed_open.append(rec)                       # 5. 借出未归还
+            (stale if days > STALE_DAYS else borrowed_open).append(rec)  # 5. 借出未归还
             continue
         if kind != "in" and status == "pending":
             # 排除已转入借出的单：借出单由「借出未归还」类目负责，
             # 若 borrowDone=true（已结清）却还出现在未提单里，纯属误报（历史 bug，2026-09-01 修复）
             if rec.get("borrowed") is True:
                 continue
-            if rec.get("fromBorrowId"):
-                borrow_diff.append(rec)                     # 2. 借还差额未提单
-            else:
-                pending_out.append(rec)                     # 1. 普通出库未提单
+            bucket = borrow_diff if rec.get("fromBorrowId") else pending_out  # 2/1
+            (stale if days > STALE_DAYS else bucket).append(rec)
 
     for p in load_dir(os.path.join(pickups_dir, "*.json")):
-        if p.get("confirmed") is not True:
-            unconfirmed.append(p)                           # 3. 待取货未确认提单
-        if p.get("shipped") is not True:
-            unshipped.append(p)                             # 4. 待取货未出库
+        if p.get("confirmed") is not True or p.get("shipped") is not True:
+            days = age_days(p.get("time"), now)
+            if days > STALE_DAYS:
+                stale.append(p)
+            else:
+                if p.get("confirmed") is not True:
+                    unconfirmed.append(p)                       # 3. 待取货未确认提单
+                if p.get("shipped") is not True:
+                    unshipped.append(p)                         # 4. 待取货未出库
 
     def fmt_time(rec):
         return str(rec.get("time", "")).replace("T", " ")
@@ -172,6 +177,10 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
         parts.append("\n".join(lines_of("📦 待取货未出库", unshipped, "取货人", warn_ids=overdue_ids)))
     if borrowed_open:
         parts.append("\n".join(lines_of("📤 借出未归还", borrowed_open, "借出人")))
+    if is_friday and stale:
+        stale_ids = set(x.get("id") for x in stale)
+        parts.append("\n".join(lines_of("⏰ 超期未处理（>7 天，每周五提醒一次）", stale, "领取人",
+                                        warn_ids=stale_ids)))
 
     if not parts:
         return None
