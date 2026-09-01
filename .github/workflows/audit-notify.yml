@@ -1,6 +1,10 @@
-name: Audit Report Notify (manual)
+name: Audit Report Notify
 on:
-  workflow_dispatch:
+  schedule:
+    # UTC 06:00 = 北京时间 14:00，每周五——比待处理提醒（北京 13:00 触发）晚 1 小时。
+    # GitHub Actions schedule 常延迟数小时，两者延迟相近，仍保持先后顺序。
+    - cron: '0 6 * * 5'
+  workflow_dispatch:      # 支持手动触发即时推送
 
 jobs:
   audit:
