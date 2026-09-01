@@ -1,8 +1,9 @@
 name: Pending Reminder
 on:
   schedule:
-    # UTC 08:00 = 北京时间 16:00（期望推送时刻；schedule 仅作兜底——实测 GitHub 可能延迟数小时）
-    - cron: '0 8 * * *'
+    # UTC 05:00 = 北京时间 13:00。实测 GitHub Actions schedule 常延迟数小时才执行，
+    # 提前到 13:00 触发，即使延迟 5-8 小时也能落在 18-21 点送达，用户下班前可看到。
+    - cron: '0 5 * * *'
   workflow_dispatch:      # 支持手动触发测试 + 外部 cron（cron-job.org）主触发（即时、无延迟）
 
 jobs:

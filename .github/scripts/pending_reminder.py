@@ -72,6 +72,15 @@ def goods_text(rec):
     ) or "（无明细）"
 
 
+def age_days(time_str, now):
+    """记录登记日期距今天数（按北京日期算）；无法解析返回 9999（视为超期，不再提醒）。"""
+    try:
+        d = datetime.strptime(str(time_str or "")[:10], "%Y-%m-%d")
+        return (now.date() - d.date()).days
+    except Exception:
+        return 9999
+
+
 def load_dir(pattern):
     """读取某目录下全部 json 文件，返回记录列表（损坏文件跳过）。"""
     items = []
@@ -100,10 +109,18 @@ def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickup
     for rec in load_dir(os.path.join(records_dir, "*.json")):
         kind = str(rec.get("type", "")).lower()
         status = str(rec.get("status", "submitted"))
+        # A1（2026-09-01）：超过 7 天仍未处理的项不再提醒。
+        # 这类多为已线下处理但系统状态没更新/已过期无意义的旧账，继续每日推送只会打扰。
+        if age_days(rec.get("time"), now) > 7:
+            continue
         if rec.get("borrowed") is True and rec.get("borrowDone") is not True:
             borrowed_open.append(rec)                       # 5. 借出未归还
             continue
         if kind != "in" and status == "pending":
+            # 排除已转入借出的单：借出单由「借出未归还」类目负责，
+            # 若 borrowDone=true（已结清）却还出现在未提单里，纯属误报（历史 bug，2026-09-01 修复）
+            if rec.get("borrowed") is True:
+                continue
             if rec.get("fromBorrowId"):
                 borrow_diff.append(rec)                     # 2. 借还差额未提单
             else:
