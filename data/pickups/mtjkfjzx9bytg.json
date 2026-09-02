@@ -1,1 +1,1 @@
-{"id":"mtjkfjzx9bytg","_ts":1788321473277,"confirmed":false,"shipped":false,"items":[{"name":"面膜 5片装","qty":10},{"name":"精华液 20支装","qty":20}],"note":"","time":"2026-09-02T16:04","picker":"陈利冠","dept":"华大智造","purpose":"内部员工使用","__overdue":false}
+{"id":"mtjkfjzx9bytg","_ts":1788341346087,"confirmed":true,"shipped":true,"items":[{"name":"面膜 5片装","qty":10},{"name":"精华液 20支装","qty":20}],"note":"","time":"2026-09-02T16:04","picker":"陈利冠","dept":"华大智造","purpose":"内部员工使用","__overdue":true}
