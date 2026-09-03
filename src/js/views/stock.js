@@ -318,7 +318,7 @@
       '</div>';
     }).join("");
     var body =
-      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量，保存后直接校准库存基准到实存数（不生成出入库记录、不进金山台账）。</div>' +
+      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量，保存后直接校准库存基准到实存数（不生成出入库记录、不进金山台账），并推送差异汇总到钉钉群。</div>' +
       '<div style="max-height:46vh;overflow:auto">' + rows + '</div>' +
       '<div class="modal-actions" style="margin-top:14px">' +
       '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
@@ -348,8 +348,11 @@
       var Catalog = window.App.Catalog;
       var cat = Catalog && Catalog.get();
       if (!cat || !cat.inventory) { Util.toast("目录未就绪，无法校准", true); return; }
+      // 记录校准前后数值（book=账面/校准前，actual=实存/校准后），供保存成功后推送钉钉
+      var affected = [];
       diffs.forEach(function (d) {
         var base = Number(cat.inventory[d.name]) || 0;
+        affected.push({ name: d.name, book: base, actual: base + d.diff, diff: d.diff });
         cat.inventory[d.name] = base + d.diff;
       });
       if (window.App.Stock) window.App.Stock.markDirty();
@@ -357,6 +360,19 @@
         UI.Modal.hide();
         if (okSave) {
           Util.toast("盘点校准完成：库存基准已更新为实存数");
+          // 盘点结果推送钉钉：写 data/notify/stocktake-*.json 由 Actions「DingTalk Remind」消费。
+          // 异步 fire-and-forget，推送失败静默，绝不影响盘点本身结果。
+          try {
+            if (Cloud && Cloud.pushNotifyFile) {
+              Cloud.pushNotifyFile("stocktake", {
+                type: "stocktake",
+                time: Util.nowLocal ? Util.nowLocal() : new Date().toISOString(),
+                items: affected
+              }).then(function () {
+                Util.toast("盘点差异已推送钉钉群");
+              }).catch(function () {});
+            }
+          } catch (e) {}
           refresh();
           try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
           try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}

@@ -5,9 +5,10 @@
 由 GitHub Actions「DingTalk Remind」在 data/notify/*.json 变更时触发。
 消息标题/正文均含关键词「出入库登记」，满足钉钉自定义机器人安全设置（防 errcode 310000）。
 
-支持两种载荷（按 data.type 区分）：
+支持三种载荷（按 data.type 区分）：
   remind          : 勾选订单提醒（orders 数组，紧凑摘要）
   pickup-confirm  : 待取货「确认提单」对比消息（pickup 对象，含登记时间与提单时间）
+  stocktake       : 库存盘点校准结果（items 数组：name 货品 / book 账面 / actual 实存 / diff 差异）
 
 读取环境变量：
   WEBHOOK  : 钉钉群机器人 Webhook 地址
@@ -196,6 +197,32 @@ def build_pickup_confirm_markdown(payload):
     return "\n".join(lines)
 
 
+def build_stocktake_markdown(payload):
+    """库存盘点校准结果：各货品 账面→实存 + 差异汇总。返回 markdown 文本；无明细返回 None。"""
+    items = payload.get("items") or []
+    if not items:
+        return None
+    t = str(payload.get("time") or "").strip().replace("T", " ")[:16] or "-"
+    total_in = sum(x.get("diff", 0) for x in items if x.get("diff", 0) > 0)
+    total_out = -sum(x.get("diff", 0) for x in items if x.get("diff", 0) < 0)
+    rows = []
+    for x in items:
+        diff = x.get("diff", 0)
+        rows.append("- **{}**：账面 {} → 实存 {}（{}{}）".format(
+            x.get("name", "?"), x.get("book", "-"), x.get("actual", "-"),
+            "+" if diff > 0 else "", diff))
+    return "\n".join([
+        "### 📋 出入库登记 · 库存盘点",
+        "",
+        "盘点时间：{}".format(t),
+        "差异 {} 项：盘盈 +{} / 盘亏 -{}".format(len(items), total_in, total_out),
+        "",
+        "（校准库存基准到实存数，未生成出入库记录、未入金山台账）",
+        "",
+        "\n".join(rows),
+    ])
+
+
 def main():
     payloads = []
     for line in (FILES or "").splitlines():
@@ -211,6 +238,7 @@ def main():
             payloads.append(data)
 
     pickup_confirm = []
+    stocktakes = []
     for line in (FILES or "").splitlines():
         line = line.strip()
         if not line:
@@ -220,10 +248,14 @@ def main():
         if not path or not path.startswith("data/notify/") or not path.endswith(".json"):
             continue
         data = load_json(path)
-        if data and data.get("type") == "pickup-confirm":
+        if not data:
+            continue
+        if data.get("type") == "pickup-confirm":
             pickup_confirm.append(data)
+        elif data.get("type") == "stocktake":
+            stocktakes.append(data)
 
-    if not payloads and not pickup_confirm:
+    if not payloads and not pickup_confirm and not stocktakes:
         print("没有可解析的提醒请求，跳过发送（不报错）")
         return 0
 
