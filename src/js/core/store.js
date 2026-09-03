@@ -99,6 +99,10 @@
     loadMemos: function () { return Store.get(Config.MEMO_STORE_KEY, []); },
     saveMemos: function (list) { Store.set(Config.MEMO_STORE_KEY, list); },
 
+    /* ---- 盘点校准记录（localStorage 键 outbound_stocktakes_v1，库存流水展示用） ---- */
+    loadStocktakes: function () { return Store.get(Config.STOCKTAKE_STORE_KEY, []); },
+    saveStocktakes: function (list) { Store.set(Config.STOCKTAKE_STORE_KEY, list); },
+
     /* ---- 历史补全（部门 / 领取人，冻结键） ---- */
     getHistory: function (key) { return Store.get(key, []); },
     addHistory: function (key, val) {
@@ -161,6 +165,8 @@
     list: [],
     pickups: [],
     memos: [],
+    /* 盘点校准记录（独立于 records：只进库存流水展示，不进金山/出入库列表/报表统计） */
+    stocktakes: [],
     /* 删除墓碑（回收站数据源）：只存内存不落 localStorage——快照里含照片 dataURL，
        持久化会迅速撑爆 5MB 配额；每次 syncPull 都会重新填充。 */
     tombstones: [],
@@ -171,11 +177,13 @@
       State.list = Store.loadRecords();
       State.pickups = Store.loadPickups();
       State.memos = Store.loadMemos();
+      State.stocktakes = Store.loadStocktakes();
       State.nav = Store.loadNav();
     },
     save: function () { Store.saveRecords(State.list); },
     savePickups: function () { Store.savePickups(State.pickups); },
-    saveMemos: function () { Store.saveMemos(State.memos); }
+    saveMemos: function () { Store.saveMemos(State.memos); },
+    saveStocktakes: function () { Store.saveStocktakes(State.stocktakes); }
   };
 
   window.App = window.App || {};

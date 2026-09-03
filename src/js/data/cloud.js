@@ -817,6 +817,42 @@
     return id;
   }
 
+  /** 推送盘点校准记录到 data/stocktakes/<id>.json（独立目录：不进金山台账、不触发登记通知）。
+      幂等：先 GET sha 再 PUT；成功置 _pushed 标记并落盘；失败静默（syncPull 后由
+      flushStocktakesPending 对 _local 未推送项补推）。 */
+  async function pushStocktake(rec) {
+    if (!rec || !rec.id) return false;
+    if (!hasToken()) return false;
+    var path = "data/stocktakes/" + rec.id + ".json";
+    var content = Util.b64enc(JSON.stringify(rec));
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+    var body = sha
+      ? { message: "update stocktake " + rec.id, content: content, sha: sha, branch: Config.GH.branch }
+      : { message: "add stocktake " + rec.id, content: content, branch: Config.GH.branch };
+    try {
+      await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+        method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
+      });
+      rec._pushed = true;
+      var st = window.App.State;
+      if (st && st.stocktakes) { try { st.saveStocktakes(); } catch (e) {} }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /** 冲刷本地盘点记录中尚未推送成功的（_local 本地新建项且未 _pushed）。syncPull 后调用。 */
+  async function flushStocktakesPending() {
+    if (!hasToken()) return;
+    var arr = (window.App.State && window.App.State.stocktakes) || [];
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] && arr[i]._local && arr[i]._pushed !== true) {
+        await pushStocktake(arr[i]);
+      }
+    }
+  }
+
   /* ================= 金山台账回执（提交后告诉用户「真的进台账了」） =================
      链路：前端 PUT 记录 → GitHub Action(wps-sync) 调金山写行 → 回写 .wps_synced.json →
            前端轮询这个标记文件 → 看到自己这条 id 就显示「✅已入金山台账（表名 第N行）」。
@@ -949,6 +985,9 @@
       try { mms = await pullMemos(); } catch (e) { mms = []; }
       var toms = [];
       try { toms = await pullTombstones(); } catch (e) { toms = []; }
+      // 盘点校准记录（data/stocktakes/）：独立目录，不进金山、不触发登记通知
+      var stkCloud = [];
+      try { stkCloud = (await pullDir("data/stocktakes", tree)).recs; } catch (e) { stkCloud = []; }
       var merged = window.App.Records.mergeAndSort(window.App.State.list, recs);
       // 应用墓碑：删除本地已标记删除的记录
       if (toms && toms.length) {
@@ -970,6 +1009,10 @@
       // 备忘录合并：同 id 云端覆盖本地（流程性数据，不参与墓碑删除同步）
       window.App.State.memos = window.App.Memos.mergeAndSort(window.App.State.memos, mms);
       Store.saveMemos(window.App.State.memos);
+      // 盘点记录合并（同 id 较新者胜）+ 冲刷本地未推送成功的盘点记录
+      window.App.State.stocktakes = window.App.Records.mergeAndSort(window.App.State.stocktakes, stkCloud);
+      Store.saveStocktakes(window.App.State.stocktakes);
+      try { await flushStocktakesPending(); } catch (e) {}
       // 冲刷本地墓碑队列（删除云端失败的补推，成功才出队）
       try { await flushTombQueue(); } catch (e) {}
       window.App.State.lastSync = new Date();

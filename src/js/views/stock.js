@@ -210,15 +210,25 @@
     });
   }
 
-  /** 过滤出与指定货品相关的所有出入记录（按 NAME_MAP 归一化） */
+  /** 某货品的全部流水行：真实出入库记录（State.list）+ 盘点校准记录（State.stocktakes）。
+      盘点记录独立存储（不进金山台账、不出现于出库/入库列表与报表统计），仅在库存流水弹窗展示。
+      统一按时间降序（time 为 YYYY-MM-DDTHH:MM 字符串，字典序即时间序）；同刻按 _ts 降序。 */
   function rowsForProduct(name) {
     var nm = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[name]) || name;
-    return (State.list || []).filter(function (r) {
+    function hit(r) {
       return (r.items || []).some(function (it) {
         var n = (window.App.Config.NAME_MAP && window.App.Config.NAME_MAP[it.name]) || it.name;
         return n === nm;
       });
+    }
+    var arr = (State.list || []).filter(hit)
+      .concat((State.stocktakes || []).filter(hit));
+    arr.sort(function (a, b) {
+      var c = String(b.time || "").localeCompare(String(a.time || ""));
+      if (c !== 0) return c;
+      return (Number(b._ts) || 0) - (Number(a._ts) || 0);
     });
+    return arr;
   }
 
   /** 在记录的 items 里找到与指定货品名（已归一化）匹配的那一项 */
@@ -245,6 +255,22 @@
       var info = findItemFor([r], name);
       var it = info.item;
       if (!it) return;
+      // 盘点校准行：类型「盘点」，数量=差异，当时库存列显示 账面→实存
+      if (r.kind === "stocktake") {
+        var dd = Number(it.diff) || 0;
+        var rowSt = [
+          esc(String(r.time || "").replace("T", " ")),
+          esc("盘点"),
+          esc("盘点校准"),
+          esc(""),
+          esc(it.name || ""),
+          esc((dd > 0 ? "+" : "") + String(dd)),
+          esc(it.book + " → " + it.actual),
+          esc("盘点校准")
+        ];
+        lines.push(rowSt.join(","));
+        return;
+      }
       var isIn = (r.type || "out") === "in";
       var stockCell = it ? String(Stock.getRecordStock(name, r, it)) : "";
       var row = [
@@ -282,6 +308,17 @@
         var info = findItemFor([r], name);
         var it = info.item;
         var isIn = (r.type || "out") === "in";
+        // 盘点校准行：不进库存推算（affectsStock 无关），直接展示 账面→实存 与差异
+        if (r.kind === "stocktake") {
+          var d0 = it ? (Number(it.diff) || 0) : 0;
+          return '<tr>' +
+            '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
+            '<td><span class="tag" style="background:#F0E7D2;color:#8a6d3b">盘点</span></td>' +
+            '<td>盘点校准</td>' +
+            '<td>' + (d0 > 0 ? "+" : "") + d0 + '</td>' +
+            '<td>' + (it ? (it.book + " → " + it.actual) : "") + '</td>' +
+          '</tr>';
+        }
         // P1 修复：流水"当时库存"必须按当前事件实时推算，不能再用 it.stock 死快照——
         // 死快照与 INVENTORY 基准、事件归一化、affectsStock 修正后的口径都不一致，
         // 会显示 134+14≠165 这种"对不上"的怪现象。
@@ -318,7 +355,7 @@
       '</div>';
     }).join("");
     var body =
-      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量，保存后直接校准库存基准到实存数（不生成出入库记录、不进金山台账），并推送差异汇总到钉钉群。</div>' +
+      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量，保存后校准库存基准到实存数，并记入系统库存流水、推送差异到钉钉群（不进金山台账）。</div>' +
       '<div style="max-height:46vh;overflow:auto">' + rows + '</div>' +
       '<div class="modal-actions" style="margin-top:14px">' +
       '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
@@ -343,7 +380,7 @@
       // 直接改 catalog.inventory 基准则：1) 不产生流水记录，流水干净；2) 不进金山，金山不变，两边长期一致；
       // 3) 系统库存 = 用户输入的实存数。
       var ok = await UI.confirmDialog(
-        "差异汇总：实存比账面多 +" + inSum + "、少 -" + outSum + "。\n将直接校准库存基准到实存数（不生成出入库记录、不进金山台账）。确认执行？", "盘点校准确认");
+        "差异汇总：实存比账面多 +" + inSum + "、少 -" + outSum + "。\n将校准库存基准到实存数并记入系统库存流水（不进金山台账），同时推送钉钉群。确认执行？", "盘点校准确认");
       if (!ok) { UI.Modal.hide(); return; }
       var Catalog = window.App.Catalog;
       var cat = Catalog && Catalog.get();
@@ -360,13 +397,35 @@
         UI.Modal.hide();
         if (okSave) {
           Util.toast("盘点校准完成：库存基准已更新为实存数");
-          // 盘点结果推送钉钉：写 data/notify/stocktake-*.json 由 Actions「DingTalk Remind」消费。
+          var stkTime = Util.nowLocal ? Util.nowLocal() : new Date().toISOString();
+          // 生成盘点校准记录 → 系统库存流水可见（State.stocktakes + data/stocktakes/<id>.json，
+          // 独立目录：不进金山台账、不触发登记推送、不参与库存计算，仅库存流水弹窗展示）
+          try {
+            var stk = {
+              id: Util.genId ? Util.genId() : ("stk" + Date.now()),
+              _ts: Date.now(),
+              time: stkTime,
+              kind: "stocktake",
+              picker: "盘点校准",
+              dept: "盘点校准",
+              purpose: "盘点调整",
+              note: "盘盈 +" + inSum + " / 盘亏 -" + outSum,
+              _local: true,
+              items: affected
+            };
+            if (State.stocktakes) {
+              State.stocktakes.unshift(stk);
+              try { if (window.App.Store.saveStocktakes) window.App.Store.saveStocktakes(State.stocktakes); } catch (e) {}
+              if (Cloud && Cloud.pushStocktake) { Cloud.pushStocktake(stk); }
+            }
+          } catch (e) {}
+          // 盘点差异推送钉钉：写 data/notify/stocktake-*.json 由 Actions「DingTalk Remind」消费。
           // 异步 fire-and-forget，推送失败静默，绝不影响盘点本身结果。
           try {
             if (Cloud && Cloud.pushNotifyFile) {
               Cloud.pushNotifyFile("stocktake", {
                 type: "stocktake",
-                time: Util.nowLocal ? Util.nowLocal() : new Date().toISOString(),
+                time: stkTime,
                 items: affected
               }).then(function () {
                 Util.toast("盘点差异已推送钉钉群");

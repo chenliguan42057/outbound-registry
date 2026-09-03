@@ -92,6 +92,9 @@
     /* 备忘录（第八轮增量，纯追加，不改既有键值） */
     MEMO_STORE_KEY: "outbound_memos_v2",
 
+    /* 盘点校准记录（库存流水可见；独立目录 data/stocktakes/，不进金山台账、不触发登记推送） */
+    STOCKTAKE_STORE_KEY: "outbound_stocktakes_v1",
+
     /* AI 助手常量（第四轮增量；outbound_ai_key 仅存 localStorage，绝不入云端/CSV/记录/代码明文） */
     AI_KEY_KEY: "outbound_ai_key",
     AI_SETTINGS_KEY: "outbound_ai_settings",
