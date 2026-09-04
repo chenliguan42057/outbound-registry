@@ -242,7 +242,7 @@
 
   /** 拉取云端全部记录（目录 404 视为空）——保留原函数供降级/兼容调用 */
   async function pull() {
-    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.GH.dir + "?ref=" + Config.GH.branch;
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("records") + "?ref=" + Config.GH.branch;
     var arr;
     try { arr = await apiJson(url); }
     catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
@@ -272,7 +272,7 @@
   /** 推送单条记录（存在则更新，不存在则新增）；云端仅存 photoUrls，剥离 photos base64 */
   async function push(rec) {
     var slim = slimRecord(rec);
-    var path = Config.GH.dir + "/" + slim.id + ".json";
+    var path = Config.Sys.dir("records") + "/" + slim.id + ".json";
     var content = Util.b64enc(JSON.stringify(slim));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
@@ -287,7 +287,7 @@
 
   /** 删除云端单条记录 */
   async function del(id) {
-    var path = Config.GH.dir + "/" + id + ".json";
+    var path = Config.Sys.dir("records") + "/" + id + ".json";
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }
@@ -301,7 +301,7 @@
 
   /** 拉取云端全部待取货（目录 404 视为空；逻辑同 pull() 但目录不同） */
   async function pullPickups() {
-    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/data/pickups?ref=" + Config.GH.branch;
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("pickups") + "?ref=" + Config.GH.branch;
     var arr;
     try { arr = await apiJson(url); }
     catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
@@ -320,7 +320,7 @@
   /** 推送单条待取货（存在则更新，不存在则新增） */
   async function pushPickup(rec) {
     var slim = slimRecord(rec);
-    var path = "data/pickups/" + slim.id + ".json";
+    var path = Config.Sys.dir("pickups") + "/" + slim.id + ".json";
     var content = Util.b64enc(JSON.stringify(slim));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
@@ -335,7 +335,7 @@
 
   /** 删除云端单条待取货（不带墓碑：待取货为流程性数据，不做跨设备删除同步） */
   async function delPickup(id) {
-    var path = "data/pickups/" + id + ".json";
+    var path = Config.Sys.dir("pickups") + "/" + id + ".json";
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }
@@ -360,7 +360,7 @@
   /** 拉取云端全部备忘录（目录 404 视为空；逻辑同 pullPickups() 但目录不同）。
       config.json 是提醒配置不是备忘录，必须排除，否则会被解析成无 id 幽灵条目。 */
   async function pullMemos() {
-    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/data/memos?ref=" + Config.GH.branch;
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("memos") + "?ref=" + Config.GH.branch;
     var arr;
     try { arr = await apiJson(url); }
     catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
@@ -379,7 +379,7 @@
   /** 推送单条备忘录（存在则更新，不存在则新增） */
   async function pushMemo(rec) {
     var slim = slimRecord(rec);
-    var path = "data/memos/" + slim.id + ".json";
+    var path = Config.Sys.dir("memos") + "/" + slim.id + ".json";
     var content = Util.b64enc(JSON.stringify(slim));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
@@ -394,7 +394,7 @@
 
   /** 删除云端单条备忘录（不带墓碑：备忘录为流程性数据，不做跨设备删除同步） */
   async function delMemo(id) {
-    var path = "data/memos/" + id + ".json";
+    var path = Config.Sys.dir("memos") + "/" + id + ".json";
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }
@@ -416,7 +416,7 @@
 
   /** 清空云端全部记录 */
   async function clearAll() {
-    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.GH.dir + "?ref=" + Config.GH.branch;
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("records") + "?ref=" + Config.GH.branch;
     var arr;
     try { arr = await apiJson(url); } catch (e) { return; }
     if (!Array.isArray(arr)) return;
@@ -439,7 +439,7 @@
       先写墓碑再删原文件，保证删除可追踪、其他设备可同步删除残留。 */
   async function pushTombstone(rec, reason) {
     if (!rec || !rec.id) return;
-    var path = "data/deleted/" + rec.id + ".json";
+    var path = Config.Sys.dir("deleted") + "/" + rec.id + ".json";
     var tomb = { type: "tombstone", id: rec.id, deletedAt: Date.now(), reason: String(reason || ""), rec: rec };
     var content = Util.b64enc(JSON.stringify(tomb));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
@@ -462,7 +462,7 @@
   /** 移除云端墓碑（回收站还原用）。
       还原必须「先删墓碑、再写回记录」：反过来的话下一轮 syncPull 会用残留墓碑把刚还原的记录再删一次。 */
   async function delTombstone(id) {
-    var path = "data/deleted/" + id + ".json";
+    var path = Config.Sys.dir("deleted") + "/" + id + ".json";
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }   // 404 视为已无墓碑
@@ -474,7 +474,7 @@
 
   /** 清空全部并写一条汇总墓碑（data/deleted/__clear-all__.json） */
   async function clearAllWithReason(reason) {
-    var path = "data/deleted/__clear-all__.json";
+    var path = Config.Sys.dir("deleted") + "/__clear-all__.json";
     var tomb = { type: "clear-all", id: "__clear-all__", deletedAt: Date.now(), reason: String(reason || "") };
     var content = Util.b64enc(JSON.stringify(tomb));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
@@ -493,7 +493,7 @@
 
   /** 拉取云端全部墓碑（目录 404 视为空） */
   async function pullTombstones() {
-    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/data/deleted?ref=" + Config.GH.branch;
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("deleted") + "?ref=" + Config.GH.branch;
     var arr;
     try { arr = await apiJson(url); }
     catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
@@ -539,7 +539,7 @@
   async function pushPhoto(id, suffix, dataUrl) {
     var m = /^data:image\/[^;]+;base64,(.+)$/.exec(String(dataUrl || ""));
     if (!m) return "";
-    var path = "data/photos/" + id + "-" + suffix + ".jpg";
+    var path = Config.Sys.dir("photos") + "/" + id + "-" + suffix + ".jpg";
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
     try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
@@ -659,7 +659,7 @@
      - 队列只存 id（不存整条记录，避免照片 dataURL 撑爆 localStorage）；冲刷时从 State.list 取最新内容重推，
        按 id 覆盖，幂等。 */
 
-  var SYNC_QUEUE_KEY = "outbound_sync_queue";
+  var SYNC_QUEUE_KEY = Config.Sys.key("sync_queue");
 
   /* 队列变更通知：UI（落地页徽标 / 云同步页列表 / 底部状态栏）实时刷新。
      不再让"提交失败"静默——队列一旦变化就推给所有监听者。 */
@@ -747,7 +747,7 @@
      - 删除时立即把 {id, reason} 写入本地队列（localStorage outbound_tomb_queue）。
      - syncPull 合并后剔除队列中的 id（本地不复活），并冲刷队列把墓碑补推到云端。
      - 云端墓碑 + 删除文件成功后才出队。 */
-  var TOMB_QUEUE_KEY = "outbound_tomb_queue";
+  var TOMB_QUEUE_KEY = Config.Sys.key("tomb_queue");
   function loadTombQueue() {
     try { return JSON.parse(localStorage.getItem(TOMB_QUEUE_KEY) || "[]"); } catch (e) { return []; }
   }
@@ -795,7 +795,7 @@
   async function pushRemind(obj) {
     if (!obj || !obj.orders || !obj.orders.length) throw new Error("empty remind payload");
     var id = "r" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-    var path = "data/notify/" + id + ".json";
+    var path = Config.Sys.dir("notify") + "/" + id + ".json";
     var content = Util.b64enc(JSON.stringify(obj));
     await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
       method: "PUT", headers: ghHeaders(),
@@ -808,7 +808,7 @@
   async function pushNotifyFile(prefix, payload) {
     if (!payload) throw new Error("empty notify payload");
     var id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-    var path = "data/notify/" + prefix + "-" + id + ".json";
+    var path = Config.Sys.dir("notify") + "/" + prefix + "-" + id + ".json";
     var content = Util.b64enc(JSON.stringify(payload));
     await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
       method: "PUT", headers: ghHeaders(),
@@ -823,7 +823,7 @@
   async function pushStocktake(rec) {
     if (!rec || !rec.id) return false;
     if (!hasToken()) return false;
-    var path = "data/stocktakes/" + rec.id + ".json";
+    var path = Config.Sys.dir("stocktakes") + "/" + rec.id + ".json";
     var content = Util.b64enc(JSON.stringify(rec));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
@@ -974,7 +974,7 @@
       // Git Trees 增量拉取：1 次 tree + 仅变更文件，替代 4 目录 N+1 全量
       var tree = null;
       try { tree = await fetchTree(); } catch (e) { tree = null; }
-      var r1 = await pullDir("data/records", tree);
+      var r1 = await pullDir(Config.Sys.dir("records"), tree);
       var recs = r1.recs;
       // 待取货/备忘录/删除墓碑：用各自独立的全量拉取函数，不再走 pullDir 增量缓存，
       // 修复"同步加速"引入的回归——pullDir 曾把整树 sha 写入同一缓存，导致这三个目录在首次同步被跳过、
@@ -987,7 +987,7 @@
       try { toms = await pullTombstones(); } catch (e) { toms = []; }
       // 盘点校准记录（data/stocktakes/）：独立目录，不进金山、不触发登记通知
       var stkCloud = [];
-      try { stkCloud = (await pullDir("data/stocktakes", tree)).recs; } catch (e) { stkCloud = []; }
+      try { stkCloud = (await pullDir(Config.Sys.dir("stocktakes"), tree)).recs; } catch (e) { stkCloud = []; }
       var merged = window.App.Records.mergeAndSort(window.App.State.list, recs);
       // 应用墓碑：删除本地已标记删除的记录
       if (toms && toms.length) {

@@ -81,7 +81,7 @@
       '<div class="win-shell" id="winShell">' +
         '<div class="win-overlay" id="winOverlay"></div>' +
         '<div class="win-titlebar">' +
-          '<span class="win-titlebar-title">' + Util.esc(Config.BRAND_TITLE) + '</span>' +
+          '<span class="win-titlebar-title" id="winBrandTitle">' + Util.esc(brandLabel()) + '</span>' +
           '<div class="win-titlebar-btns">' +
             '<button type="button" class="win-titlebar-btn" id="winMin" title="最小化">&#8211;</button>' +
             '<button type="button" class="win-titlebar-btn" id="winMax" title="最大化">&#9633;</button>' +
@@ -90,7 +90,7 @@
         '</div>' +
         '<div class="win-topbar">' +
           '<button type="button" class="win-topbar-menu" id="winMenu" title="菜单">' + UI.icon("menu", 20) + '</button>' +
-          '<span class="win-topbar-title">' + Util.esc(Config.BRAND_TITLE) + '</span>' +
+          '<span class="win-topbar-title" id="winBrandTitleTop">' + Util.esc(brandLabel()) + '</span>' +
           '<div class="win-topbar-search">' +
             '<!-- 全局搜索已移除（2026-08-08 用户要求） -->' +
           '</div>' +
@@ -100,6 +100,10 @@
         '</div>' +
         '<div class="win-main">' +
           '<aside class="win-sidebar" id="winSidebar">' +
+            '<div class="win-sysbar" id="winSysbar" role="group" aria-label="出货仓库单位">' +
+              '<button type="button" class="win-sysbar-btn" data-sys="shenzhen">深圳细胞</button>' +
+              '<button type="button" class="win-sysbar-btn" data-sys="saidis">赛迪斯</button>' +
+            '</div>' +
             '<nav class="win-sidebar-nav" id="winNav"></nav>' +
             '<div class="win-sidebar-foot">' +
               '<div class="win-status" id="winStatus">就绪</div>' +
@@ -113,12 +117,87 @@
     shellEl = Util.$("winShell");
     renderNav();
     wireShell();
+    bindSysBar();
     mount(module || State.nav.active || "stock");
     if (!routeBound) {
       window.addEventListener("hashchange", onRouteChange);
       routeBound = true;
     }
     startAutoSync();
+  }
+
+  /* ---------- 双仓库系统切换器（2026-09-04：深圳细胞 / 赛迪斯） ---------- */
+
+  /** 品牌标题：主标题 + 当前系统名（如「进销存管理系统 · 深圳细胞」） */
+  function brandLabel() {
+    return Config.BRAND_TITLE + " · " + Config.Sys.name();
+  }
+
+  /** 更新顶栏/标题栏的品牌文本与系统按钮高亮（切换系统后调用） */
+  function updateBrand() {
+    var b1 = Util.$("winBrandTitle"), b2 = Util.$("winBrandTitleTop");
+    var label = brandLabel();
+    if (b1) b1.textContent = label;
+    if (b2) b2.textContent = label;
+    var cur = Config.Sys.current().id;
+    var btns = document.querySelectorAll(".win-sysbar-btn");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle("active", btns[i].getAttribute("data-sys") === cur);
+    }
+  }
+
+  var sysBarBound = false;
+  function bindSysBar() {
+    if (sysBarBound) return;
+    sysBarBound = true;
+    var bar = Util.$("winSysbar");
+    if (!bar) return;
+    bar.addEventListener("click", function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest(".win-sysbar-btn") : null;
+      if (!btn) return;
+      switchSystem(btn.getAttribute("data-sys"));
+    });
+    updateBrand();
+  }
+
+  /** 切换系统：数据目录/本地缓存键/catalog 基准全部按新系统热切换（不整页刷新，避免退出登录） */
+  function switchSystem(id) {
+    if (!id || id === Config.Sys.current().id) return;
+    Config.Sys.set(id);
+    updateBrand();
+    // 重读新系统的本地缓存（记录/待取货/备忘/盘点，键已按系统隔离）
+    window.App.State.init();
+    if (window.App.Stock) window.App.Stock.markDirty();
+    // 清掉当前视图并重新挂载当前模块，保证表格/统计基于新系统数据
+    if (currentView && typeof currentView.destroy === "function") {
+      try { currentView.destroy(); } catch (e) { console.warn("[app] 视图清理失败", e); }
+      currentView = null;
+    }
+    var cur = State.nav.active || "stock";
+    // catalog 按新系统重载（异步）；完成后刷新依赖目录的视图
+    if (window.App.Catalog && window.App.Catalog.reload) {
+      window.App.Catalog.reload().then(function () {
+        try { window.App.Views.dashboard && window.App.Views.dashboard.refresh && window.App.Views.dashboard.refresh(); } catch (e) {}
+        try { window.App.Views.stock && window.App.Views.stock.refresh && window.App.Views.stock.refresh(); } catch (e) {}
+        try { window.App.Views.records && window.App.Views.records.refresh && window.App.Views.records.refresh(); } catch (e) {}
+        try { window.App.Views.report && window.App.Views.report.refresh && window.App.Views.report.refresh(); } catch (e) {}
+        if (window.App.Stock) window.App.Stock.markDirty();
+      })["catch"](function () {});
+    }
+    // 有令牌则从云端拉取新系统数据；完成后再次挂载保证最新
+    var remount = function () {
+      if (currentView && typeof currentView.destroy === "function") {
+        try { currentView.destroy(); } catch (e) {}
+        currentView = null;
+      }
+      mount(cur);
+    };
+    if (Cloud && Cloud.hasToken && Cloud.hasToken()) {
+      Cloud.syncPull({ onStatus: function () {} }).then(remount)["catch"](function () { remount(); });
+    } else {
+      remount();
+    }
+    Util.toast("已切换到「" + Config.Sys.name() + "」系统");
   }
 
   function renderNav() {
@@ -472,6 +551,8 @@
     isAutoSyncOn: isAutoSyncOn,
     nextSyncRemainSec: nextSyncRemainSec,
     requestMemoNotification: requestMemoNotification,
-    checkMemoReminders: checkMemoReminders
+    checkMemoReminders: checkMemoReminders,
+    switchSystem: switchSystem,
+    updateBrand: updateBrand
   };
 })();

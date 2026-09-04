@@ -418,7 +418,7 @@
     rows += '<div class="detail-row"><span class="k">出库时间</span><span class="v">' + Util.esc(r.time || "-") + '</span></div>';
     rows += '<div class="detail-row"><span class="k">领取人</span><span class="v">' + Util.esc(r.picker || "-") + '</span></div>';
     rows += '<div class="detail-row"><span class="k">部门/客户</span><span class="v">' + Util.esc(r.dept || "-") + '</span></div>';
-    if (r.entity) rows += '<div class="detail-row"><span class="k">结算法人单位</span><span class="v">' + Util.esc(r.entity) + '</span></div>';
+    if (r.entity) rows += '<div class="detail-row"><span class="k">出货仓库单位</span><span class="v">' + Util.esc(r.entity) + '</span></div>';
     rows += '<div class="detail-row"><span class="k">用途</span><span class="v">' + Util.esc(r.purpose || "-") + '</span></div>';
     if (r.note) rows += '<div class="detail-row"><span class="k">备注</span><span class="v">' + Util.esc(r.note) + '</span></div>';
     rows += '<div class="detail-row"><span class="k">货品归还</span><span class="v detail-items">' + (lines || "-") + '</span></div>';

@@ -25,19 +25,20 @@
   var submitting = false;
   /** 当前选中的用途值（chip 单选，互斥高亮） */
   var selectedPurpose = "";
-  /** 出货仓库单位默认值：固定「深圳细胞法人」（2026-09-04 升级：深圳细胞 / 赛迪斯二选一，定死选项） */
-  var DEFAULT_ENTITY = (Config.ENTITY_PRESETS && Config.ENTITY_PRESETS[0]) || "";
-  /** 当前选中的出货仓库单位（chip 单选，互斥高亮；必填，默认深圳细胞，不记忆上次选择） */
-  var selectedEntity = DEFAULT_ENTITY;
+  /** 出货仓库单位默认值：跟随当前系统（深圳系统=深圳细胞法人，赛迪斯系统=赛迪斯法人）。
+      2026-09-04 双仓库：选项定死二选一；DEFAULT_ENTITY 为函数，热切换系统后取到新系统实体 */
+  function DEFAULT_ENTITY() { return Config.Sys.entity(); }
+  /** 当前选中的出货仓库单位（chip 单选，互斥高亮；必填，默认当前系统实体） */
+  var selectedEntity = DEFAULT_ENTITY();
 
   function render(container) {
     container.innerHTML =
       '<div class="card">' +
         '<h2>出库登记 <span class="tag">基础登记</span></h2>' +
         '<div class="field">' +
-          '<span class="field-label" id="outEntityLabel">出货仓库单位（已默认选择深圳细胞）<span class="req">*</span></span>' +
+          '<span class="field-label" id="outEntityLabel">出货仓库单位（默认「' + Util.esc(Config.Sys.name()) + '」）<span class="req">*</span></span>' +
           '<div id="outEntityChips" class="chip-group" role="group" aria-labelledby="outEntityLabel"></div>' +
-          '<div class="hint" style="margin-top:-4px">仓库二选一：所选仓库的登记数据将写入对应独立系统</div>' +
+          '<div class="hint" style="margin-top:-4px">仓库二选一：切换后系统即跳转到该仓库，登记数据写入对应独立系统</div>' +
         '</div>' +
         '<div class="field">' +
           '<label for="outDept">部门 / 领取单位<span class="req">*</span></label>' +
@@ -172,11 +173,19 @@
     });
     renderPurposeChips();
 
-    // 出货仓库单位 chip 单选：事件委托（互斥高亮）；选项固定二选一（深圳细胞/赛迪斯），无「+ 添加」
+    // 出货仓库单位 chip 单选：事件委托（互斥高亮）；选项固定二选一（深圳细胞/赛迪斯），无「+ 添加」。
+    // 点击另一仓库 = 切换系统（数据目录随之切换，chip 默认值跟随系统），由 Views.app.switchSystem 热切换。
     els.entityChips.addEventListener("click", function (ev) {
       var btn = ev.target && ev.target.closest ? ev.target.closest(".chip") : null;
       if (!btn) return;
-      setEntitySelected(btn.getAttribute("data-val") || "");
+      var val = btn.getAttribute("data-val") || "";
+      var sysOf = { "深圳细胞法人": "shenzhen", "赛迪斯法人": "saidis" }[val];
+      var appV = window.App.Views && window.App.Views.app;
+      if (sysOf && appV && appV.switchSystem && sysOf !== Config.Sys.current().id) {
+        appV.switchSystem(sysOf);   // 切换系统 → 视图重挂 → chip 默认值跟随新系统
+        return;
+      }
+      setEntitySelected(val);
     });
     renderEntityChips();
 
@@ -605,7 +614,7 @@
     selectedPurpose = "";
     renderPurposeChips();
     closePurposeAdd();
-    selectedEntity = DEFAULT_ENTITY;   // 清空后回默认「深圳细胞」
+    selectedEntity = DEFAULT_ENTITY();   // 清空后回默认（当前系统实体）
     renderEntityChips();
     els.dept.value = "";
     els.time.value = Util.nowLocal();
@@ -633,7 +642,7 @@
     // 编辑初始化选中态：有值则选中，无值（旧记录/导入记录）必须清空，避免先前选中态残留带出
     selectedPurpose = r.purpose || "";
     renderPurposeChips();
-    selectedEntity = r.entity || DEFAULT_ENTITY;   // 旧记录无法人字段时回默认「深圳细胞法人」
+    selectedEntity = r.entity || DEFAULT_ENTITY();   // 旧记录无法人字段时回默认（当前系统实体）
     renderEntityChips();
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);

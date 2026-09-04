@@ -234,7 +234,7 @@
         '<th class="check-col"><input type="checkbox" id="recCheckAll" title="全选当前筛选结果" /></th>' +
         '<th>序号</th><th>时间</th><th>' + (isIn ? "经办人" : "领取人") + '</th>' +
         (!isIn ? '<th>状态</th>' : '') +
-        (!isIn ? '<th>结算法人单位</th>' : '') +
+        (!isIn ? '<th>出货仓库单位</th>' : '') +
         '<th>' + (isIn ? "来源" : "部门") + '</th><th>用途/项目</th><th>货物名称</th><th>数量</th><th>库存</th><th>照片</th><th>操作</th>' +
         '</tr></thead><tbody>';
       list.forEach(function (r, i) {
@@ -386,7 +386,7 @@
         rows += '<div class="detail-row"><span class="k">领取人</span><span class="v">' + Util.esc(r.picker || "-") + '</span></div>';
         rows += '<div class="detail-row"><span class="k">部门</span><span class="v">' + Util.esc(r.dept || "-") + '</span></div>';
         if (r.entity) {
-          rows += '<div class="detail-row"><span class="k">结算法人单位</span><span class="v">' + Util.esc(r.entity) + '</span></div>';
+          rows += '<div class="detail-row"><span class="k">出货仓库单位</span><span class="v">' + Util.esc(r.entity) + '</span></div>';
         }
       }
       rows += '<div class="detail-row"><span class="k">' + (isRecIn ? "用途/来源" : "用途/项目") + '</span><span class="v">' + Util.esc(r.purpose || "-") + '</span></div>';
@@ -457,7 +457,7 @@
         '<div class="field">' +
           '<b>' + (isRecIn ? "经办人" : "领取人") + '：</b>' + Util.esc(r.picker || "-") + '<br>' +
           (isRecIn ? '' : '<b>部门/客户：</b>' + Util.esc(r.dept || "-") + '<br>') +
-          (isRecIn ? '' : (r.entity ? '<b>结算法人单位：</b>' + Util.esc(r.entity) + '<br>' : '')) +
+          (isRecIn ? '' : (r.entity ? '<b>出货仓库单位：</b>' + Util.esc(r.entity) + '<br>' : '')) +
           '<b>' + (isRecIn ? "用途/来源" : "用途/项目") + '：</b>' + Util.esc(r.purpose || "-") + '<br>' +
           (isRecIn ? '' : '<b>状态：</b>' + statusLabel + '<br>') +
           (r.note ? '<b>备注：</b>' + Util.esc(r.note) + '<br>' : '') +

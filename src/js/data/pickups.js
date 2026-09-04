@@ -64,10 +64,10 @@
   }
 
   /** 转为出库记录 payload（确认出库时调用；不含 confirmed/shipped）。
-      结算法人单位：待取货表单不收集，按系统默认「深圳细胞法人」补全（Config.ENTITY_PRESETS[0]），
-      与出库登记表单的空值回退规则一致（out.js DEFAULT_ENTITY）；备注原样透传，信息不断链。 */
+      出货仓库单位：待取货表单不收集，按当前系统实体补全（Config.Sys.entity()：深圳系统=深圳细胞法人、
+      赛迪斯系统=赛迪斯法人），与出库登记表单的空值回退规则一致（out.js DEFAULT_ENTITY）；备注原样透传。 */
   function toOutboundPayload(pk) {
-    var entity = (window.App.Config && window.App.Config.ENTITY_PRESETS && window.App.Config.ENTITY_PRESETS[0]) || "深圳细胞法人";
+    var entity = (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.entity()) || "深圳细胞法人";
     return {
       time: Util.nowLocal(),
       picker: pk.picker,

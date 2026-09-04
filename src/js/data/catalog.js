@@ -15,8 +15,8 @@
   // 所以不能在顶部捕获常量，必须调用时惰性取值，否则「货品目录管理」弹窗一打开就抛 TypeError。
   function UI() { return window.App.UI; }
 
-  var CLOUD_PATH = "data/catalog/catalog.json";
-  var LS_KEY = "outbound_catalog_v1";
+  /* 云端 catalog 路径与本地缓存键均按当前系统动态化（深圳：data/catalog/catalog.json + outbound_catalog_v1；
+     赛迪斯：data-saidis/catalog/catalog.json + outbound_saidis_catalog_v1）。调用处运行时求值。 */
   var catalog = null;   // {version, updatedAt, products:[], inventory:{}}
   var loaded = false;
 
@@ -65,7 +65,7 @@
   async function fetchCloud() {
     if (!hasToken()) return null;
     try {
-      var res = await fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + CLOUD_PATH +
+      var res = await fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("catalog/catalog.json") +
         "?ref=" + Config.GH.branch, { headers: { "Accept": "application/vnd.github+json",
         "Authorization": "Bearer " + Config.GH.token } });
       if (!res.ok) return null;
@@ -74,12 +74,17 @@
     } catch (e) { return null; }
   }
 
-  /** 生成默认目录（从当前配置推导，保证保存时始终有完整底稿） */
+  /** 生成默认目录（从当前配置推导，保证保存时始终有完整底稿）。
+      双系统：深圳细胞沿用 Config.INVENTORY 快照；赛迪斯首次（云端与本地缓存皆无）库存基准为空
+      （inventory 全 0，由 save 自动补零落盘为独立 data-saidis/catalog/catalog.json），避免误继承深圳库存。 */
   function defaultCatalog() {
     var products = Config.PRODUCTS.map(function (name) {
       return { name: name, unit: "", warnAt: Config.LOW_STOCK_THRESHOLD, price: 0, barcode: "" };
     });
-    return { version: 1, updatedAt: 0, products: products, inventory: Object.assign({}, Config.INVENTORY) };
+    var hadLocal = false;
+    try { hadLocal = !!localStorage.getItem(Config.Sys.key("catalog_v1")); } catch (e) {}
+    var inv = (!hadLocal && Config.Sys.isSaidis()) ? {} : Object.assign({}, Config.INVENTORY);
+    return { version: 1, updatedAt: 0, products: products, inventory: inv };
   }
 
   /** 启动加载：云端优先 → localStorage 缓存 → 默认 */
@@ -90,12 +95,12 @@
     if (cloud && Array.isArray(cloud.products)) {
       catalog = cloud;
       applyToConfig(cloud);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(cloud)); } catch (e) {}
+      try { localStorage.setItem(Config.Sys.key("catalog_v1"), JSON.stringify(cloud)); } catch (e) {}
       refreshDependents();
       return;
     }
     try {
-      var cached = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+      var cached = JSON.parse(localStorage.getItem(Config.Sys.key("catalog_v1")) || "null");
       if (cached && Array.isArray(cached.products)) {
         catalog = cached;
         applyToConfig(cached);
@@ -121,11 +126,11 @@
     names.forEach(function (n) { if (cat.inventory[n] === undefined) cat.inventory[n] = 0; });
     catalog = cat;
     applyToConfig(cat);
-    try { localStorage.setItem(LS_KEY, JSON.stringify(cat)); } catch (e) {}
+    try { localStorage.setItem(Config.Sys.key("catalog_v1"), JSON.stringify(cat)); } catch (e) {}
     if (!hasToken()) { if (cb) cb(true, "本机模式：目录已保存到本机"); return; }
     try {
       var content = Util.b64enc(JSON.stringify(cat));
-      var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + CLOUD_PATH + "?ref=" + Config.GH.branch;
+      var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("catalog/catalog.json") + "?ref=" + Config.GH.branch;
       var sha = null;
       try {
         var ej = await (await fetch(getUrl, { headers: { "Accept": "application/vnd.github+json",
@@ -135,7 +140,7 @@
       var body = sha
         ? { message: "update catalog", content: content, sha: sha, branch: Config.GH.branch }
         : { message: "add catalog", content: content, branch: Config.GH.branch };
-      var res = await fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + CLOUD_PATH, {
+      var res = await fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("catalog/catalog.json"), {
         method: "PUT",
         headers: { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + Config.GH.token,
           "Content-Type": "application/json" },
@@ -293,7 +298,7 @@
       if (!hasToken()) { resolve(false); return; }
       try {
         var ts = event.time || Date.now();
-        var path = "data/catalog/notifications/" + ts + ".json";
+        var path = Config.Sys.dir("catalog/notifications") + "/" + ts + ".json";
         var content = Util.b64enc(JSON.stringify(event));
         var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
         var shaP = fetch(getUrl, { headers: { "Accept": "application/vnd.github+json",
@@ -315,6 +320,12 @@
   window.App = window.App || {};
   window.App.Catalog = {
     load: load,
+    /** 切换系统后重置并重新加载当前系统的 catalog（云端优先 → 缓存 → 默认空库存） */
+    reload: async function () {
+      loaded = false;
+      catalog = null;
+      await load();
+    },
     save: save,
     openManager: openManager,
     quickAdd: quickAdd,

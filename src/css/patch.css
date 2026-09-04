@@ -237,3 +237,29 @@
 @media (prefers-color-scheme: dark) {
   html:not([data-theme="light"]) { color-scheme: dark; }
 }
+
+/* 双仓库系统切换器（2026-09-04：深圳细胞 / 赛迪斯） */
+.win-sysbar {
+  display: flex;
+  gap: 6px;
+  padding: 12px 12px 2px;
+}
+.win-sysbar-btn {
+  flex: 1;
+  padding: 7px 0;
+  font-size: 13px;
+  text-align: center;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid rgba(62, 93, 84, .45);
+  color: var(--ink-700, #AAB4C2);
+  background: transparent;
+  transition: background .15s, color .15s;
+}
+.win-sysbar-btn:hover { background: rgba(111, 160, 138, .10); }
+.win-sysbar-btn.active {
+  background: #3E5D54;
+  border-color: transparent;
+  color: #fff;
+}

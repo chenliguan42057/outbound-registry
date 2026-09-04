@@ -53,9 +53,9 @@
       try { localStorage.removeItem(key); } catch (e) {}
     },
 
-    /* ---- 记录（冻结键 outbound_records_v2） ---- */
-    loadRecords: function () { return Store.get(Config.STORE_KEY, []); },
-    saveRecords: function (list) { Store.set(Config.STORE_KEY, list); },
+    /* ---- 记录（键按当前系统：outbound_records_v2 / outbound_saidis_records_v2） ---- */
+    loadRecords: function () { return Store.get(Config.Sys.key("records_v2"), []); },
+    saveRecords: function (list) { Store.set(Config.Sys.key("records_v2"), list); },
 
     /* ---- 导航状态（最后停留目录项 / 折叠状态） ---- */
     loadNav: function () {
@@ -66,15 +66,15 @@
     },
     saveNav: function (nav) { Store.set(Config.NAV_KEY, nav); },
 
-    /* ---- 表单草稿：name = "out" | "in" ---- */
+    /* ---- 表单草稿：name = "out" | "in"（键按当前系统隔离，防跨系统误提交） ---- */
     loadDraft: function (name) {
-      return Store.get(name === "in" ? Config.DRAFT_IN_KEY : Config.DRAFT_OUT_KEY, null);
+      return Store.get(name === "in" ? Config.Sys.key("draft_in") : Config.Sys.key("draft_out"), null);
     },
     saveDraft: function (name, draft) {
-      Store.set(name === "in" ? Config.DRAFT_IN_KEY : Config.DRAFT_OUT_KEY, draft);
+      Store.set(name === "in" ? Config.Sys.key("draft_in") : Config.Sys.key("draft_out"), draft);
     },
     clearDraft: function (name) {
-      Store.remove(name === "in" ? Config.DRAFT_IN_KEY : Config.DRAFT_OUT_KEY);
+      Store.remove(name === "in" ? Config.Sys.key("draft_in") : Config.Sys.key("draft_out"));
     },
 
     /* ---- 记录搜索条件 ---- */
@@ -86,22 +86,22 @@
     },
     saveSearch: function (s) { Store.set(Config.SEARCH_KEY, s); },
 
-    /* ---- 待取货（localStorage 键 outbound_pickups_v2，纯追加不动既有键） ---- */
-    loadPickups: function () { return Store.get(Config.PICKUP_STORE_KEY, []); },
-    savePickups: function (list) { Store.set(Config.PICKUP_STORE_KEY, list); },
+    /* ---- 待取货（键按当前系统：outbound_pickups_v2 / outbound_saidis_pickups_v2） ---- */
+    loadPickups: function () { return Store.get(Config.Sys.key("pickups_v2"), []); },
+    savePickups: function (list) { Store.set(Config.Sys.key("pickups_v2"), list); },
 
-    /* ---- 待取货登记草稿（outbound_pickup_draft） ---- */
-    loadPickupsDraft: function () { return Store.get(Config.PICKUP_DRAFT_KEY, null); },
-    savePickupsDraft: function (draft) { Store.set(Config.PICKUP_DRAFT_KEY, draft); },
-    clearPickupsDraft: function () { Store.remove(Config.PICKUP_DRAFT_KEY); },
+    /* ---- 待取货登记草稿（按系统隔离） ---- */
+    loadPickupsDraft: function () { return Store.get(Config.Sys.key("pickup_draft"), null); },
+    savePickupsDraft: function (draft) { Store.set(Config.Sys.key("pickup_draft"), draft); },
+    clearPickupsDraft: function () { Store.remove(Config.Sys.key("pickup_draft")); },
 
-    /* ---- 备忘录（localStorage 键 outbound_memos_v2，纯追加不动既有键） ---- */
-    loadMemos: function () { return Store.get(Config.MEMO_STORE_KEY, []); },
-    saveMemos: function (list) { Store.set(Config.MEMO_STORE_KEY, list); },
+    /* ---- 备忘录（键按当前系统：outbound_memos_v2 / outbound_saidis_memos_v2） ---- */
+    loadMemos: function () { return Store.get(Config.Sys.key("memos_v2"), []); },
+    saveMemos: function (list) { Store.set(Config.Sys.key("memos_v2"), list); },
 
-    /* ---- 盘点校准记录（localStorage 键 outbound_stocktakes_v1，库存流水展示用） ---- */
-    loadStocktakes: function () { return Store.get(Config.STOCKTAKE_STORE_KEY, []); },
-    saveStocktakes: function (list) { Store.set(Config.STOCKTAKE_STORE_KEY, list); },
+    /* ---- 盘点校准记录（键按当前系统：outbound_stocktakes_v1 / outbound_saidis_stocktakes_v1） ---- */
+    loadStocktakes: function () { return Store.get(Config.Sys.key("stocktakes_v1"), []); },
+    saveStocktakes: function (list) { Store.set(Config.Sys.key("stocktakes_v1"), list); },
 
     /* ---- 历史补全（部门 / 领取人，冻结键） ---- */
     getHistory: function (key) { return Store.get(key, []); },

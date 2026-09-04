@@ -40,6 +40,42 @@
     token: ""
   };
 
+  /* ================= 双仓库系统上下文（2026-09-04 大升级） =================
+     深圳细胞（data/，原系统，全部键沿用 outbound_*）与赛迪斯（data-saidis/，键 outbound_saidis_*）
+     同网址切换、数据物理隔离。catalog 产品目录共享（Config.PRODUCTS/NAME_MAP 构建常量单份），
+     inventory 基准按系统隔离（data/catalog/catalog.json vs data-saidis/catalog/catalog.json）。
+     Sys 提供目录/键/当前实体；默认深圳细胞（localStorage outbound_active_system 记忆切换）。 */
+  var SYSTEM_DEFS = {
+    shenzhen: { id: "shenzhen", name: "深圳细胞", dataDir: "data", lsPrefix: "outbound", entity: "深圳细胞法人", saidis: false },
+    saidis:   { id: "saidis", name: "赛迪斯",   dataDir: "data-saidis", lsPrefix: "outbound_saidis", entity: "赛迪斯法人", saidis: true }
+  };
+  var ACTIVE_SYSTEM_KEY = "outbound_active_system";
+  var Sys = {
+    /** 当前系统定义（默认深圳细胞；localStorage 记忆用户上次切换） */
+    current: function () {
+      try {
+        var v = localStorage.getItem(ACTIVE_SYSTEM_KEY);
+        if (v === "saidis") return SYSTEM_DEFS.saidis;
+      } catch (e) {}
+      return SYSTEM_DEFS.shenzhen;
+    },
+    /** 切换当前系统并记忆（"shenzhen" | "saidis"） */
+    set: function (id) {
+      try { localStorage.setItem(ACTIVE_SYSTEM_KEY, id === "saidis" ? "saidis" : "shenzhen"); } catch (e) {}
+    },
+    /** 云端数据目录根：data / data-saidis */
+    root: function () { return Sys.current().dataDir; },
+    /** 相对云端目录 → 完整目录：Sys.dir("records") → "data/records"（赛迪斯 → "data-saidis/records"） */
+    dir: function (rel) { return Sys.current().dataDir + "/" + rel; },
+    /** localStorage 键：Sys.key("records_v2") → "outbound_records_v2"（赛迪斯 → "outbound_saidis_records_v2"） */
+    key: function (name) { return Sys.current().lsPrefix + "_" + name; },
+    /** 当前系统出货仓库单位值（出库记录 entity 补全用） */
+    entity: function () { return Sys.current().entity; },
+    /** 当前系统名 */
+    name: function () { return Sys.current().name; },
+    isSaidis: function () { return Sys.current().saidis; }
+  };
+
   /* 改名映射（旧名→新名）同样来自 product-map.js（nameMap），与后台共用。
      历史 records 里的 items.name 仍是旧名，库存折算必须归一到新名，否则库存错乱。
      兜底内联同上。 */
@@ -68,6 +104,10 @@
     INVENTORY: INVENTORY,
     NAME_MAP: NAME_MAP,
     GH: GH,
+    /* 双仓库系统上下文（2026-09-04） */
+    SYSTEM_DEFS: SYSTEM_DEFS,
+    ACTIVE_SYSTEM_KEY: ACTIVE_SYSTEM_KEY,
+    Sys: Sys,
 
     /* 品牌标题（Windows 桌面壳标题栏 / 顶栏 / 落地页顶栏） */
     BRAND_TITLE: "进销存管理系统",

@@ -2,7 +2,7 @@
  * records.js — 记录 CRUD + 云端合并排序 + CSV 导出
  * 记录 schema 冻结：{id, time, picker?, dept?, purpose, items:[{name,qty}], photos:[dataURL], _ts, affectsStock, type?, status?}
  * status?: "pending" | "submitted" —— 仅出库记录（type 非 "in"）使用的可选字段；入库不写。
- * entity?: 结算法人单位（仅出库记录，chip 必填）；note?: 备注（非必填）——均为纯追加可选字段。
+ * entity?: 出货仓库单位（仅出库记录，chip 必填）；note?: 备注（非必填）——均为纯追加可选字段。
  */
 (function () {
   'use strict';
@@ -224,7 +224,7 @@
     var Stock = window.App.Stock;
     var hasOut = (list || []).some(function (r) { return (r.type || "out") !== "in"; });
     var head = ["序号", "时间", "领取人", "部门", "用途/项目", "备注", "货物名称及数量", "库存", "照片数"];
-    if (hasOut) head.splice(3, 0, "状态", "结算法人单位");   // 状态/结算法人单位列插在「领取人」「部门」之间（保持既有状态列 splice 语义）
+    if (hasOut) head.splice(3, 0, "状态", "出货仓库单位");   // 状态/出货仓库单位列插在「领取人」「部门」之间（保持既有状态列 splice 语义）
     var rows = list.map(function (r, i) {
       var items = (r.items || []).map(function (it) { return it.name + "×" + it.qty; }).join("； ");
       var stocks = (r.items || []).map(function (it) { return String(Stock.getRecordStock(it.name, r, it)); }).join("； ");
@@ -260,7 +260,7 @@
       }
       return null;
     };
-    var head = ["单号", "时间", "结算法人单位", "领取人", "部门", "用途/项目", "货品名称", "数量", "单价", "金额"];
+    var head = ["单号", "时间", "出货仓库单位", "领取人", "部门", "用途/项目", "货品名称", "数量", "单价", "金额"];
     var rows = [];
     (list || []).forEach(function (r) {
       var base = [r.orderNo || r.id, r.time || "", r.entity || "", r.picker || "", r.dept || "", r.purpose || ""];
