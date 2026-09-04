@@ -6,10 +6,11 @@ on:
     # 若不排除，每条业务数据都会触发一次全站重新部署；而下面的
     # concurrency.cancel-in-progress 会把正在进行的部署直接取消，
     # 高峰期表现为「连续提交多条，站点却迟迟不更新」。
-    # 部署产物只有 src/（见下方 cp -r src/. dist/），data/ 根本不参与打包，
-    # 因此忽略这些路径不会让站点内容失真。
+    # 部署产物只有 src/（见下方 cp -r src/. dist/），data/ 与 data-saidis/
+    # （双仓库：深圳细胞 / 赛迪斯）根本不参与打包，忽略它们不会让站点内容失真。
     paths-ignore:
       - 'data/**'
+      - 'data-saidis/**'
       - 'docs/**'
       - '**.md'
       - '.wps_synced.json'
