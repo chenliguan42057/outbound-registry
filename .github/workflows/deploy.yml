@@ -89,8 +89,8 @@ jobs:
             echo "::error::检测到 components.js 被回滚（缺拍照直调优化标记），已中止部署。"
             exit 1
           fi
-          if ! grep -q 'outbound_last_entity' src/js/views/out.js ; then
-            echo "::error::检测到 out.js 被回滚（缺记住法人单位优化标记），已中止部署。"
+          if ! grep -q 'DEFAULT_ENTITY' src/js/views/out.js ; then
+            echo "::error::检测到 out.js 被回滚（缺出货仓库单位二选一优化标记），已中止部署。"
             exit 1
           fi
           if ! grep -q 'wireOnlineOffline' src/js/views/app.js || ! grep -q 'sw.js' src/index.html ; then
