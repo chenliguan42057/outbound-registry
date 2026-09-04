@@ -20,7 +20,7 @@
         if (payload.summary) entry.summary = payload.summary;
       }
       var id = "a" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-      var path = "data/audit/" + id + ".json";
+      var path = Config.Sys.dir("audit") + "/" + id + ".json";   // 双仓库：审计随当前系统隔离（data/audit vs data-saidis/audit）
       var content = Util.b64enc(JSON.stringify(entry));
       fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
         method: "PUT",
