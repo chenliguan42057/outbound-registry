@@ -25,35 +25,19 @@
   var submitting = false;
   /** 当前选中的用途值（chip 单选，互斥高亮） */
   var selectedPurpose = "";
-  /** 结算法人单位默认值：预设第一项「深圳细胞法人」，仅手动点击赛迪斯或自定义后才切换 */
+  /** 出货仓库单位默认值：固定「深圳细胞法人」（2026-09-04 升级：深圳细胞 / 赛迪斯二选一，定死选项） */
   var DEFAULT_ENTITY = (Config.ENTITY_PRESETS && Config.ENTITY_PRESETS[0]) || "";
-  /** 记住上次使用的结算法人单位（体验优化 4c，2026-08-10） */
-  var LAST_ENTITY_KEY = "outbound_last_entity";
-  function loadLastEntity() {
-    try {
-      var v = localStorage.getItem(LAST_ENTITY_KEY);
-      if (v && (Config.ENTITY_PRESETS || []).indexOf(v) !== -1) return v;  // 仅恢复预设值，防脏数据
-    } catch (e) {}
-    return DEFAULT_ENTITY;
-  }
-  /** 当前选中的结算法人单位值（chip 单选，互斥高亮；必填，默认深圳细胞法人） */
-  var selectedEntity = loadLastEntity();
+  /** 当前选中的出货仓库单位（chip 单选，互斥高亮；必填，默认深圳细胞，不记忆上次选择） */
+  var selectedEntity = DEFAULT_ENTITY;
 
   function render(container) {
     container.innerHTML =
       '<div class="card">' +
         '<h2>出库登记 <span class="tag">基础登记</span></h2>' +
         '<div class="field">' +
-          '<span class="field-label" id="outEntityLabel">结算法人单位（已默认选择深圳细胞）<span class="req">*</span></span>' +
+          '<span class="field-label" id="outEntityLabel">出货仓库单位（已默认选择深圳细胞）<span class="req">*</span></span>' +
           '<div id="outEntityChips" class="chip-group" role="group" aria-labelledby="outEntityLabel"></div>' +
-          '<div class="purpose-add-row">' +
-            '<button type="button" class="chip-add" id="outEntityAdd">+ 添加</button>' +
-            '<span class="purpose-add-inline" id="outEntityAddInline" style="display:none;">' +
-              '<input type="text" id="outEntityInput" class="purpose-add-input" placeholder="输入自定义法人" maxlength="30" autocomplete="off" enterkeyhint="done" aria-label="自定义结算法人单位" />' +
-              '<button type="button" class="btn mini" id="outEntityOk">确定</button>' +
-              '<button type="button" class="btn ghost mini" id="outEntityCancel">取消</button>' +
-            '</span>' +
-          '</div>' +
+          '<div class="hint" style="margin-top:-4px">仓库二选一：所选仓库的登记数据将写入对应独立系统</div>' +
         '</div>' +
         '<div class="field">' +
           '<label for="outDept">部门 / 领取单位<span class="req">*</span></label>' +
@@ -109,11 +93,6 @@
 
     els = {
       entityChips: Util.$("outEntityChips"),
-      entityAdd: Util.$("outEntityAdd"),
-      entityAddInline: Util.$("outEntityAddInline"),
-      entityInput: Util.$("outEntityInput"),
-      entityOk: Util.$("outEntityOk"),
-      entityCancel: Util.$("outEntityCancel"),
       dept: Util.$("outDept"),
       time: Util.$("outTime"),
       picker: Util.$("outPicker"),
@@ -193,19 +172,11 @@
     });
     renderPurposeChips();
 
-    // 结算法人单位 chip 单选：事件委托（互斥高亮），与用途/项目同模式
+    // 出货仓库单位 chip 单选：事件委托（互斥高亮）；选项固定二选一（深圳细胞/赛迪斯），无「+ 添加」
     els.entityChips.addEventListener("click", function (ev) {
       var btn = ev.target && ev.target.closest ? ev.target.closest(".chip") : null;
       if (!btn) return;
-      closeEntityAdd();
       setEntitySelected(btn.getAttribute("data-val") || "");
-    });
-    els.entityAdd.addEventListener("click", openEntityAdd);
-    els.entityOk.addEventListener("click", confirmEntityAdd);
-    els.entityCancel.addEventListener("click", closeEntityAdd);
-    els.entityInput.addEventListener("keydown", function (ev) {
-      if (ev.key === "Escape") { ev.preventDefault(); closeEntityAdd(); }
-      else if (ev.key === "Enter") { ev.preventDefault(); confirmEntityAdd(); }
     });
     renderEntityChips();
 
@@ -252,9 +223,12 @@
     return getHistoryChipOptions(Config.PURPOSE_PRESETS, Config.PURPOSE_HISTORY_KEY, selectedPurpose);
   }
 
-  /** 组装「结算法人单位」chip 选项 */
+  /** 组装「出货仓库单位」chip 选项：固定二选一（深圳细胞/赛迪斯），不可自定义新增；
+      编辑历史旧记录若含自定义法人值，临时回显该值以便原样保存或切回固定两项。 */
   function getEntityOptions() {
-    return getHistoryChipOptions(Config.ENTITY_PRESETS, Config.ENTITY_HISTORY_KEY, selectedEntity);
+    var out = (Config.ENTITY_PRESETS || []).slice();
+    if (selectedEntity && out.indexOf(selectedEntity) === -1) out.push(selectedEntity);
+    return out;
   }
 
   /** 渲染 chip 列表（用户数据经 Util.esc 转义，防 XSS） */
@@ -331,33 +305,7 @@
     saveDraft();
   }
 
-  /** 打开「+ 添加」inline 输入框 */
-  function openEntityAdd() {
-    els.entityAdd.style.display = "none";
-    els.entityAddInline.style.display = "inline-flex";
-    els.entityInput.value = "";
-    els.entityInput.focus();
-  }
-
-  /** 关闭 inline 输入框并还原「+ 添加」按钮 */
-  function closeEntityAdd() {
-    if (!els.entityAdd) return;
-    els.entityAdd.style.display = "";
-    els.entityAddInline.style.display = "none";
-    els.entityInput.value = "";
-  }
-
-  /** 确认新增自定义法人：非空 + 不重复 → 写历史 → 重排 chips → 自动选中 */
-  function confirmEntityAdd() {
-    var val = els.entityInput.value.trim();
-    if (!val) { Util.toast("请输入结算法人单位", true); els.entityInput.focus(); return; }
-    if (getEntityOptions().indexOf(val) !== -1) { Util.toast("该法人已存在，请直接选择", true); return; }
-    Store.addHistory(Config.ENTITY_HISTORY_KEY, val);
-    closeEntityAdd();
-    selectedEntity = val;
-    renderEntityChips();
-    saveDraft();
-  }
+  /* 自定义「+ 添加」入口已移除：出货仓库单位固定二选一（深圳细胞/赛迪斯，见 getEntityOptions） */
 
   /** 历史补全（部门 / 领取人）
    *  2026-08-11 升级：合并「本地提交历史(lcoalStorage)」+「仓库所有登记记录中的字段全集(State.list)」
@@ -463,7 +411,7 @@
 
     // 一次性收集全部缺失项，字段级标红 + 滚动定位到第一处，替代「一次只弹一条 toast」
     var errs = [];
-    if (!entity) errs.push({ el: els.entityChips, msg: "请选择结算法人单位" });
+    if (!entity) errs.push({ el: els.entityChips, msg: "请选择出货仓库单位" });
     if (!dept) errs.push({ el: els.dept, msg: "请填写部门 / 领取单位" });
     if (!time) errs.push({ el: els.time, msg: "请填写领取时间" });
     if (!pickerVal) errs.push({ el: els.picker, msg: "请填写领取人" });
@@ -527,7 +475,6 @@
     }
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
-    try { localStorage.setItem(LAST_ENTITY_KEY, entity); } catch (e) {}   // 记住本次法人单位
     resetForm();
     // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
     // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。
@@ -658,9 +605,8 @@
     selectedPurpose = "";
     renderPurposeChips();
     closePurposeAdd();
-    selectedEntity = DEFAULT_ENTITY;   // 清空后回默认「深圳细胞法人」
+    selectedEntity = DEFAULT_ENTITY;   // 清空后回默认「深圳细胞」
     renderEntityChips();
-    closeEntityAdd();
     els.dept.value = "";
     els.time.value = Util.nowLocal();
     els.note.value = "";

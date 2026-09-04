@@ -153,7 +153,8 @@
     /* 出库「用途/项目」预设（chip 单选；用户自定义项存 outbound_purpose_history） */
     PURPOSE_PRESETS: ["客户销售", "赠送客户", "内部员工使用"],
 
-    /* 出库「结算法人单位」预设（chip 单选必填；用户自定义项存 outbound_entity_history） */
+    /* 出库「出货仓库单位」预设（2026-09-04：双仓库二选一，chip 单选必填且定死，不再支持自定义；
+       仅保留 outbound_entity_history 兼容读取，供编辑历史旧记录回显用） */
     ENTITY_PRESETS: ["深圳细胞法人", "赛迪斯法人"],
     ENTITY_HISTORY_KEY: "outbound_entity_history",
 
