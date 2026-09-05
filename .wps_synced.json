@@ -1234,6 +1234,11 @@
       "ok": 1,
       "at": "2026-09-05T03:16:46Z",
       "mode": "add_product_col"
+    },
+    "wpscol:1788578272000.json": {
+      "ok": 1,
+      "at": "2026-09-05T03:18:10Z",
+      "mode": "del_product_col"
     }
   }
 }
