@@ -75,6 +75,11 @@
       "ok": 1,
       "at": "2026-09-05T06:32:02Z",
       "mode": "add_product_col"
+    },
+    "wpscol:1788590406522.json": {
+      "ok": 1,
+      "at": "2026-09-05T06:40:18Z",
+      "mode": "add_product_col"
     }
   }
 }
