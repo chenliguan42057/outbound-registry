@@ -757,6 +757,50 @@
     return false;
   }
 
+  /** 通用 JSON 写入（任意子目录），供「两仓调拨」写对方仓 catalog.json / 货品列事件等。
+     与 pushRecordTo 的区别：路径由调用方自由拼接；不强制 records/。幂等（sha）+ 3 次重试。 */
+  async function putJsonFile(opts) {
+    if (!opts || !opts.dataDir || !opts.id) return false;
+    if (!hasToken()) return false;
+    var dir = String(opts.dataDir).replace(/[\\/]+$/, "");
+    var subdir = String(opts.subdir || "").replace(/^[\\/]+|[\\/]+$/g, "");
+    var id = String(opts.id);
+    var payload = opts.payload;
+    var message = String(opts.message || ("put " + (subdir ? subdir + "/" : "") + id));
+    var filePath = dir + (subdir ? "/" + subdir : "") + "/" + id + ".json";
+    var content = Util.b64enc(JSON.stringify(payload));
+    var putUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + filePath;
+    var getUrl = putUrl + "?ref=" + Config.GH.branch;
+    for (var i = 0; i < 3; i++) {
+      try {
+        var sha;
+        try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { sha = null; }
+        var body = sha
+          ? { message: message, content: content, sha: sha, branch: Config.GH.branch }
+          : { message: message, content: content, branch: Config.GH.branch };
+        await apiJson(putUrl, { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+        return true;
+      } catch (e) {
+        var msg = String((e && e.message) || "");
+        if (/^401 |^403 /.test(msg)) return false;
+        if (i < 2) await new Promise(function (r) { setTimeout(r, 800 * Math.pow(2, i)); });
+      }
+    }
+    return false;
+  }
+
+  /** 读取远端 catalog.json；404 / 失败返回 null（不抛错）。 */
+  async function fetchCatalogAt(dataDir) {
+    var dir = String(dataDir || "").replace(/[\\/]+$/, "");
+    if (!dir) return null;
+    var path = dir + "/catalog/catalog.json";
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    try {
+      var j = await apiJson(url);
+      return JSON.parse(Util.b64dec(j.content));
+    } catch (e) { return null; }
+  }
+
   /** 冲刷持久化队列：逐条重试（2 次），成功出队；记录已本地删除则直接出队。返回 {ok, remain} */
   async function flushQueue() {
     var q = loadQueue();
@@ -1070,6 +1114,8 @@
     pushAllLocal: pushAllLocal,
     pushRecord: pushRecord,
     pushRecordTo: pushRecordTo,
+    putJsonFile: putJsonFile,
+    fetchCatalogAt: fetchCatalogAt,
     pushWithRetry: pushWithRetry,
     flushQueue: flushQueue,
     loadQueue: loadQueue,

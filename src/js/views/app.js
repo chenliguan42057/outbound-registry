@@ -103,8 +103,14 @@
         '<div class="win-main">' +
           '<aside class="win-sidebar" id="winSidebar">' +
             '<div class="win-sysbar" id="winSysbar" role="group" aria-label="出货仓库单位">' +
-              '<button type="button" class="win-sysbar-btn" data-sys="shenzhen">深圳细胞</button>' +
-              '<button type="button" class="win-sysbar-btn" data-sys="saidis">赛迪斯</button>' +
+              '<button type="button" class="win-sysbar-trigger" id="winSysbarTrigger" aria-haspopup="listbox" aria-expanded="false">' +
+                '<span id="winSysbarName"></span>' +
+                '<svg class="win-sysbar-caret" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>' +
+              '</button>' +
+              '<ul class="win-sysbar-menu" id="winSysbarMenu" role="listbox" hidden>' +
+                '<li><button type="button" class="win-sysbar-item" data-sys="shenzhen" role="option">深圳细胞</button></li>' +
+                '<li><button type="button" class="win-sysbar-item" data-sys="saidis" role="option">赛迪斯</button></li>' +
+              '</ul>' +
             '</div>' +
             '<nav class="win-sidebar-nav" id="winNav"></nav>' +
             '<div class="win-sidebar-foot">' +
@@ -142,22 +148,57 @@
     if (b1) b1.textContent = label;
     if (b2) b2.textContent = label;
     var cur = Config.Sys.current().id;
-    var btns = document.querySelectorAll(".win-sysbar-btn");
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].classList.toggle("active", btns[i].getAttribute("data-sys") === cur);
+    var nameEl = Util.$("winSysbarName");
+    if (nameEl) nameEl.textContent = Config.Sys.name();
+    var trigger = Util.$("winSysbarTrigger");
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+    var menu = Util.$("winSysbarMenu");
+    if (menu) menu.hidden = true;
+    var items = document.querySelectorAll(".win-sysbar-item");
+    for (var i = 0; i < items.length; i++) {
+      items[i].classList.toggle("active", items[i].getAttribute("data-sys") === cur);
     }
   }
 
   var sysBarBound = false;
+  /** 关闭下拉菜单（切换系统 / 点外部 / 按 Esc 时调用） */
+  function closeSysMenu() {
+    var trigger = Util.$("winSysbarTrigger");
+    var menu = Util.$("winSysbarMenu");
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+    if (menu) menu.hidden = true;
+  }
   function bindSysBar() {
     if (sysBarBound) return;
     sysBarBound = true;
     var bar = Util.$("winSysbar");
     if (!bar) return;
-    bar.addEventListener("click", function (e) {
-      var btn = e.target && e.target.closest ? e.target.closest(".win-sysbar-btn") : null;
-      if (!btn) return;
-      switchSystem(btn.getAttribute("data-sys"));
+    var trigger = Util.$("winSysbarTrigger");
+    var menu = Util.$("winSysbarMenu");
+    if (trigger) {
+      trigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (!menu) return;
+        var open = !menu.hidden;
+        trigger.setAttribute("aria-expanded", open ? "false" : "true");
+        menu.hidden = open;
+      });
+    }
+    if (menu) {
+      menu.addEventListener("click", function (e) {
+        var it = e.target.closest && e.target.closest(".win-sysbar-item");
+        if (!it) return;
+        e.stopPropagation();
+        var id = it.getAttribute("data-sys");
+        closeSysMenu();
+        switchSystem(id);
+      });
+    }
+    document.addEventListener("click", function () {
+      if (menu && !menu.hidden) closeSysMenu();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && menu && !menu.hidden) closeSysMenu();
     });
     updateBrand();
   }

@@ -238,28 +238,73 @@
   html:not([data-theme="light"]) { color-scheme: dark; }
 }
 
-/* 双仓库系统切换器（2026-09-04：深圳细胞 / 赛迪斯） */
+/* 双仓库系统切换器（2026-09-05：下拉式 — 只显示当前仓库，点击展开两选项） */
 .win-sysbar {
-  display: flex;
-  gap: 6px;
-  padding: 12px 12px 2px;
+  position: relative;
+  padding: 12px 12px 6px;
 }
-.win-sysbar-btn {
-  flex: 1;
-  padding: 7px 0;
-  font-size: 13px;
-  text-align: center;
-  border-radius: 8px;
+.win-sysbar-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  border-radius: 10px;
   cursor: pointer;
   user-select: none;
-  border: 1px solid rgba(62, 93, 84, .45);
-  color: var(--ink-700, #AAB4C2);
-  background: transparent;
-  transition: background .15s, color .15s;
+  border: 1px solid var(--line-soft, #DCE6E0);
+  background: var(--card-bg, #fff);
+  color: var(--ink-700, #2A3A48);
+  transition: border-color .15s, box-shadow .15s;
 }
-.win-sysbar-btn:hover { background: rgba(111, 160, 138, .10); }
-.win-sysbar-btn.active {
+.win-sysbar-trigger:hover,
+.win-sysbar-trigger[aria-expanded="true"] {
+  border-color: rgba(62, 93, 84, .55);
+  box-shadow: 0 1px 0 rgba(62, 93, 84, .04);
+}
+.win-sysbar-trigger #winSysbarName { font-weight: 600; }
+.win-sysbar-caret {
+  flex: 0 0 14px;
+  color: var(--ink-700, #6B7C8C);
+  transition: transform .15s;
+}
+.win-sysbar-trigger[aria-expanded="true"] .win-sysbar-caret { transform: rotate(180deg); }
+.win-sysbar-menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(100% - 2px);
+  z-index: 50;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--line-soft, #DCE6E0);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .10);
+  overflow: hidden;
+}
+.win-sysbar-menu[hidden] { display: none; }
+.win-sysbar-menu li { margin: 0; padding: 0; }
+.win-sysbar-item {
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-700, #2A3A48);
+  font-family: inherit;
+}
+.win-sysbar-item:hover,
+.win-sysbar-item:focus-visible {
+  background: rgba(111, 160, 138, .12);
+  outline: none;
+}
+.win-sysbar-item.active {
   background: #3E5D54;
-  border-color: transparent;
   color: #fff;
 }

@@ -133,8 +133,83 @@
     })["catch"](function () { lock.unlock(); });
   }
 
-  /** 执行：先写对方仓入库记录（云端直写，幂等），成功后再建本仓出库记录（本地立即可见 + 云端推送）。
-      顺序保证「对方入库没写成，本仓绝不出库」，避免单向扣账。 */
+  /** 若对方仓 catalog 缺本批货品，先在对方目录里加产品 + 初始化库存基准 0 + 写 wps-col-add 事件
+      （让对方金山台账自动多出对应列）。目录更新与事件按顺序串行写入，每个 PUT 是独立 commit，
+      wps_sync 串行并发组会先处理加列事件再处理后续 inRec，保证 inRec 写入时列已就绪。
+      返回 missing 数组；返回 false 表示有失败已中止。 */
+  async function ensureTargetProducts(items, dst, dstName) {
+    var cat = await Cloud.fetchCatalogAt(dst.dataDir);
+    if (!cat || typeof cat !== "object") {
+      cat = { version: 1, updatedAt: Date.now(), products: [], inventory: {} };
+    }
+    if (!Array.isArray(cat.products)) cat.products = [];
+    if (!cat.inventory || typeof cat.inventory !== "object") cat.inventory = {};
+    var existing = {};
+    cat.products.forEach(function (p) { if (p && p.name) existing[p.name] = true; });
+    var missing = items.filter(function (it) { return it.name && !existing[it.name]; });
+    if (!missing.length) return [];
+    /* 从源头目录拷贝缺货的产品描述（含 unit/warnAt/price/barcode/wps），wps 字段用 guessWps 兜底 */
+    var srcCat = (window.App.Catalog && window.App.Catalog.get) ? window.App.Catalog.get() : null;
+    var srcMap = {};
+    if (srcCat && Array.isArray(srcCat.products)) srcCat.products.forEach(function (p) { if (p && p.name) srcMap[p.name] = p; });
+    missing.forEach(function (it) {
+      var proto = srcMap[it.name] || { name: it.name, unit: "", warnAt: Config.LOW_STOCK_THRESHOLD || 95, price: 0, barcode: "" };
+      var wps = proto.wps;
+      try {
+        if ((!wps || !wps.sheet) && window.App.Catalog && window.App.Catalog.guessWps) {
+          wps = window.App.Catalog.guessWps(it.name);
+        }
+      } catch (e) {}
+      var prod = Object.assign({}, proto, { name: it.name });
+      if (wps) prod.wps = wps;
+      cat.products.push(prod);
+      cat.inventory[it.name] = 0;
+    });
+    cat.updatedAt = Date.now();
+    /* ① 写对方 catalog.json（一个 commit） */
+    var catOk = await Cloud.putJsonFile({
+      dataDir: dst.dataDir,
+      subdir: "catalog",
+      id: "catalog",
+      payload: cat,
+      message: "transfer: add " + missing.length + " product(s) to " + dstName
+    });
+    if (!catOk) {
+      Util.toast("❌ " + dstName + " 目录写入失败，本次未调拨，请重试", true);
+      return false;
+    }
+    /* ② 为每个新货品推一条 wps-col-add 事件（每个事件一个 commit） */
+    var failedEvents = [];
+    for (var k = 0; k < missing.length; k++) {
+      var m = missing[k];
+      var w = (m && window.App.Catalog && window.App.Catalog.guessWps) ? window.App.Catalog.guessWps(m.name) : null;
+      if (!w || !w.sheet) continue;  // 没金山台账归属（如袋类）不建列，避免无意义事件
+      var ts = Date.now() + k;
+      var ev = {
+        type: "wps-col-add",
+        name: m.name,
+        sheet: w.sheet,
+        col: w.col,
+        time: ts
+      };
+      var ok = await Cloud.putJsonFile({
+        dataDir: dst.dataDir,
+        subdir: "catalog/wps-events",
+        id: String(ts),
+        payload: ev,
+        message: "transfer: wps-col-add " + m.name
+      });
+      if (!ok) failedEvents.push(m.name);
+    }
+    if (failedEvents.length) {
+      Util.toast("⚠️ " + dstName + " 部分新货品金山列未生成（" + failedEvents.join("、") + "），请稍候在「云同步」页补传", true);
+    }
+    return missing.map(function (it) { return it.name; });
+  }
+
+  /** 执行：①若对方仓缺本批货品，先在对方目录补产品 + 写 wps-col-add 事件；
+      ②写对方仓入库记录（云端直写，幂等），成功后再建本仓出库记录（本地立即可见 + 云端推送）。
+      顺序保证「对方目录/列没准备好，本仓绝不出库」，避免单向扣账 / 列错位。 */
   async function runTransfer(items, srcName, dst, dstName, note, lock) {
     var btn = Util.$("tfSubmit");
     try {
@@ -144,7 +219,16 @@
       }
       var now = Util.nowLocal();
       var transferId = Util.genId();
-      // ① 对方仓入库记录 → 云端直写对方 records/
+      // ① 对方仓是否缺本批货品？缺则补目录 + 写 wps-col-add 事件（每个独立 commit，wps_sync 串行处理）
+      var statusBox = Util.$("tfResult");
+      var missingOk = await ensureTargetProducts(items, dst, dstName);
+      if (missingOk === false) return;            // ensureTargetProducts 内部已 toast
+      if (missingOk.length && statusBox) {
+        statusBox.innerHTML = '<div class="hint" style="padding:8px 12px;border:1px dashed #C8E6C9;border-radius:10px;background:#F0FAF0;color:#1E6B2E">' +
+          '⏳ 正在为「' + Util.esc(dstName) + '」添加 ' + missingOk.length + ' 项新货品并建金山列…' +
+          '</div>';
+      }
+      // ② 对方仓入库记录 → 云端直写对方 records/
       var inRec = {
         id: Util.genId(),
         _ts: Date.now(),
@@ -190,12 +274,16 @@
 
       var box = Util.$("tfResult");
       if (box) {
+        var addedMsg = (missingOk && missingOk.length)
+          ? '<br>· <span style="color:#1E6B2E">' + Util.esc(dstName) + ' 首次新增产品：</span>' + missingOk.map(function (n) { return Util.esc(n); }).join('、') + '（目录与金山列已自动创建并生效）'
+          : '';
         box.innerHTML =
           '<div style="padding:12px 16px;border:1px solid #C8E6C9;border-radius:12px;background:#F0FAF0;color:#1E6B2E;font-size:13.5px;line-height:1.9">' +
           '<b>✅ 调拨成功</b>（单号 ' + Util.esc(transferId) + '）<br>' +
           '· ' + Util.esc(srcName) + '：出库 ' + items.reduce(function (s, it) { return s + it.qty; }, 0) + '（本页已生效，钉钉/金山稍后自动推送）<br>' +
-          '· ' + Util.esc(dstName) + '：入库 +（对方仓库切过去即可看到；对方钉钉群会收到「入库」通知）<br>' +
-          '<span class="hint">备注：' + Util.esc(note) + '</span>' +
+          '· ' + Util.esc(dstName) + '：入库 +（对方仓库切过去即可看到；对方钉钉群会收到「入库」通知）' +
+          addedMsg +
+          '<br><span class="hint">备注：' + Util.esc(note) + '</span>' +
           '</div>';
       }
       Util.toast("✅ 调拨成功：" + srcName + " 出库 → " + dstName + " 入库");
