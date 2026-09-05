@@ -346,8 +346,21 @@ def process_record(rec, synced):
     rid = rec.get("id")
     if not rid:
         return 0, 0
-    if rid in synced:
-        return 0, 0
+    prev = synced.get(rid)
+    prev_rows = {}
+    partial = False
+    if prev is not None:
+        # 断点续传：跨子表订单上次「部分成功」（有成功子表行号、但仍带 fail/err）时，
+        # 本次只补 rows 缺失的子表；已在 rows 里的子表绝不重写（避免重复加行/加库存）。
+        if isinstance(prev, dict) and prev.get("rows") and not prev.get("skip") \
+                and (prev.get("fail", 0) > 0 or prev.get("err")):
+            partial = True
+            prev_rows = dict(prev.get("rows") or {})
+            log("🔄 断点续传 %s：上次部分成功（已有子表 %s），本次只补缺失子表"
+                % (rid, ",".join(prev_rows.keys())))
+        else:
+            # 完全成功 / skip 类型（borrow_diff/stocktake/无货品）—— 幂等跳过
+            return 0, 0
 
     # 先借后还「差额单」不进金山台账（归还入库单 type=in 不受影响，照常记）。
     # 账务口径说明：借出时原单已记一笔出库（全量），归还时已记一笔入库（归还量），
@@ -399,6 +412,10 @@ def process_record(rec, synced):
     errs = []
     # 每个子表 = 一次 webhook 调用（带该子表的全部商品）；订单碰到的每个子表各写「一行」
     for sheet, itemlist in by_sheet.items():
+        # 断点续传：该子表上次已成功写入（rows 里有行号）→ 本次跳过，绝不重写
+        if partial and sheet in prev_rows:
+            log("⏭️ 断点续传 %s：子表 %s 上次已写入第 %s 行，跳过不重写" % (rid, sheet, prev_rows[sheet]))
+            continue
         # 过滤无效项（无名称 / 数量<=0）
         valid = [(p, q) for (p, q) in itemlist if p and q and q > 0]
         if not valid:
@@ -435,14 +452,20 @@ def process_record(rec, synced):
             errs.append("%s: %s" % (sheet, e))
             fail += 1
 
-    # 标记整个订单为已同步（保证幂等、不重复写）。
-    # 说明：单子表订单=一次调用全有或全无，完全准确；
-    # 跨子表订单若某子表调用失败，已成功的子表行不补写（与旧逻辑一致，优先避免重复行）。
+    # 标记整个订单（保证幂等、不重复写）。
+    # 断点续传语义：
+    #   - 单子表订单：一次调用全有或全无，成功即写正式标记；
+    #   - 跨子表订单：把「成功子表的行号」记进 rows。只要仍有子表失败(fail>0)，
+    #     就保留 fail/err —— 下次兜底扫描识别到「rows 非空但 fail>0」即进入续传分支，
+    #     只补 rows 缺失的子表，已成功子表绝不重写（避免重复加行、库存二次累计）。
+    #   - 全军覆没(ok==0)：不写正式标记，只留 __fail__，每小时兜底都会重试。
     fails = synced.setdefault("__fail__", {})
     if ok > 0:
-        st = {"ok": ok, "fail": fail, "at": now_iso()}
-        if rows:
-            st["rows"] = rows
+        all_rows = dict(prev_rows)   # 部分续传时保留上次已成功子表行号
+        all_rows.update(rows)
+        st = {"ok": len(all_rows), "fail": fail, "at": now_iso()}
+        if all_rows:
+            st["rows"] = all_rows
         if errs:
             st["err"] = errs[:3]
         if skipped:
@@ -451,8 +474,15 @@ def process_record(rec, synced):
         synced[rid] = st
         fails.pop(rid, None)      # 之前失败过、这次成功了，清掉失败回执
     elif fail > 0:
-        # 全军覆没：不写正式标记（否则每小时兜底就不再重试了），
-        # 只在 __fail__ 里留个失败回执，让前端能立刻显示「⚠️金山写入失败」而不是干等超时。
+        if partial:
+            # 续传仍失败：保留上次 rows，仅刷新失败信息 —— 下次兜底继续从 rows 续传缺失子表
+            st = dict(prev)
+            st["fail"] = fail
+            st["at"] = now_iso()
+            if errs:
+                st["err"] = errs[:3]
+            synced[rid] = st
+        # 全军覆没 / 续传仍失败：在 __fail__ 留失败回执，让前端能立刻显示「⚠️金山写入失败」
         fails[rid] = {"fail": fail, "at": now_iso(), "err": errs[:3]}
     return ok, fail
 
