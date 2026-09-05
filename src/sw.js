@@ -3,8 +3,9 @@
  *
  * 策略：
  *  - 页面（navigation 请求）：network-first，失败回退缓存 → 断网也能打开应用
- *  - 静态资源（CSS/JS/ico/svg/manifest，带 ?v=<sha> 指纹）：cache-first →
- *    指纹 URL 天然失效，发版后自动拉新
+ *  - 静态资源（CSS/JS/ico/svg/manifest）：network-first（2026-09-05 起由
+ *    cache-first 改为 network-first，杜绝发版后用户仍拿到旧版样式的缓存残留；
+ *    在线永远最新，离线回退缓存）
  *  - GitHub API（api.github.com）与 jsdelivr CDN（cdn.jsdelivr.net）：
  *    一律透传不缓存（数据走 localStorage，绝不缓存 API 响应）
  *
@@ -44,16 +45,20 @@ async function handleNavigation(req) {
   }
 }
 
-/** 静态资源 → cache-first（带指纹 URL 天然失效） */
+/** 静态资源 → network-first（在线永远最新，离线回退缓存） */
 async function handleStatic(req) {
   var cache = await caches.open(CACHE);
-  var hit = await cache.match(req);
-  if (hit) return hit;
-  var res = await fetch(req);
-  if (res && res.ok) {
-    try { await cache.put(req, res.clone()); } catch (e) {}
+  try {
+    var fresh = await fetch(req);
+    if (fresh && fresh.ok) {
+      try { await cache.put(req, fresh.clone()); } catch (e) {}
+    }
+    return fresh;
+  } catch (e) {
+    var cached = await cache.match(req);
+    if (cached) return cached;
+    return new Response("", { status: 504, statusText: "Offline" });
   }
-  return res;
 }
 
 self.addEventListener("install", function (event) {
