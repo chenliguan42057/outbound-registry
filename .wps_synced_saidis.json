@@ -60,6 +60,11 @@
       "ok": 1,
       "at": "2026-09-05T03:18:12Z",
       "mode": "del_product_col"
+    },
+    "wpscol:1788589770568.json": {
+      "ok": 1,
+      "at": "2026-09-05T06:29:43Z",
+      "mode": "add_product_col"
     }
   }
 }
