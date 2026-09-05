@@ -76,6 +76,7 @@
       if (r.affectsStock !== true) return false;      // 不参与库存（差额单/旧快照）不可借出
       if (r.borrowed === true) return false;          // 已转入
       if (r.fromBorrowId) return false;               // 差额单/归还单不可再转
+      if (r.transferId) return false;                 // 两仓调拨记录不可再转借出
       return true;
     }).sort(function (a, b) {
       var pa = Records.getStatus(a) === "pending" ? 0 : 1;

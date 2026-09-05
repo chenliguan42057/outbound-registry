@@ -34,7 +34,8 @@
         '<div class="actions" style="margin:-6px 0 14px">' +
           '<button type="button" class="btn sm" id="stockAddBtn">＋ 新增货品</button>' +
           '<button type="button" class="btn ghost sm" id="stockCatalogBtn">📋 货品目录</button>' +
-          '<button type="button" class="btn ghost sm" id="stockTakeBtn">📊 盘点平账</button>' +
+          '<button type="button" class="btn ghost sm" id="stockTakeBtn">📊 盘点平账</button> ' +
+          '<button type="button" class="btn ghost sm" id="stockDelBtn" style="color:#c0392b">🗑 删除货品</button>' +
         '</div>' +
         '<div class="stock-summary" id="stockSummary"></div>' +
         '<div id="stockTableBox"></div>' +
@@ -65,6 +66,7 @@
       else Util.toast("目录模块未加载", true);
     });
     Util.$("stockTakeBtn").addEventListener("click", openStocktake);
+    Util.$("stockDelBtn").addEventListener("click", openDelProductList);
     Util.$("stockAddBtn").addEventListener("click", openQuickAdd);
     wireHistory();
     renderTable();
@@ -126,10 +128,7 @@
         '<td>' + s.inQty + '</td>' +
         '<td>' + s.outQty + '</td>' +
         '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
-        '<td style="white-space:nowrap">' +
-        '<button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button> ' +
-        '<button type="button" class="btn ghost sm del-btn" data-name="' + Util.esc(s.name) + '" style="color:#c0392b">🗑 删除</button>' +
-        '</td>' +
+        '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -182,10 +181,7 @@
         '<td>' + Util.esc(s.name) + '</td>' +
         '<td class="stock-num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
         '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
-        '<td style="white-space:nowrap">' +
-        '<button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button> ' +
-        '<button type="button" class="btn ghost sm del-btn" data-name="' + Util.esc(s.name) + '" style="color:#c0392b">🗑 删除</button>' +
-        '</td>' +
+        '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -195,7 +191,7 @@
   /* ================= 库存页行内删除货品（2026-09-05） =================
      删除 = 目录移除 + 库存归 0 + 钉钉通知 + 金山台账删列（若有列）。
      历史出入库记录仍保留在系统内可查；金山整列删除不可恢复，弹窗强提醒。 */
-  function askDelProduct(name) {
+  function askDelProduct(name, cb) {
     if (!name) return;
     var g = (window.App.Catalog && window.App.Catalog.get) ? window.App.Catalog.get() : null;
     var p = null;
@@ -225,8 +221,49 @@
           try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e3) {}
           try { if (window.App.Views.report && window.App.Views.report.refresh) window.App.Views.report.refresh(); } catch (e4) {}
         }
+        if (cb) cb(ok2);
       });
     })["catch"](function () {});
+  }
+
+  /* ================= 工具栏「🗑 删除货品」（2026-09-05 改版） =================
+     从每行一个小删除按钮，改为工具栏一个入口 → 弹窗列出全部货品 → 选中点删除 →
+     走 askDelProduct 强确认（含金山整列删除不可恢复提醒）。删除成功后从弹窗列表移除该行。 */
+  function openDelProductList() {
+    var summary = Stock.summarize();
+    if (!summary.length) { Util.toast("暂无货品可删除", true); return; }
+    var rows = summary.map(function (s) {
+      return '<div class="del-pick-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line-soft,#DCE6E0)">' +
+        '<span style="flex:1;font-size:13.5px">' + Util.esc(s.name) + '</span>' +
+        '<span class="hint" style="margin:0;flex:0 0 96px;text-align:right">当前 ' + s.stock + '</span>' +
+        '<button type="button" class="btn ghost sm del-pick-btn" data-name="' + Util.esc(s.name) + '" style="color:#c0392b">🗑 删除</button>' +
+      '</div>';
+    }).join("");
+    var body =
+      '<div class="hint" style="margin-bottom:10px">选择要删除的货品：删除后系统目录移除、库存归 0、钉钉收到通知；若该货品在金山台账有列，那一列（含全部历史数据）也会一并删除且不可恢复（点删除后还会再确认一次）。</div>' +
+      '<div style="max-height:46vh;overflow:auto">' + rows + '</div>' +
+      '<div class="modal-actions" style="margin-top:14px">' +
+        '<button type="button" class="btn ghost sm" data-act="close">关闭</button>' +
+      '</div>';
+    UI.Modal.show("🗑 删除货品", body, { width: "580px" });
+    var mBody = UI.Modal.body();
+    mBody.querySelector('[data-act="close"]').addEventListener("click", function () { UI.Modal.hide(); });
+    mBody.addEventListener("click", function (e) {
+      var b = e.target.closest(".del-pick-btn");
+      if (!b || !b.getAttribute("data-name")) return;
+      var name = b.getAttribute("data-name");
+      askDelProduct(name, function (ok2) {
+        if (ok2) {
+          var rowEl = b.closest(".del-pick-row");
+          if (rowEl) rowEl.remove();
+          var remain = mBody.querySelectorAll(".del-pick-row").length;
+          if (!remain) {
+            var wrap = mBody.querySelector("div[style*='max-height:46vh']");
+            if (wrap) wrap.innerHTML = '<div class="empty">已全部删除，暂无货品</div>';
+          }
+        }
+      });
+    });
   }
 
   /* ================= B3 库存流水追溯 ================= */
@@ -235,12 +272,6 @@
     container.setAttribute("data-his", "1");
     // ① 点「📊 流水」按钮 → 弹窗（手机/电脑通用，主入口）
     container.addEventListener("click", function (e) {
-      var dbtn = e.target.closest(".del-btn");
-      if (dbtn && dbtn.getAttribute("data-name")) {
-        e.stopPropagation();
-        askDelProduct(dbtn.getAttribute("data-name"));
-        return;
-      }
       var btn = e.target.closest(".flow-btn");
       if (btn && btn.getAttribute("data-name")) {
         e.stopPropagation();

@@ -726,6 +726,37 @@
     return false;
   }
 
+  /** 跨系统推送：把记录写到指定数据根（如 data-saidis）的 records/ 下。
+     供「两仓调拨」把对方仓的入库/出库记录直接写进对方目录（幂等：先 GET sha 再 PUT）。
+     与 pushRecord 的区别：不做本地队列（对方系统状态不在这台设备），失败当场返回 false。 */
+  async function pushRecordTo(rec, dataDir) {
+    if (!rec || !rec.id) return false;
+    if (!hasToken()) return false;
+    var dir = String(dataDir || "").replace(/[\\/]+$/, "");
+    if (!dir) return false;
+    var slim = slimRecord(rec);
+    var path = dir + "/records/" + slim.id + ".json";
+    var content = Util.b64enc(JSON.stringify(slim));
+    var putUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path;
+    var getUrl = putUrl + "?ref=" + Config.GH.branch;
+    for (var i = 0; i < 3; i++) {
+      try {
+        var sha;
+        try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { sha = null; }
+        var body = sha
+          ? { message: "update " + slim.id, content: content, sha: sha, branch: Config.GH.branch }
+          : { message: "add " + slim.id, content: content, branch: Config.GH.branch };
+        await apiJson(putUrl, { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+        return true;
+      } catch (e) {
+        var msg = String((e && e.message) || "");
+        if (/^401 |^403 /.test(msg)) return false;   // 令牌失效不再重试
+        if (i < 2) await new Promise(function (r) { setTimeout(r, 800 * Math.pow(2, i)); });
+      }
+    }
+    return false;
+  }
+
   /** 冲刷持久化队列：逐条重试（2 次），成功出队；记录已本地删除则直接出队。返回 {ok, remain} */
   async function flushQueue() {
     var q = loadQueue();
@@ -1038,6 +1069,7 @@
     clearAll: clearAll,
     pushAllLocal: pushAllLocal,
     pushRecord: pushRecord,
+    pushRecordTo: pushRecordTo,
     pushWithRetry: pushWithRetry,
     flushQueue: flushQueue,
     loadQueue: loadQueue,

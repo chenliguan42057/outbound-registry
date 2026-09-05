@@ -20,7 +20,7 @@
   var KNOWN_MODULES = {
     dashboard: 1, stock: 1, in: 1, pickups: 1, memos: 1, sync: 1, borrow: 1,
     "in-records": 1, "out-records": 1, "in-remind": 1, "out-remind": 1, report: 1, ai: 1,
-    trash: 1
+    trash: 1, transfer: 1
   };
 
   /** 解析当前 hash 到合法路由对象 */
