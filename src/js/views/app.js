@@ -104,6 +104,7 @@
           '<aside class="win-sidebar" id="winSidebar">' +
             '<div class="win-sysbar" id="winSysbar" role="group" aria-label="出货仓库单位">' +
               '<button type="button" class="win-sysbar-trigger" id="winSysbarTrigger" aria-haspopup="listbox" aria-expanded="false">' +
+                '<span class="win-sysbar-dot" aria-hidden="true"></span>' +
                 '<span id="winSysbarName"></span>' +
                 '<svg class="win-sysbar-caret" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>' +
               '</button>' +
@@ -151,7 +152,10 @@
     var nameEl = Util.$("winSysbarName");
     if (nameEl) nameEl.textContent = Config.Sys.name();
     var trigger = Util.$("winSysbarTrigger");
-    if (trigger) trigger.setAttribute("aria-expanded", "false");
+    if (trigger) {
+      trigger.setAttribute("data-sys", cur);
+      trigger.setAttribute("aria-expanded", "false");
+    }
     var menu = Util.$("winSysbarMenu");
     if (menu) menu.hidden = true;
     var items = document.querySelectorAll(".win-sysbar-item");

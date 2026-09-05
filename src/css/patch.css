@@ -238,73 +238,129 @@
   html:not([data-theme="light"]) { color-scheme: dark; }
 }
 
-/* 双仓库系统切换器（2026-09-05：下拉式 — 只显示当前仓库，点击展开两选项） */
+/* 双仓库系统切换器（2026-09-05 视觉升级：主题彩卡 + 仓库色点，贴合清新薄荷主题）
+   配色取自 fresh-mint-theme：深圳细胞=薄荷绿 --mint-500 / 赛迪斯=淡紫 --lav-500，
+   触发器叠淡紫→薄荷绿渐变晕染，与全局主渐变 --grad-primary 同源。 */
 .win-sysbar {
   position: relative;
-  padding: 12px 12px 6px;
+  padding: 12px 12px 8px;
 }
 .win-sysbar-trigger {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 9px;
+  padding: 9px 11px;
   font-size: 13.5px;
-  border-radius: 10px;
+  font-weight: 600;
+  border-radius: 13px;
   cursor: pointer;
   user-select: none;
-  border: 1px solid var(--line-soft, #DCE6E0);
-  background: var(--card-bg, #fff);
-  color: var(--ink-700, #2A3A48);
-  transition: border-color .15s, box-shadow .15s;
+  color: var(--ink-900, #3C4845);
+  border: 1px solid rgba(127, 179, 165, .40);
+  background:
+    linear-gradient(135deg, rgba(167, 158, 208, .16), rgba(127, 179, 165, .13)),
+    var(--cream-050, #FBF9F3);
+  box-shadow: 0 3px 10px rgba(87, 130, 111, .10);
+  transition: border-color .18s, box-shadow .18s, transform .18s;
 }
 .win-sysbar-trigger:hover,
 .win-sysbar-trigger[aria-expanded="true"] {
-  border-color: rgba(62, 93, 84, .55);
-  box-shadow: 0 1px 0 rgba(62, 93, 84, .04);
+  border-color: rgba(127, 179, 165, .75);
+  background:
+    linear-gradient(135deg, rgba(167, 158, 208, .24), rgba(127, 179, 165, .20)),
+    var(--cream-050, #FBF9F3);
+  box-shadow: 0 5px 16px rgba(87, 130, 111, .18);
 }
-.win-sysbar-trigger #winSysbarName { font-weight: 600; }
+.win-sysbar-trigger:active { transform: translateY(1px); }
+/* 当前仓库彩色圆点（trigger 带 data-sys，由 app.js updateBrand 写入） */
+.win-sysbar-dot {
+  flex: 0 0 11px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--mint-500, #6FA08A);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .65), 0 1px 3px rgba(87, 130, 111, .35);
+}
+.win-sysbar-trigger[data-sys="saidis"] .win-sysbar-dot { background: var(--lav-500, #968ABE); }
+.win-sysbar-trigger #winSysbarName {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .win-sysbar-caret {
   flex: 0 0 14px;
-  color: var(--ink-700, #6B7C8C);
-  transition: transform .15s;
+  color: var(--mint-600, #57826F);
+  opacity: .9;
+  transition: transform .2s;
 }
 .win-sysbar-trigger[aria-expanded="true"] .win-sysbar-caret { transform: rotate(180deg); }
 .win-sysbar-menu {
   position: absolute;
   left: 12px;
   right: 12px;
-  top: calc(100% - 2px);
-  z-index: 50;
+  top: calc(100% + 2px);
+  z-index: 60;
   margin: 0;
-  padding: 4px 0;
+  padding: 6px;
   list-style: none;
-  background: var(--card-bg, #fff);
-  border: 1px solid var(--line-soft, #DCE6E0);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .10);
-  overflow: hidden;
+  background: var(--cream-050, #FBF9F3);
+  border: 1px solid rgba(127, 179, 165, .45);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(87, 130, 111, .20);
 }
 .win-sysbar-menu[hidden] { display: none; }
 .win-sysbar-menu li { margin: 0; padding: 0; }
 .win-sysbar-item {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
   text-align: left;
-  padding: 9px 12px;
+  padding: 9px 11px;
   font-size: 13.5px;
   border: 0;
   background: transparent;
   cursor: pointer;
-  color: var(--ink-700, #2A3A48);
+  color: var(--ink-700, #55635F);
   font-family: inherit;
+  border-radius: 9px;
+  transition: background .15s;
 }
+/* 菜单项仓库色点：深圳细胞=薄荷绿 / 赛迪斯=淡紫 */
+.win-sysbar-item::before {
+  content: "";
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--mint-300, #B9D6C7);
+  box-shadow: inset 0 0 0 1px rgba(87, 130, 111, .18);
+}
+.win-sysbar-item[data-sys="saidis"]::before { background: var(--lav-300, #CBC4E2); }
 .win-sysbar-item:hover,
 .win-sysbar-item:focus-visible {
-  background: rgba(111, 160, 138, .12);
+  background: rgba(127, 179, 165, .14);
   outline: none;
 }
+/* 当前所在仓库：主题渐变浅底 + 深墨字 + ✓ 标记 */
 .win-sysbar-item.active {
-  background: #3E5D54;
-  color: #fff;
+  background: linear-gradient(135deg, rgba(167, 158, 208, .18), rgba(127, 179, 165, .18));
+  color: var(--ink-900, #3C4845);
+  font-weight: 700;
 }
+.win-sysbar-item.active::before {
+  background: var(--mint-500, #6FA08A);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .8), 0 1px 3px rgba(87, 130, 111, .35);
+}
+.win-sysbar-item.active[data-sys="saidis"]::before { background: var(--lav-500, #968ABE); }
+.win-sysbar-item.active::after {
+  content: "✓";
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--mint-600, #57826F);
+}
+.win-sysbar-item.active[data-sys="saidis"]::after { color: var(--lav-600, #7A6DA3); }
