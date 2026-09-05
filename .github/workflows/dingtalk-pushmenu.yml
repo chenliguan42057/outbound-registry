@@ -1,0 +1,36 @@
+name: DingTalk Pushmenu
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'data/notify/pushmenu/*.json'
+  workflow_dispatch:   # 手动触发测试：扫描最近 3 个待发文件
+
+jobs:
+  pushmenu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # 需要历史 diff 出变更文件
+      - name: Get changed pushmenu files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # event.before..sha 全范围 diff，避免合并 push 吞前序 commit 的变更
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data/notify/pushmenu/*.json' || true)
+          else
+            FILES=$(git ls-tree -r --name-only HEAD -- data/notify/pushmenu | grep '\.json$' | tail -3 | sed 's|^|A\t|' || true)
+          fi
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Send DingTalk Pushmenu
+        env:
+          SYS_NAME: '深圳细胞'
+          KEYWORD: '出入库登记'
+          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          SECRET: ${{ secrets.DINGTALK_SECRET }}
+          FILES: ${{ steps.changed.outputs.files }}
+        run: python3 .github/scripts/dingtalk_pushmenu.py

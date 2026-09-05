@@ -25,6 +25,7 @@
     { id: "borrow", icon: "box", label: "先借后还" },
     { id: "transfer", icon: "swap", label: "调拨" },
     { id: "memos", icon: "edit", label: "备忘录" },
+    { id: "push", icon: "bell", label: "推送信息" },
     { id: "trash", icon: "box", label: "回收站" },
     { id: "ai", icon: "box", label: "AI 助手" }
   ];
@@ -43,6 +44,7 @@
     "out-remind": "remind",
     borrow: "borrow",
     transfer: "transfer",
+    push: "push",
     trash: "trash",
     report: "report",
     ai: "ai"
@@ -51,7 +53,7 @@
   var MODULE_TITLES = {
     dashboard: "仪表盘", stock: "库存查询", in: "入库管理", pickups: "待取货", memos: "备忘录", sync: "云端同步",
     "in-records": "入库记录", "out-records": "出库记录", report: "报表统计", ai: "AI 助手",
-    borrow: "先借后还", transfer: "调拨", trash: "回收站",
+    borrow: "先借后还", transfer: "调拨", push: "推送信息", trash: "回收站",
     "in-remind": "入库提醒", "out-remind": "出库提醒"
   };
 

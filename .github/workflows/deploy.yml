@@ -130,6 +130,10 @@ jobs:
             echo "::error::检测到入库经办人字段被回滚，已中止部署。"
             exit 1
           fi
+          if ! [ -f src/js/views/push.js ] || ! grep -q 'views/push.js' src/index.html || ! grep -q 'pushmenu' src/js/views/push.js ; then
+            echo "::error::检测到推送信息视图缺失/未注册/或核心逻辑被回滚，已中止部署。"
+            exit 1
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

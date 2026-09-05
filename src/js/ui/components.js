@@ -28,6 +28,7 @@
     search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>',
     chevron: '<path d="M6 9l6 6 6-6"/>',
     trash: '<path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14"/>',
+    bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>',
     download: '<path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/>',
     close: '<path d="M18 6L6 18M6 6l12 12"/>',
     edit: '<path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
