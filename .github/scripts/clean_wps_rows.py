@@ -21,8 +21,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wps_sync import post_to_wps, wps_result, log, now_iso, load_synced, save_synced  # noqa: E402
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
-CLEANUP_FILE = "data/cleanup_diff_rids.json"
+CLEANUP_FILE = DATA_ROOT + "/cleanup_diff_rids.json"
 
 
 def main():

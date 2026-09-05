@@ -38,6 +38,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
 CST = timezone(timedelta(hours=8))
 
@@ -47,7 +48,7 @@ SECRET = os.environ.get("SECRET", "").strip()
 # 仓库与目录
 GH_REPO = "chenliguan42057/outbound-registry"
 GH_BRANCH = "main"
-MEMOS_DIR = "data/memos"
+MEMOS_DIR = DATA_ROOT + "/memos"
 
 # 容忍延迟窗口（分钟）：命中条件 target_dt <= now <= target_dt + TOLERANCE_LATE。
 # cron 只能晚跑不能早跑，窗口只容忍调度延迟、不提前推送；超过窗口即错过，单次不补推。
@@ -179,7 +180,7 @@ def write_reminded(memo, token=None):
     if not token:
         print("WARN GH_TOKEN 为空，无法写回 reminded（不影响本次推送）")
         return False, "GH_TOKEN 为空"
-    path = "data/memos/{}.json".format(memo_id)
+    path = DATA_ROOT + "/memos/{}.json".format(memo_id)
     url = "https://api.github.com/repos/{}/contents/{}".format(GH_REPO, path)
     headers = {
         "Accept": "application/vnd.github+json",

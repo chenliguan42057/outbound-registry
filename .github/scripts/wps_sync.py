@@ -23,6 +23,7 @@ import sys
 import time
 import base64
 import urllib.request
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
 WEBHOOK = (os.environ.get("WEBHOOK") or "").strip()
 TOKEN = (os.environ.get("AIRSCRIPT_TOKEN") or "").strip()   # 金山 脚本令牌(AirScript-Token 请求头)
@@ -30,7 +31,7 @@ FILES = (os.environ.get("FILES") or "").strip()
 BACKFILL = (os.environ.get("BACKFILL") or "").strip().lower() in ("1", "true", "yes")
 GH_PAT = (os.environ.get("GH_PAT") or "").strip()  # 本地回填时用来回写标记文件
 REPO = "chenliguan42057/outbound-registry"
-MARKER = ".wps_synced.json"
+MARKER = (os.environ.get("MARKER_FILE") or ".wps_synced.json").strip()  # 双仓库独立标记：深圳 .wps_synced.json；赛迪斯 workflow 注入 .wps_synced_saidis.json
 
 
 def log(msg):
@@ -499,9 +500,9 @@ def list_changed_paths():
             continue
         if not path.endswith(".json"):
             continue
-        if path.startswith("data/records/"):
+        if path.startswith(DATA_ROOT + "/records/"):
             recs.append(path)
-        elif path.startswith("data/deleted/"):
+        elif path.startswith(DATA_ROOT + "/deleted/"):
             toms.append(path)
     return recs, toms
 
@@ -523,8 +524,8 @@ def main():
 
     if BACKFILL:
         log(">>> 全量回填模式：扫描 data/records/ 与 data/deleted/ 全部文件")
-        paths = scan_dir(os.path.join("data", "records"))
-        tomb_paths = scan_dir(os.path.join("data", "deleted"))
+        paths = scan_dir(os.path.join(DATA_ROOT, "records"))
+        tomb_paths = scan_dir(os.path.join(DATA_ROOT, "deleted"))
     else:
         paths, tomb_paths = list_changed_paths()
         if not paths and not tomb_paths:

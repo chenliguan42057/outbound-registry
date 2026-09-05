@@ -20,11 +20,13 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
 FILES = os.environ.get("FILES", "").strip()
 GITHUB_SHA = os.environ.get("GITHUB_SHA", "").strip()
+SYS_NAME = os.environ.get("SYS_NAME", "").strip()  # 非空时消息正文首部加「系统名」标记（双仓库：赛迪斯 workflow 注入「赛迪斯」）
 
 # 北京时间（UTC+8）：GitHub Actions runner 默认 UTC，钉钉消息时间必须显式用 CST
 CST = timezone(timedelta(hours=8))
@@ -358,6 +360,18 @@ def build_catalog_event_markdown(data):
         md = title
         md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
         return md
+    if kind == "product-deleted":
+        title = "### 🗑️ 出入库登记 · 货品已删除"
+        time_ms = data.get("time", 0)
+        del_time = fmt_ts(time_ms) if isinstance(time_ms, (int, float)) and time_ms else datetime.now(CST).strftime("%Y-%m-%d %H:%M")
+        fields = [
+            ("货品名称", data.get("name", "") or "-"),
+            ("删除时间", del_time),
+        ]
+        md = title
+        md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
+        return md
+
     # 预留其它类型：catalog-updated / catalog-deleted 等扩展位
     return None
 
@@ -526,13 +540,13 @@ def main():
         if path.endswith("config.json"):
             continue
         # 待取货变更 → 待取货通知（data/pickups/ 前缀；删除为 D 时文件已不存在，load_json 返回 None 自然跳过）
-        if path.startswith("data/pickups/"):
+        if path.startswith(DATA_ROOT + "/pickups/"):
             if action == "M":
                 md = build_pickup_update_markdown(data, git_show_old(path))
             else:  # A 新增
                 md = build_pickup_new_markdown(data)
         # 备忘录变更 → 备忘录通知（data/memos/ 前缀；同上，删除自然跳过）
-        elif path.startswith("data/memos/"):
+        elif path.startswith(DATA_ROOT + "/memos/"):
             if action == "M":
                 md = build_memo_update_markdown(data, git_show_old(path))
             else:  # A 新增
@@ -540,9 +554,9 @@ def main():
         # 货品目录事件 → 货品目录通知（data/catalog/notifications/ 前缀，2026-08-14 增量）
         #   文件名形如 <ts>.json，内容为 {type, name, unit, stock, warnAt, price, time, ...}
         #   由前端 Catalog.pushCatalogEvent 写入（仅在「+ 新增货品」成功时），不涉及 catalog.json 本体变更。
-        elif path.startswith("data/catalog/notifications/"):
+        elif path.startswith(DATA_ROOT + "/catalog/notifications/"):
             md = build_catalog_event_markdown(data)
-        elif path.startswith("data/deleted/"):
+        elif path.startswith(DATA_ROOT + "/deleted/"):
             md = build_tombstone_markdown(data)
         elif action == "M":
             old = git_show_old(path)
@@ -562,6 +576,10 @@ def main():
         text = "### 🔔 通知（共 {} 条）\n\n{}".format(
             len(records), "\n\n---\n\n".join(records)
         )
+
+    if SYS_NAME:
+        text = "【" + SYS_NAME + "】\n\n" + text
+
 
     ok, err = send(text, title="出入库登记通知")
     if ok:

@@ -1,0 +1,36 @@
+name: DingTalk Remind (赛迪斯)
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'data-saidis/notify/*.json'
+  workflow_dispatch:   # 手动触发测试：扫描最近 3 个提醒文件
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # 需要历史 diff 出变更文件
+      - name: Get changed notify files
+        id: changed
+        run: |
+          # name-status 输出形如 "A\tpath"（新增）/ "M\tpath"（修改）
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # 用 event.before..sha 全范围 diff（理由同 dingtalk-notify.yml：合并 push 会吞前序 commit 变更）
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data-saidis/notify/*.json' || true)
+          else
+            FILES=$(git ls-tree -r --name-only HEAD -- data/notify | grep '\.json$' | tail -3 | sed 's|^|A\t|' || true)
+          fi
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Send DingTalk Remind
+        env:
+          DATA_PREFIX: data-saidis
+          SYS_NAME: '赛迪斯'
+          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK_SAIDIS }}
+          SECRET: ${{ secrets.DINGTALK_SECRET_SAIDIS }}
+          FILES: ${{ steps.changed.outputs.files }}
+        run: python3 .github/scripts/dingtalk_remind.py

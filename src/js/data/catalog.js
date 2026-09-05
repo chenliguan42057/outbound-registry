@@ -217,11 +217,22 @@
         names[n] = 1;
         work.products[i].name = n;
       }
+      var oldNames = ((catalog && catalog.products) || []).map(function (p) { return p.name; });
+      var newNames = work.products.map(function (p) { return p.name; });
       var ok = await UI().confirmDialog("保存后全站货品目录/库存将立即更新（新增货品初始库存为 0）。确认保存？", "保存货品目录");
       if (!ok) return;
       save(work, function (ok2, msg) {
         UI().Modal.hide();
         Util.toast(msg, !ok2);
+        if (ok2) {
+          // 目录增删事件（推送钉钉；新增行发 product-added，删除行发 product-deleted）
+          var added = newNames.filter(function (n) { return oldNames.indexOf(n) === -1; });
+          var removed = oldNames.filter(function (n) { return newNames.indexOf(n) === -1; });
+          var evs = added.map(function (n) { return { type: "product-added", name: n, unit: "", stock: 0, warnAt: Config.LOW_STOCK_THRESHOLD, price: 0, barcode: "" }; })
+            .concat(removed.map(function (n) { return { type: "product-deleted", name: n }; }));
+          evs.forEach(function (ev, i) { ev.time = Date.now() + i; pushCatalogEvent(ev); });
+        }
+
         // 刷新依赖目录的视图
         try { if (window.App.Views.stock && window.App.Views.stock.refresh) window.App.Views.stock.refresh(); } catch (e) {}
         try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}

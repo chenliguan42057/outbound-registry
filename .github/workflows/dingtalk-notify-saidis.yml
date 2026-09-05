@@ -1,13 +1,13 @@
-name: DingTalk Notify
+name: DingTalk Notify (赛迪斯)
 on:
   push:
     branches: [ main ]
     paths:
-      - 'data/records/*.json'
-      - 'data/deleted/*.json'
-      - 'data/pickups/*.json'
-      - 'data/memos/*.json'
-      - 'data/catalog/notifications/*.json'
+      - 'data-saidis/records/*.json'
+      - 'data-saidis/deleted/*.json'
+      - 'data-saidis/pickups/*.json'
+      - 'data-saidis/memos/*.json'
+      - 'data-saidis/catalog/notifications/*.json'
   workflow_dispatch:   # 支持手动触发测试（默认发一条测试消息）
 
 jobs:
@@ -25,17 +25,19 @@ jobs:
             # 用 event.before..sha 全范围 diff：GitHub 会把 ~15s 内多次推送合并为一个 push 事件，
             # 若只 diff 最新 commit（git diff-tree -r $sha），批量操作（删除2提交/借还3提交/确认出库2提交）
             # 前面 commit 的变更会被吞掉导致通知漏发。
-            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data/records/*.json' 'data/deleted/*.json' 'data/pickups/*.json' 'data/memos/*.json' 'data/catalog/notifications/*.json' || true)
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data-saidis/records/*.json' 'data-saidis/deleted/*.json' 'data-saidis/pickups/*.json' 'data-saidis/memos/*.json' 'data-saidis/catalog/notifications/*.json' || true)
           else
-            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data/records/*.json' 'data/deleted/*.json' 'data/pickups/*.json' 'data/memos/*.json' || true)
+            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data-saidis/records/*.json' 'data-saidis/deleted/*.json' 'data-saidis/pickups/*.json' 'data-saidis/memos/*.json' 'data-saidis/catalog/notifications/*.json' || true)
           fi
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
       - name: Send DingTalk
         env:
-          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
-          SECRET: ${{ secrets.DINGTALK_SECRET }}
+          DATA_PREFIX: data-saidis
+          SYS_NAME: '赛迪斯'
+          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK_SAIDIS }}
+          SECRET: ${{ secrets.DINGTALK_SECRET_SAIDIS }}
           FILES: ${{ steps.changed.outputs.files }}
           GITHUB_SHA: ${{ github.sha }}
         run: python3 .github/scripts/dingtalk_notify.py

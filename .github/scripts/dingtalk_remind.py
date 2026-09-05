@@ -24,6 +24,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
@@ -231,7 +232,7 @@ def main():
             continue
         parts = line.split("\t")
         path = parts[-1].strip() if len(parts) > 1 else ""
-        if not path or not path.startswith("data/notify/") or not path.endswith(".json"):
+        if not path or not path.startswith(DATA_ROOT + "/notify/") or not path.endswith(".json"):
             continue
         data = load_json(path)
         if data and data.get("type") == "remind" and data.get("orders"):
@@ -245,7 +246,7 @@ def main():
             continue
         parts = line.split("\t")
         path = parts[-1].strip() if len(parts) > 1 else ""
-        if not path or not path.startswith("data/notify/") or not path.endswith(".json"):
+        if not path or not path.startswith(DATA_ROOT + "/notify/") or not path.endswith(".json"):
             continue
         data = load_json(path)
         if not data:

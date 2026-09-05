@@ -28,6 +28,8 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()
+WF_NAME = (os.environ.get("WF_NAME") or "dingtalk-notify.yml").strip()  # 健康检查目标 workflow 文件名（赛迪斯副本注入 dingtalk-notify-saidis.yml）
 
 CST = timezone(timedelta(hours=8))
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
@@ -80,7 +82,7 @@ def count_records_commits_today():
     since_str = since.strftime("%Y-%m-%d %H:%M:%S")
     try:
         out = subprocess.run(
-            ["git", "log", "--since={}".format(since_str), "--pretty=%H", "--", "data/records"],
+            ["git", "log", "--since={}".format(since_str), "--pretty=%H", "--", DATA_ROOT + "/records"],
             capture_output=True, text=True, timeout=30,
         )
         if out.returncode != 0:
@@ -98,7 +100,7 @@ def last_notify_run_state():
     """
     if not GH_TOKEN:
         return None, None, "GH_TOKEN 为空（无法查询，跳过推送失败检查）"
-    url = ("https://api.github.com/repos/{repo}/actions/workflows/dingtalk-notify.yml/runs"
+    url = ("https://api.github.com/repos/{repo}/actions/workflows/" + WF_NAME + "/runs"
            "?per_page=3").format(repo=REPO)
     req = urllib.request.Request(url, headers={
         "Authorization": "Bearer " + GH_TOKEN,

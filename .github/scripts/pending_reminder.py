@@ -32,6 +32,7 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
 CST = timezone(timedelta(hours=8))
 
@@ -92,7 +93,7 @@ def load_dir(pattern):
     return items
 
 
-def build_reminder_markdown(records_dir="data/records", pickups_dir="data/pickups", now=None):
+def build_reminder_markdown(records_dir=DATA_ROOT + "/records", pickups_dir=DATA_ROOT + "/pickups", now=None):
     """扫描所有未处理完成的单据，组装提醒 markdown；五类均空时返回 None。
 
     now 仅用于测试注入固定北京时间；线上默认取当前北京时间。

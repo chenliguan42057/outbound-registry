@@ -1,0 +1,30 @@
+name: Memo Reminder (赛迪斯)
+on:
+  schedule:
+    # 每 5 分钟一次。GitHub schedule 的实际最小粒度就是 5 分钟，写 */1 并不会真的每分钟执行，
+    # 只会让绝大多数排期被直接丢弃，同时白白消耗 Actions 配额。
+    # memo_reminder.py 的 TOLERANCE_LATE=10 分钟窗口本就是按「≤5 分钟一次」设计的（见脚本注释），
+    # 因此改成 */5 与脚本设计一致，不会漏推。
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '强制推送（跳过时间匹配与当日去重，供手动测试/补推）'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Send memo reminder
+        env:
+          DATA_PREFIX: data-saidis
+          SYS_NAME: '赛迪斯'
+          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK_SAIDIS }}
+          SECRET: ${{ secrets.DINGTALK_SECRET_SAIDIS }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          FORCE: ${{ inputs.force }}
+        run: python3 .github/scripts/memo_reminder.py

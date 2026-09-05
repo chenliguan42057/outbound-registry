@@ -27,6 +27,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
@@ -34,8 +35,8 @@ GH_TOKEN = os.environ.get("GH_TOKEN", "").strip()
 
 LOW_STOCK_THRESHOLD = 95  # 与前端 Config.LOW_STOCK_THRESHOLD 一致
 CONFIG_PATH = "src/js/core/config.js"
-RECORDS_DIR = "data/records"
-REPORTS_DIR = "data/reports"
+RECORDS_DIR = DATA_ROOT + "/records"
+REPORTS_DIR = DATA_ROOT + "/reports"
 GH_REPO = "chenliguan42057/outbound-registry"
 GH_BRANCH = "main"
 

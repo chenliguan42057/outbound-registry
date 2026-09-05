@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
 # 业务时区（东八区），保证快照日期与用户认知的"今天"一致
 TZ = timezone(timedelta(hours=8))
@@ -104,7 +105,7 @@ def main():
         ["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"],
         cwd=ROOT, check=True
     )
-    subprocess.run(["git", "add", "data/backups"], cwd=ROOT, check=True)
+    subprocess.run(["git", "add", DATA_ROOT + "/backups"], cwd=ROOT, check=True)
     diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT)
     if diff.returncode == 0:
         print("[backup] 内容无变化，无需提交")

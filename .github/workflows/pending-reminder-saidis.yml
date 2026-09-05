@@ -1,0 +1,20 @@
+name: Pending Reminder (赛迪斯)
+on:
+  schedule:
+    # UTC 05:00 = 北京时间 13:00。实测 GitHub Actions schedule 常延迟数小时才执行，
+    # 提前到 13:00 触发，即使延迟 5-8 小时也能落在 18-21 点送达，用户下班前可看到。
+    - cron: '0 5 * * *'
+  workflow_dispatch:      # 支持手动触发测试 + 外部 cron（cron-job.org）主触发（即时、无延迟）
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Send pending reminder
+        env:
+          DATA_PREFIX: data-saidis
+          SYS_NAME: '赛迪斯'
+          WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK_SAIDIS }}
+          SECRET: ${{ secrets.DINGTALK_SECRET_SAIDIS }}
+        run: python3 .github/scripts/pending_reminder.py

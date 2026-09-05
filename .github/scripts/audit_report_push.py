@@ -8,10 +8,11 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
-REPORT = "data/reports/system_audit_2026-09-01.md"
+REPORT = DATA_ROOT + "/reports/system_audit_2026-09-01.md"
 
 
 def sign_url(webhook, secret):
