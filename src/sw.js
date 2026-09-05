@@ -45,11 +45,13 @@ async function handleNavigation(req) {
   }
 }
 
-/** 静态资源 → network-first（在线永远最新，离线回退缓存） */
+/** 静态资源 → network-first（在线永远最新，离线回退缓存）
+ *  fetch 加 cache: "reload" 强制绕过浏览器 HTTP 磁盘缓存，避免旧文件残留
+ *  （2026-09-05：补强 — 不加 cache:reload 时 disk cache 仍会拦截旧 CSS） */
 async function handleStatic(req) {
   var cache = await caches.open(CACHE);
   try {
-    var fresh = await fetch(req);
+    var fresh = await fetch(req, { cache: "reload" });
     if (fresh && fresh.ok) {
       try { await cache.put(req, fresh.clone()); } catch (e) {}
     }
