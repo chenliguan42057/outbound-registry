@@ -240,7 +240,8 @@
 
 /* 双仓库系统切换器（2026-09-05 视觉升级：主题彩卡 + 仓库色点，贴合清新薄荷主题）
    配色取自 fresh-mint-theme：深圳细胞=薄荷绿 --mint-500 / 赛迪斯=淡紫 --lav-500，
-   触发器叠淡紫→薄荷绿渐变晕染，与全局主渐变 --grad-primary 同源。 */
+   触发器叠淡紫→薄荷绿渐变晕染，与全局主渐变 --grad-primary 同源。
+   仓库名加粗加大并水平居中（dot 在最左 / caret 在最右 / 名字居中）。 */
 .win-sysbar {
   position: relative;
   padding: 12px 12px 8px;
@@ -249,11 +250,11 @@
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 9px;
-  padding: 9px 11px;
-  font-size: 13.5px;
-  font-weight: 600;
+  justify-content: center;
+  position: relative;
+  padding: 10px 32px;
+  font-size: 15px;
+  font-weight: 700;
   border-radius: 13px;
   cursor: pointer;
   user-select: none;
@@ -274,9 +275,12 @@
   box-shadow: 0 5px 16px rgba(87, 130, 111, .18);
 }
 .win-sysbar-trigger:active { transform: translateY(1px); }
-/* 当前仓库彩色圆点（trigger 带 data-sys，由 app.js updateBrand 写入） */
+/* 当前仓库彩色圆点（绝对定位贴左，给仓库名腾出居中空间）） */
 .win-sysbar-dot {
-  flex: 0 0 11px;
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 11px;
   height: 11px;
   border-radius: 50%;
@@ -286,17 +290,24 @@
 .win-sysbar-trigger[data-sys="saidis"] .win-sysbar-dot { background: var(--lav-500, #968ABE); }
 .win-sysbar-trigger #winSysbarName {
   flex: 1 1 auto;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 .win-sysbar-caret {
-  flex: 0 0 14px;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--mint-600, #57826F);
   opacity: .9;
   transition: transform .2s;
 }
-.win-sysbar-trigger[aria-expanded="true"] .win-sysbar-caret { transform: rotate(180deg); }
+.win-sysbar-trigger[aria-expanded="true"] .win-sysbar-caret { transform: translateY(-50%) rotate(180deg); }
 .win-sysbar-menu {
   position: absolute;
   left: 12px;
@@ -317,10 +328,10 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 9px;
-  text-align: left;
-  padding: 9px 11px;
-  font-size: 13.5px;
+  position: relative;
+  padding: 10px 32px;
+  font-size: 14.5px;
+  font-weight: 700;
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -329,10 +340,18 @@
   border-radius: 9px;
   transition: background .15s;
 }
-/* 菜单项仓库色点：深圳细胞=薄荷绿 / 赛迪斯=淡紫 */
+.win-sysbar-item > .win-sysbar-name {
+  flex: 1 1 auto;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+/* 菜单项仓库色点：深圳细胞=薄荷绿 / 赛迪斯=淡紫（绝对定位贴左） */
 .win-sysbar-item::before {
   content: "";
-  flex: 0 0 10px;
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -345,7 +364,7 @@
   background: rgba(127, 179, 165, .14);
   outline: none;
 }
-/* 当前所在仓库：主题渐变浅底 + 深墨字 + ✓ 标记 */
+/* 当前所在仓库：主题渐变浅底 + 深墨字 + ✓ 标记（✓ 绝对定位贴右） */
 .win-sysbar-item.active {
   background: linear-gradient(135deg, rgba(167, 158, 208, .18), rgba(127, 179, 165, .18));
   color: var(--ink-900, #3C4845);
@@ -358,8 +377,11 @@
 .win-sysbar-item.active[data-sys="saidis"]::before { background: var(--lav-500, #968ABE); }
 .win-sysbar-item.active::after {
   content: "✓";
-  margin-left: auto;
-  font-size: 12px;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
   font-weight: 800;
   color: var(--mint-600, #57826F);
 }

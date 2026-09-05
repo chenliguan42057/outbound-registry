@@ -109,8 +109,8 @@
                 '<svg class="win-sysbar-caret" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>' +
               '</button>' +
               '<ul class="win-sysbar-menu" id="winSysbarMenu" role="listbox" hidden>' +
-                '<li><button type="button" class="win-sysbar-item" data-sys="shenzhen" role="option">深圳细胞</button></li>' +
-                '<li><button type="button" class="win-sysbar-item" data-sys="saidis" role="option">赛迪斯</button></li>' +
+                '<li><button type="button" class="win-sysbar-item" data-sys="shenzhen" role="option"><span class="win-sysbar-name">深圳细胞</span></button></li>' +
+                '<li><button type="button" class="win-sysbar-item" data-sys="saidis" role="option"><span class="win-sysbar-name">赛迪斯</span></button></li>' +
               '</ul>' +
             '</div>' +
             '<nav class="win-sidebar-nav" id="winNav"></nav>' +
