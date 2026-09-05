@@ -202,7 +202,7 @@
       if (!ok) failedEvents.push(m.name);
     }
     if (failedEvents.length) {
-      Util.toast("⚠️ " + dstName + " 部分新货品金山列未生成（" + failedEvents.join("、") + "），请稍候在「云同步」页补传", true);
+      Util.toast("⚠️ " + dstName + " 部分新货品的金山建列请求因网络原因未送达（" + failedEvents.join("、") + "）。目录与入库不受影响；金山列可能缺失，可稍后对这些货品重做一次调拨来补建列", true);
     }
     return missing.map(function (it) { return it.name; });
   }

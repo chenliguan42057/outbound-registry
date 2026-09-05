@@ -431,7 +431,7 @@
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line-soft,#DCE6E0)">' +
         '<span style="flex:1;font-size:13.5px">' + Util.esc(s.name) + '</span>' +
         '<span class="hint" style="margin:0;flex:0 0 74px;text-align:right">当前 ' + s.stock + '</span>' +
-        '<input type="number" step="any" min="0" value="' + s.stock + '" data-i="' + i + '" class="st-in" style="width:92px;padding:8px 10px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)" />' +
+        '<input type="number" step="1" min="0" inputmode="numeric" value="' + s.stock + '" data-i="' + i + '" class="st-in" style="width:92px;padding:8px 10px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)" />' +
       '</div>';
     }).join("");
     var body =
@@ -448,7 +448,7 @@
       var diffs = [];
       summary.forEach(function (s, i) {
         var inp = mBody.querySelector('.st-in[data-i="' + i + '"]');
-        var actual = inp ? (Number(inp.value) || 0) : s.stock;
+        var actual = Math.round(inp ? (Number(inp.value) || 0) : s.stock);
         var diff = actual - s.stock;
         if (diff !== 0) diffs.push({ name: s.name, diff: diff });
       });
@@ -536,11 +536,11 @@
         '<div class="field"><label for="qaUnit">单位</label>' +
         '<input type="text" id="qaUnit" maxlength="10" placeholder="盒/支/瓶/箱" autocomplete="off" /></div>' +
         '<div class="field"><label for="qaStock">初始库存<span class="req">*</span></label>' +
-        '<input type="number" id="qaStock" min="0" step="any" value="0" inputmode="decimal" /></div>' +
+        '<input type="number" id="qaStock" min="0" step="1" value="0" inputmode="numeric" /></div>' +
       '</div>' +
       '<div class="grid2">' +
         '<div class="field"><label for="qaWarn">预警线（低于即标红）</label>' +
-        '<input type="number" id="qaWarn" min="0" step="any" value="' + Config.LOW_STOCK_THRESHOLD + '" inputmode="decimal" /></div>' +
+        '<input type="number" id="qaWarn" min="0" step="1" value="' + Config.LOW_STOCK_THRESHOLD + '" inputmode="numeric" /></div>' +
         '<div class="field"><label for="qaPrice">单价（元，可选）</label>' +
         '<input type="number" id="qaPrice" min="0" step="0.01" value="0" inputmode="decimal" /></div>' +
       '</div>' +
@@ -565,8 +565,8 @@
       try {
         var name = (mBody.querySelector('#qaName').value || '').trim();
         var unit = (mBody.querySelector('#qaUnit').value || '').trim();
-        var stock = Number(mBody.querySelector('#qaStock').value) || 0;
-        var warn = Number(mBody.querySelector('#qaWarn').value) || Config.LOW_STOCK_THRESHOLD;
+        var stock = Math.round(Number(mBody.querySelector('#qaStock').value) || 0);
+        var warn = Math.round(Number(mBody.querySelector('#qaWarn').value) || Config.LOW_STOCK_THRESHOLD);
         var price = Number(mBody.querySelector('#qaPrice').value) || 0;
         var barcode = (mBody.querySelector('#qaBarcode').value || '').trim();
 

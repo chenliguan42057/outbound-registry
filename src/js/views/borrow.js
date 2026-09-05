@@ -278,7 +278,7 @@
         '<td>' + outQty + '</td>' +
         '<td>' + (ret[it.name] || 0) + '</td>' +
         '<td style="color:#E11D48;font-weight:600;">' + it.qty + '</td>' +
-        '<td><input type="number" class="return-input" data-name="' + Util.esc(it.name) + '" min="0" max="' + it.qty + '" step="any" value="0" inputmode="decimal" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 本次归还数量（最多 ' + it.qty + '）" style="width:96px;" /></td>' +
+        '<td><input type="number" class="return-input" data-name="' + Util.esc(it.name) + '" min="0" max="' + it.qty + '" step="1" value="0" inputmode="numeric" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 本次归还数量（最多 ' + it.qty + '）" style="width:96px;" /></td>' +
       '</tr>';
     }).join("");
     var body =
@@ -302,7 +302,7 @@
         inputs.forEach(function (inp) {
           inp.removeAttribute("aria-invalid");
           inp.style.borderColor = "";
-          var v = Number(inp.value);
+          var v = Math.round(Number(inp.value));
           if (!inp.value || isNaN(v)) v = 0;
           var max = Number(inp.max) || 0;
           if (v < 0 || v > max) {

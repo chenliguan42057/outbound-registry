@@ -7,6 +7,14 @@
 
   function init() {
     try {
+      // URL 直达系统（2026-09-05）：https://…/?sys=saidis（或 shenzhen）在启动前即锁定当前仓库，
+      // 供「两仓各自的登记二维码/分享链接」使用；缺省保持 localStorage 记忆的系统。必须早于 State.init。
+      try {
+        var sm = (location.search || "").match(/[?&]sys=(shenzhen|saidis)/);
+        if (sm && window.App.Config && window.App.Config.Sys) {
+          window.App.Config.Sys.set(sm[1]);
+        }
+      } catch (e) {}
       window.App.State.init();
       // 启动一致性修复（幂等，可安全重复执行）：
       //   1) 已提单的先借后还差额出库单 → 原借出单自动完成

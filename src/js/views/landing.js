@@ -139,7 +139,9 @@
     el.innerHTML =
       '<div class="landing">' +
         '<header class="landing-topbar">' +
-          '<span class="landing-brand">' + Util.esc(Config.BRAND_TITLE) + '</span>' +
+          '<span class="landing-brand">' + Util.esc(Config.BRAND_TITLE) +
+            '<span class="landing-sys" style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#fff;vertical-align:2px;background:linear-gradient(120deg,#A79ED0 0%,#7FB3A5 100%)">' +
+              Util.esc(Config.Sys.name()) + '</span></span>' +
           '<button type="button" class="landing-admin" id="landingAdmin"><span class="landing-admin-emoji">🖥️</span> 管理 ➜</button>' +
         '</header>' +
         '<div class="landing-body">' +

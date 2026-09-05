@@ -311,6 +311,26 @@
         self.emit();
       }
     });
+    // 数量取整（2026-09-05）：货品按支/盒/袋计，只允许正整数。
+    // blur/change 时若填了小数（如 2.5）自动就近取整并轻提示，避免小数库存进入流水。
+    this.listEl.addEventListener("change", function (e) {
+      var inp = e.target.closest(".qty");
+      if (!inp) return;
+      var i = Number(inp.getAttribute("data-i"));
+      var raw = String(inp.value || "").trim();
+      if (raw === "") return;
+      var v = Number(raw);
+      if (!isFinite(v)) return;
+      var r = Math.round(v);
+      if (r === v) { self.selected[i].qty = v; return; }
+      self.selected[i].qty = r;
+      inp.value = String(r);
+      self.emit();
+      var nm = self.selected[i] ? self.selected[i].name : "";
+      if (window.App && window.App.Util && window.App.Util.toast) {
+        window.App.Util.toast("「" + (nm || "货品") + "」数量已按整数取整为 " + r);
+      }
+    });
     this.render();
   };
 
@@ -381,7 +401,7 @@
         '<span class="name">' + Util.esc(it.name) + '</span>' +
         '<div class="qty-stepper">' +
           '<button type="button" class="qty-btn" data-act="dec" data-i="' + i + '" aria-label="减少">−</button>' +
-          '<input type="number" min="0" max="999999" step="any" inputmode="decimal" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 数量" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
+          '<input type="number" min="0" max="999999" step="1" inputmode="numeric" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 数量" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
           '<button type="button" class="qty-btn" data-act="inc" data-i="' + i + '" aria-label="增加">+</button>' +
         '</div>' +
         '<span class="x" data-i="' + i + '">&times;</span>';
@@ -410,6 +430,7 @@
     this.selected.forEach(function (s) {
       var n = s.qty === "" ? 0 : Number(s.qty);
       if (!isFinite(n) || n <= 0) problems.push(s.name + " 未填数量");
+      else if (Math.floor(n) !== n) problems.push(s.name + " 数量需为整数（支/盒/袋按整件计）");
       else if (n < ProductPicker.MIN_QTY) problems.push(s.name + " 数量过小");
       else if (n > ProductPicker.MAX_QTY) problems.push(s.name + " 数量超上限");
     });
