@@ -31,7 +31,8 @@ SYS_NAME = os.environ.get("SYS_NAME", "").strip()  # 非空时消息正文首部
 # 北京时间（UTC+8）：GitHub Actions runner 默认 UTC，钉钉消息时间必须显式用 CST
 CST = timezone(timedelta(hours=8))
 
-TEST_TEXT = "✅ 出入库登记通知测试：仓库通知已连通"
+# 默认测试文案；workflow_dispatch 可传 INPUT_TEXT 覆盖为自定义推送内容（2026-09-05 增强）
+TEST_TEXT = (os.environ.get("INPUT_TEXT") or "").strip() or "✅ 出入库登记通知测试：仓库通知已连通"
 
 
 def sign_url(webhook, secret):

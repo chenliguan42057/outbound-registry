@@ -8,7 +8,12 @@ on:
       - 'data-saidis/pickups/*.json'
       - 'data-saidis/memos/*.json'
       - 'data-saidis/catalog/notifications/*.json'
-  workflow_dispatch:   # 支持手动触发测试（默认发一条测试消息）
+  workflow_dispatch:   # 支持手动触发测试（默认发一条测试消息；可传 text 自定义内容）
+    inputs:
+      text:
+        description: '自定义推送文本（留空则发默认测试消息）'
+        required: false
+        default: ''
 
 jobs:
   notify:
@@ -40,4 +45,5 @@ jobs:
           SECRET: ${{ secrets.DINGTALK_SECRET_SAIDIS }}
           FILES: ${{ steps.changed.outputs.files }}
           GITHUB_SHA: ${{ github.sha }}
+          INPUT_TEXT: ${{ github.event.inputs.text }}
         run: python3 .github/scripts/dingtalk_notify.py
