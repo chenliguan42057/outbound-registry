@@ -438,7 +438,7 @@
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line-soft,#DCE6E0)">' +
         '<span style="flex:1;font-size:13.5px">' + Util.esc(s.name) + '</span>' +
         '<span class="hint" style="margin:0;flex:0 0 74px;text-align:right">当前 ' + s.stock + '</span>' +
-        '<input type="number" step="1" min="0" inputmode="numeric" value="' + s.stock + '" data-i="' + i + '" class="st-in" style="width:92px;padding:8px 10px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)" />' +
+        '<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="' + s.stock + '" data-i="' + i + '" class="st-in" style="width:92px;padding:8px 10px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)" />' +
       '</div>';
     }).join("");
     var body =

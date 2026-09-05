@@ -102,7 +102,13 @@
     }
   };
 
-  /** 确认弹窗：Promise<boolean> */
+  /** 确认弹窗：Promise<boolean>
+      修复（2026-09-05）：原版 .onclick = function(){...} 赋值存在两个隐患——
+        1) querySelector('[data-act="ok"]') 若返回 null 时会 null.onclick 抛错，promise 永不 resolve
+           （用户感知为"确认按钮点不动"），常见于 mBody 上已堆叠 click 监听把按钮吞掉的场景；
+        2) .onclick 直接赋值在动态插入的 button 上偶有边界问题。
+      改为 addEventListener + null 守卫 + 包裹 close() 函数（异常吞掉 Modal.hide 抛错，保证 resolve 必触发）；
+      并默认 focus 到 OK 按钮，移动端/键盘 Enter 也能直接确认。 */
   function confirmDialog(msg, title) {
     return new Promise(function (resolve) {
       var body =
@@ -113,8 +119,16 @@
         '</div>';
       Modal.show(title || "请确认", body, { width: "340px" });
       var mBody = Modal.body();
-      mBody.querySelector('[data-act="ok"]').onclick = function () { Modal.hide(); resolve(true); };
-      mBody.querySelector('[data-act="cancel"]').onclick = function () { Modal.hide(); resolve(false); };
+      var okBtn = mBody && mBody.querySelector('[data-act="ok"]');
+      var noBtn = mBody && mBody.querySelector('[data-act="cancel"]');
+      function close(v) {
+        try { Modal.hide(); } catch (e) {}
+        resolve(v);
+      }
+      if (okBtn) okBtn.addEventListener('click', function () { close(true); });
+      if (noBtn) noBtn.addEventListener('click', function () { close(false); });
+      // 默认聚焦 OK：键盘 Enter 直接确认，移动端软键盘也走 OK
+      try { setTimeout(function () { if (okBtn && document.contains(okBtn)) okBtn.focus(); }, 60); } catch (e) {}
     });
   }
 
