@@ -567,11 +567,18 @@
     return true;
   }
 
+  /** 状态栏写入（带守卫）：落地页等未挂载 #/app 壳的场景（无 Views.app）必须静默跳过，
+      否则 setSyncStatus 抛 TypeError 会中断后续提示（2026-09-05 落地页提交无反馈问题根因之一）。 */
+  function appStatus(text, isErr) {
+    var a = window.App.Views && window.App.Views.app;
+    if (a && a.setSyncStatus) a.setSyncStatus(text, isErr);
+  }
+
   function pushToCloud(rec, msg) {
     if (!Cloud.hasToken()) {
       // 令牌缺失＝只存在本机浏览器，换设备看不到、也不会进金山台账。必须醒目告警，否则用户会误以为已同步。
       Util.toast("⚠️ 仅存本机，未上传云端！请联系管理员检查同步令牌", true);
-      window.App.Views.app.setSyncStatus("⚠️ 未配置云端令牌，本条只存在本机，换设备看不到", true);
+      appStatus("⚠️ 未配置云端令牌，本条只存在本机，换设备看不到", true);
       return;
     }
     Util.toast(msg);
@@ -581,17 +588,17 @@
     }).then(function (r) {
       var fres = r.fres;
       State.lastSync = new Date();
-      window.App.Views.app.setSyncStatus("已同步 " + State.lastSync.toLocaleString(), false);
+      appStatus("已同步 " + State.lastSync.toLocaleString(), false);
       var remain = (fres && fres.remain) || 0;
       if (remain > 0) {
         // 失败可见（P1）：明确提示数量 + 指引去「云同步 → 一键重推」，而不是模糊的"稍后自动补推"
-        window.App.Views.app.setSyncStatus("⚠️ " + remain + " 条未推上云端（已存本机队列），可在「云同步」页一键重推", true);
+        appStatus("⚠️ " + remain + " 条未推上云端（已存本机队列），可在「云同步」页一键重推", true);
         Util.toast("⚠️ 有 " + remain + " 条记录未同步到云端，已存本机队列；打开「管理 → 云同步 → 一键重推」即可补推", true);
         return;
       }
       if (r.pushed) watchWpsReceipt(rec);
     }).catch(function (e) {
-      window.App.Views.app.setSyncStatus("云端同步失败：" + e.message + "（已存本机队列，可在「云同步」页一键重推）", true);
+      appStatus("云端同步失败：" + e.message + "（已存本机队列，可在「云同步」页一键重推）", true);
       Util.toast("⚠️ 云端同步失败：" + e.message + "，已存本机队列，可在「云同步」页一键重推", true);
     });
   }
@@ -599,12 +606,12 @@
   /** 追踪金山台账回执：上云只是第一步，真正落进台账才算数，把这一步也显示给用户看 */
   function watchWpsReceipt(rec) {
     if (!Cloud.waitWpsReceipt) return;
-    window.App.Views.app.setSyncStatus("⏳ 已上云，正在写入金山台账…", false);
+    appStatus("⏳ 已上云，正在写入金山台账…", false);
     Cloud.waitWpsReceipt(rec.id, function (st) {
       if (!st || st.phase === "waiting") return;
       var d = Cloud.describeWpsReceipt(st);
       if (!d) return;
-      window.App.Views.app.setSyncStatus(d.text, d.isErr);
+      appStatus(d.text, d.isErr);
       if (d.toast) Util.toast(d.toast, d.isErr);
     });
   }
