@@ -21,6 +21,9 @@
 <meta name="twitter:description" content="出库/入库/借用/领用登记与看板" />
 <link rel="stylesheet" href="css/core.css?v=__CACHE_BUST__" />
 <link rel="stylesheet" href="css/theme.css?v=__CACHE_BUST__" />
+<!-- 体验修补层：必须最后加载（依赖后来者胜出压过 theme.css 若干规则）。
+     2026-09-05 修复：此前该文件未被任何页面引用，导致 win-sysbar 等增量样式全部不生效。 -->
+<link rel="stylesheet" href="css/patch.css?v=__CACHE_BUST__" />
 <script>
   /* 应急回退：?legacy=1 直接跳转冻结的旧版单页 legacy.html */
   (function () {
