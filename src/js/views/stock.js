@@ -248,22 +248,29 @@
     UI.Modal.show("🗑 删除货品", body, { width: "580px" });
     var mBody = UI.Modal.body();
     mBody.querySelector('[data-act="close"]').addEventListener("click", function () { UI.Modal.hide(); });
-    mBody.addEventListener("click", function (e) {
-      var b = e.target.closest(".del-pick-btn");
-      if (!b || !b.getAttribute("data-name")) return;
-      var name = b.getAttribute("data-name");
-      askDelProduct(name, function (ok2) {
-        if (ok2) {
-          var rowEl = b.closest(".del-pick-row");
-          if (rowEl) rowEl.remove();
-          var remain = mBody.querySelectorAll(".del-pick-row").length;
-          if (!remain) {
-            var wrap = mBody.querySelector("div[style*='max-height:46vh']");
-            if (wrap) wrap.innerHTML = '<div class="empty">已全部删除，暂无货品</div>';
+    // 修复（2026-09-05）：mBody 是 .modal-body 单例元素，Modal.show 每次只 innerHTML="" 但元素保留。
+    // 若每次 openDelProductList 都 mBody.addEventListener("click", ...) 会叠加堆叠——同一点击触发多次
+    // askDelProduct + 多次弹 confirmDialog。Modal 单实例下后调用者覆盖前者，前者 Promise 永不 resolve，
+    // 用户感受「点击没反应，多次点击后才有一次真的删」。改为一次性绑定（mBody.dataset.delBound 标记）。
+    if (!mBody.dataset.delBound) {
+      mBody.dataset.delBound = "1";
+      mBody.addEventListener("click", function (e) {
+        var b = e.target.closest(".del-pick-btn");
+        if (!b || !b.getAttribute("data-name")) return;
+        var name = b.getAttribute("data-name");
+        askDelProduct(name, function (ok2) {
+          if (ok2) {
+            var rowEl = b.closest(".del-pick-row");
+            if (rowEl) rowEl.remove();
+            var remain = mBody.querySelectorAll(".del-pick-row").length;
+            if (!remain) {
+              var wrap = mBody.querySelector("div[style*='max-height:46vh']");
+              if (wrap) wrap.innerHTML = '<div class="empty">已全部删除，暂无货品</div>';
+            }
           }
-        }
+        });
       });
-    });
+    }
   }
 
   /* ================= B3 库存流水追溯 ================= */
@@ -541,8 +548,11 @@
       '<div class="grid2">' +
         '<div class="field"><label for="qaWarn">预警线（低于即标红）</label>' +
         '<input type="number" id="qaWarn" min="0" step="1" value="' + Config.LOW_STOCK_THRESHOLD + '" inputmode="numeric" /></div>' +
+        // 修复（2026-09-05）：原价是 type="number" step="0.01" value="0"，按 spinner ▲ 一次只 +0.01，
+        // 填 28 元得按 2800 次；且 min="0" 下 number input 清空会自动回弹，用户感受「按数字失灵」。
+        // 改用 type="text" + inputmode="decimal"（移动端拉数字键盘；桌面用普通键盘键入，无原生 spinner 干扰）。
         '<div class="field"><label for="qaPrice">单价（元，可选）</label>' +
-        '<input type="number" id="qaPrice" min="0" step="0.01" value="0" inputmode="decimal" /></div>' +
+        '<input type="text" id="qaPrice" inputmode="decimal" pattern="[0-9.]*" maxlength="10" placeholder="0.00" autocomplete="off" /></div>' +
       '</div>' +
       '<div class="field"><label for="qaBarcode">条码（可选）</label>' +
       '<input type="text" id="qaBarcode" maxlength="40" autocomplete="off" /></div>' +
