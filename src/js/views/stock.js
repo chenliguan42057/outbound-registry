@@ -191,7 +191,7 @@
   /* ================= 库存页行内删除货品（2026-09-05） =================
      删除 = 目录移除 + 库存归 0 + 钉钉通知 + 金山台账删列（若有列）。
      历史出入库记录仍保留在系统内可查；金山整列删除不可恢复，弹窗强提醒。 */
-  function askDelProduct(name, cb) {
+  function askDelProduct(name, cb, onStart) {
     if (!name) return;
     var g = (window.App.Catalog && window.App.Catalog.get) ? window.App.Catalog.get() : null;
     var p = null;
@@ -212,6 +212,8 @@
     if (!window.App.UI || !window.App.UI.confirmDialog) return;
     window.App.UI.confirmDialog(msg, "🗑 删除货品").then(function (ok) {
       if (!ok) return;
+      // 2026-09-05：确认后才置忙（取消/点遮罩关闭都不会误锁），删除进行中防连点重复提交
+      if (typeof onStart === "function") { try { onStart(); } catch (e) {} }
       if (!window.App.Catalog || !window.App.Catalog.removeProduct) { Util.toast("删除能力未就绪，请刷新页面", true); return; }
       window.App.Catalog.removeProduct(name, function (ok2, msg2) {
         Util.toast(msg2 || (ok2 ? "已删除" : "删除失败"), !ok2);
@@ -257,17 +259,28 @@
       mBody.addEventListener("click", function (e) {
         var b = e.target.closest(".del-pick-btn");
         if (!b || !b.getAttribute("data-name")) return;
+        if (b.dataset.busy === "1") return;   // 该行删除进行中，忽略重复点击
         var name = b.getAttribute("data-name");
         askDelProduct(name, function (ok2) {
-          if (ok2) {
-            var rowEl = b.closest(".del-pick-row");
-            if (rowEl) rowEl.remove();
-            var remain = mBody.querySelectorAll(".del-pick-row").length;
-            if (!remain) {
-              var wrap = mBody.querySelector("div[style*='max-height:46vh']");
-              if (wrap) wrap.innerHTML = '<div class="empty">已全部删除，暂无货品</div>';
-            }
+          if (!ok2) {
+            // 删除失败/未完成 → 恢复按钮可再点；成功则由下方移除行
+            b.dataset.busy = "0";
+            b.disabled = false;
+            b.textContent = "🗑 删除";
+            return;
           }
+          var rowEl = b.closest(".del-pick-row");
+          if (rowEl) rowEl.remove();
+          var remain = mBody.querySelectorAll(".del-pick-row").length;
+          if (!remain) {
+            var wrap = mBody.querySelector("div[style*='max-height:46vh']");
+            if (wrap) wrap.innerHTML = '<div class="empty">已全部删除，暂无货品</div>';
+          }
+        }, function () {
+          // 用户确认删除、云端保存进行中 → 锁住按钮防连点（弱网下不再叠出多个删除请求）
+          b.dataset.busy = "1";
+          b.disabled = true;
+          b.textContent = "删除中…";
         });
       });
     }
@@ -452,37 +465,45 @@
     var mBody = UI.Modal.body();
     mBody.querySelector('[data-act="cancel"]').addEventListener("click", function () { UI.Modal.hide(); });
     mBody.querySelector("#stSave").addEventListener("click", async function () {
-      var diffs = [];
-      summary.forEach(function (s, i) {
-        var inp = mBody.querySelector('.st-in[data-i="' + i + '"]');
-        var actual = Math.round(inp ? (Number(inp.value) || 0) : s.stock);
-        var diff = actual - s.stock;
-        if (diff !== 0) diffs.push({ name: s.name, diff: diff });
-      });
-      if (!diffs.length) { Util.toast("盘点数与当前库存一致，无需调整"); UI.Modal.hide(); return; }
-      var inSum = 0, outSum = 0;
-      diffs.forEach(function (d) { if (d.diff > 0) inSum += d.diff; else outSum -= d.diff; });
-      // P1 改进：盘点改为「校准库存基准」，不再生成出入库记录。
-      // 旧逻辑生成 affectsStock=true 的调整记录：系统多一笔流水、金山又没有 → 每次盘点后系统就偏离金山一笔。
-      // 直接改 catalog.inventory 基准则：1) 不产生流水记录，流水干净；2) 不进金山，金山不变，两边长期一致；
-      // 3) 系统库存 = 用户输入的实存数。
-      var ok = await UI.confirmDialog(
-        "差异汇总：实存比账面多 +" + inSum + "、少 -" + outSum + "。\n将校准库存基准到实存数并记入系统库存流水（不进金山台账），同时推送钉钉群。确认执行？", "盘点校准确认");
-      if (!ok) { UI.Modal.hide(); return; }
-      var Catalog = window.App.Catalog;
-      var cat = Catalog && Catalog.get();
-      if (!cat || !cat.inventory) { Util.toast("目录未就绪，无法校准", true); return; }
-      // 记录校准前后数值（book=账面/校准前，actual=实存/校准后），供保存成功后推送钉钉
-      var affected = [];
-      diffs.forEach(function (d) {
-        var base = Number(cat.inventory[d.name]) || 0;
-        affected.push({ name: d.name, book: base, actual: base + d.diff, diff: d.diff });
-        cat.inventory[d.name] = base + d.diff;
-      });
-      if (window.App.Stock) window.App.Stock.markDirty();
-      Catalog.save(cat, function (okSave, msg) {
+      // 2026-09-05：防连点锁——保存/云同步期间再次点击会叠出并发 PUT（409 → “云端保存失败”）
+      var stBtn = mBody.querySelector("#stSave");
+      if (stBtn.dataset.busy === "1") return;
+      stBtn.dataset.busy = "1";
+      stBtn.disabled = true;
+      try {
+        var diffs = [];
+        summary.forEach(function (s, i) {
+          var inp = mBody.querySelector('.st-in[data-i="' + i + '"]');
+          var actual = Math.round(inp ? (Number(inp.value) || 0) : s.stock);
+          var diff = actual - s.stock;
+          if (diff !== 0) diffs.push({ name: s.name, diff: diff });
+        });
+        if (!diffs.length) { Util.toast("盘点数与当前库存一致，无需调整"); UI.Modal.hide(); return; }
+        var inSum = 0, outSum = 0;
+        diffs.forEach(function (d) { if (d.diff > 0) inSum += d.diff; else outSum -= d.diff; });
+        // P1 改进：盘点改为「校准库存基准」，不再生成出入库记录。
+        // 旧逻辑生成 affectsStock=true 的调整记录：系统多一笔流水、金山又没有 → 每次盘点后系统就偏离金山一笔。
+        // 直接改 catalog.inventory 基准则：1) 不产生流水记录，流水干净；2) 不进金山，金山不变，两边长期一致；
+        // 3) 系统库存 = 用户输入的实存数。
+        var ok = await UI.confirmDialog(
+          "差异汇总：实存比账面多 +" + inSum + "、少 -" + outSum + "。\n将校准库存基准到实存数并记入系统库存流水（不进金山台账），同时推送钉钉群。确认执行？", "盘点校准确认");
+        if (!ok) { UI.Modal.hide(); return; }
+        // 2026-09-05：确认后立即收起盘点弹窗——云端保存在后台进行（15s 超时 + 3 次重试），
+        // 弱网/移动端下用户不再看到“弹窗卡住 / 保存按钮点了没反应”，结果统一用 toast 呈现。
         UI.Modal.hide();
-        if (okSave) {
+        var Catalog = window.App.Catalog;
+        var cat = Catalog && Catalog.get();
+        if (!cat || !cat.inventory) { Util.toast("目录未就绪，无法校准", true); return; }
+        // 记录校准前后数值（book=账面/校准前，actual=实存/校准后），供保存成功后推送钉钉
+        var affected = [];
+        diffs.forEach(function (d) {
+          var base = Number(cat.inventory[d.name]) || 0;
+          affected.push({ name: d.name, book: base, actual: base + d.diff, diff: d.diff });
+          cat.inventory[d.name] = base + d.diff;
+        });
+        if (window.App.Stock) window.App.Stock.markDirty();
+        Catalog.save(cat, function (okSave, msg) {
+          if (okSave) {
           Util.toast("盘点校准完成：库存基准已更新为实存数");
           var stkTime = Util.nowLocal ? Util.nowLocal() : new Date().toISOString();
           // 生成盘点校准记录 → 系统库存流水可见（State.stocktakes + data/stocktakes/<id>.json，
@@ -526,6 +547,10 @@
           Util.toast("目录保存失败：" + (msg || ""), true);
         }
       });
+      } finally {
+        stBtn.dataset.busy = "0";
+        stBtn.disabled = false;
+      }
     });
   }
 

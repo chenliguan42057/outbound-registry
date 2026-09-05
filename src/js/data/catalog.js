@@ -61,16 +61,15 @@
     else fire();
   }
 
-  /** 读取云端 catalog.json；404 返回 null */
+  /** 读取云端 catalog.json；404 / 失败返回 null。
+      2026-09-05 修复：改走 Cloud.fetchCatalogAt（15s 超时 + 友好报错），不再裸 fetch——
+      原实现无超时，移动端/微信弱网下请求一直挂着，页面表现为「卡住 / 按钮点不上」。 */
   async function fetchCloud() {
     if (!hasToken()) return null;
     try {
-      var res = await fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("catalog/catalog.json") +
-        "?ref=" + Config.GH.branch, { headers: { "Accept": "application/vnd.github+json",
-        "Authorization": "Bearer " + Config.GH.token } });
-      if (!res.ok) return null;
-      var j = await res.json();
-      return JSON.parse(Util.b64dec(j.content));
+      var C = window.App.Cloud;
+      if (!C || !C.fetchCatalogAt) return null;
+      return await C.fetchCatalogAt(Config.Sys.root());
     } catch (e) { return null; }
   }
 
@@ -145,28 +144,41 @@
       } catch (e2) {}
     }
     if (!hasToken()) { _fireWpsCol(); if (cb) cb(true, "本机模式：目录已保存到本机"); return; }
+    // ===== 2026-09-05 修复「卡住 / 云端保存失败」：云端写入改走 Cloud 成熟封装 =====
+    // 原实现裸 fetch 有三个致命缺陷，正是用户在删除/新增/盘点时反复踩坑的根源：
+    //   ① 无超时 → 弱网/移动端 fetch 永久挂起，回调永不触发 → 「确定点了没反应 / 一直卡住」；
+    //   ② GET-sha 失败被静默吞掉（网络闪断/额度用尽时 ej.sha 为 undefined）→ 盲 PUT 不带 sha，
+    //      对已存在的 catalog.json 必然返回 409/422 → 「云端保存失败」；
+    //   ③ 无全局写串行链 → 连点/多端并发 PUT 互相 409。
+    // Cloud.putJsonFile：15s 超时 + 幂等（先 GET sha 再 PUT）+ 3 次退避重试 +
+    // 全局限流串行写链（同一时刻仅 1 个写请求在途），从源头消除上述三类故障。
     try {
-      var content = Util.b64enc(JSON.stringify(cat));
-      var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("catalog/catalog.json") + "?ref=" + Config.GH.branch;
-      var sha = null;
-      try {
-        var ej = await (await fetch(getUrl, { headers: { "Accept": "application/vnd.github+json",
-          "Authorization": "Bearer " + Config.GH.token } })).json();
-        sha = ej.sha;
-      } catch (e) {}
-      var body = sha
-        ? { message: "update catalog", content: content, sha: sha, branch: Config.GH.branch }
-        : { message: "add catalog", content: content, branch: Config.GH.branch };
-      var res = await fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("catalog/catalog.json"), {
-        method: "PUT",
-        headers: { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + Config.GH.token,
-          "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+      var C = window.App.Cloud;
+      if (!C || !C.putJsonFile) { if (cb) cb(false, "云端同步组件未就绪，请刷新页面后重试"); return; }
+      var okCloud = await C.putJsonFile({
+        dataDir: Config.Sys.root(),
+        subdir: "catalog",
+        id: "catalog",
+        payload: cat,
+        message: "update catalog"
       });
-      if (!res.ok) { if (cb) cb(false, "云端保存失败：" + res.status); return; }
+      if (!okCloud) { if (cb) cb(false, cloudFailMsg()); return; }
       _fireWpsCol();
       if (cb) cb(true, "目录已保存到云端");
-    } catch (e) { if (cb) cb(false, "云端保存异常：" + e.message); }
+    } catch (e) { if (cb) cb(false, "云端保存异常：" + ((e && e.message) || e)); }
+  }
+
+  /** putJsonFile 失败后的用户可读原因：优先判断 API 额度用尽（时间明确），否则给通用网络/令牌提示 */
+  function cloudFailMsg() {
+    try {
+      var C = window.App.Cloud;
+      var r = C && C.getRate ? C.getRate() : null;
+      if (r && typeof r.remaining === "number" && r.remaining <= 0) {
+        var mins = r.reset ? Math.max(1, Math.ceil((r.reset - Date.now()) / 60000)) : 0;
+        return "云端保存失败：API 额度已用尽" + (mins ? "，约 " + mins + " 分钟后自动恢复" : "") + "，请稍后再试";
+      }
+    } catch (e) {}
+    return "云端保存失败：已自动重试 3 次仍未成功，请检查网络后重试；若持续失败请到「云同步」页确认令牌状态";
   }
 
   /* ---------- 管理界面 ---------- */
@@ -227,35 +239,45 @@
       draw();
     });
     mBody.querySelector("#catSave").addEventListener("click", async function () {
-      var names = {};
-      for (var i = 0; i < work.products.length; i++) {
-        var n = String(work.products[i].name || "").trim();
-        if (!n) { Util.toast("第 " + (i + 1) + " 行货品名称为空", true); return; }
-        if (names[n]) { Util.toast("货品名称重复：" + n, true); return; }
-        names[n] = 1;
-        work.products[i].name = n;
-      }
-      var oldNames = ((catalog && catalog.products) || []).map(function (p) { return p.name; });
-      var newNames = work.products.map(function (p) { return p.name; });
-      var ok = await UI().confirmDialog("保存后全站货品目录/库存将立即更新（新增货品初始库存为 0）。确认保存？", "保存货品目录");
-      if (!ok) return;
-      save(work, function (ok2, msg) {
-        UI().Modal.hide();
-        Util.toast(msg, !ok2);
-        if (ok2) {
-          // 目录增删事件（推送钉钉；新增行发 product-added，删除行发 product-deleted）
-          var added = newNames.filter(function (n) { return oldNames.indexOf(n) === -1; });
-          var removed = oldNames.filter(function (n) { return newNames.indexOf(n) === -1; });
-          var evs = added.map(function (n) { return { type: "product-added", name: n, unit: "", stock: 0, warnAt: Config.LOW_STOCK_THRESHOLD, price: 0, barcode: "" }; })
-            .concat(removed.map(function (n) { return { type: "product-deleted", name: n }; }));
-          evs.forEach(function (ev, i) { ev.time = Date.now() + i; pushCatalogEvent(ev); });
+      // 2026-09-05：防连点锁（弱网保存期间再次点击会并发 PUT → 409 → “云端保存失败”）
+      var sBtn = mBody.querySelector("#catSave");
+      if (sBtn.dataset.busy === "1") return;
+      sBtn.dataset.busy = "1";
+      sBtn.disabled = true;
+      try {
+        var names = {};
+        for (var i = 0; i < work.products.length; i++) {
+          var n = String(work.products[i].name || "").trim();
+          if (!n) { Util.toast("第 " + (i + 1) + " 行货品名称为空", true); return; }
+          if (names[n]) { Util.toast("货品名称重复：" + n, true); return; }
+          names[n] = 1;
+          work.products[i].name = n;
         }
+        var oldNames = ((catalog && catalog.products) || []).map(function (p) { return p.name; });
+        var newNames = work.products.map(function (p) { return p.name; });
+        var ok = await UI().confirmDialog("保存后全站货品目录/库存将立即更新（新增货品初始库存为 0）。确认保存？", "保存货品目录");
+        if (!ok) return;
+        save(work, function (ok2, msg) {
+          UI().Modal.hide();
+          Util.toast(msg, !ok2);
+          if (ok2) {
+            // 目录增删事件（推送钉钉；新增行发 product-added，删除行发 product-deleted）
+            var added = newNames.filter(function (n) { return oldNames.indexOf(n) === -1; });
+            var removed = oldNames.filter(function (n) { return newNames.indexOf(n) === -1; });
+            var evs = added.map(function (n) { return { type: "product-added", name: n, unit: "", stock: 0, warnAt: Config.LOW_STOCK_THRESHOLD, price: 0, barcode: "" }; })
+              .concat(removed.map(function (n) { return { type: "product-deleted", name: n }; }));
+            evs.forEach(function (ev, i) { ev.time = Date.now() + i; pushCatalogEvent(ev); });
+          }
 
-        // 刷新依赖目录的视图
-        try { if (window.App.Views.stock && window.App.Views.stock.refresh) window.App.Views.stock.refresh(); } catch (e) {}
-        try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
-        try { if (window.App.Views.report && window.App.Views.report.refresh) window.App.Views.report.refresh(); } catch (e) {}
-      });
+          // 刷新依赖目录的视图
+          try { if (window.App.Views.stock && window.App.Views.stock.refresh) window.App.Views.stock.refresh(); } catch (e) {}
+          try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
+          try { if (window.App.Views.report && window.App.Views.report.refresh) window.App.Views.report.refresh(); } catch (e) {}
+        });
+      } finally {
+        sBtn.dataset.busy = "0";
+        sBtn.disabled = false;
+      }
     });
     mBody.querySelector('[data-act="cancel"]').addEventListener("click", function () { UI().Modal.hide(); });
   }
@@ -328,27 +350,22 @@
 
   /* ---------- 推送货品目录事件到 data/catalog/notifications/{ts}.json ----------
      仅在云端写一条事件文件，由 GitHub Actions dingtalk_notify.py 识别并推送钉钉。
-     与 save 走相同 Contents API 流程；无 token 时直接跳过（不影响主流程）。 */
+     与 save 走相同 Contents API 流程；无 token 时直接跳过（不影响主流程）。
+     2026-09-05：改走 Cloud.putJsonFile（超时 + 串行写链 + 重试），原裸 fetch 连点会并发冲突。 */
   function pushCatalogEvent(event, subdir) {
     return new Promise(function (resolve) {
       if (!hasToken()) { resolve(false); return; }
       try {
         var ts = event.time || Date.now();
-        var path = Config.Sys.dir(subdir || "catalog/notifications") + "/" + ts + ".json";
-        var content = Util.b64enc(JSON.stringify(event));
-        var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
-        var shaP = fetch(getUrl, { headers: { "Accept": "application/vnd.github+json",
-          "Authorization": "Bearer " + Config.GH.token } }).then(function (r) { return r.json(); }).then(function (j) { return j.sha; })["catch"](function () { return null; });
-        shaP.then(function (sha) {
-          var body = { message: "catalog: " + (event.type || "event"), content: content, branch: Config.GH.branch };
-          if (sha) body.sha = sha;
-          return fetch("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
-            method: "PUT",
-            headers: { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + Config.GH.token,
-              "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-          });
-        }).then(function (res) { resolve(res && res.ok); })["catch"](function () { resolve(false); });
+        var C = window.App.Cloud;
+        if (!C || !C.putJsonFile) { resolve(false); return; }
+        C.putJsonFile({
+          dataDir: Config.Sys.root(),
+          subdir: subdir || "catalog/notifications",
+          id: String(ts),
+          payload: event,
+          message: "catalog: " + (event.type || "event")
+        }).then(function (ok) { resolve(!!ok); })["catch"](function () { resolve(false); });
       } catch (e) { resolve(false); }
     });
   }
