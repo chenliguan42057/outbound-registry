@@ -159,6 +159,43 @@ else:
 PRODUCTS_SET = set(PRODUCTS)
 
 
+def load_catalog_wps():
+    """把当前系统 data(-saidis)/catalog/catalog.json 里 products[].wps 合并进 WPS_MAP。
+
+    前端保存货品目录时自动给「新增货品」登记 wps: {sheet, col}（product-map.js 之外的新货品），
+    这里让后台也能识别新货品该写金山哪个子表/列；wps 为 null 表示显式不进台账。
+    老货品无该字段 → 继续走 product-map.js，互不干扰。
+    """
+    try:
+        p = os.path.normpath(os.path.join(DATA_ROOT, "catalog", "catalog.json"))
+        if not os.path.exists(p):
+            return 0
+        with open(p, "r", encoding="utf-8") as f:
+            cat = json.load(f)
+        n = 0
+        for prod in (cat.get("products") or []):
+            nm = (prod.get("name") or "").strip()
+            if not nm:
+                continue
+            w = prod.get("wps")
+            if w is None:
+                continue
+            if isinstance(w, dict) and w.get("sheet") and w.get("col"):
+                WPS_MAP[nm] = (w["sheet"], w["col"])
+            else:
+                WPS_MAP[nm] = None
+            n += 1
+        if n:
+            log("✅ catalog 合并 %d 条货品金山映射" % n)
+        return n
+    except Exception as e:
+        log("⚠️ catalog wps 合并失败: %s" % e)
+        return 0
+
+
+load_catalog_wps()
+
+
 def fmt_date(time_str):
     """'2026-08-06T17:23' -> '2026/8/6'（照 xlsx 台账习惯，无前导零）"""
     if not time_str:
@@ -482,12 +519,14 @@ def process_tombstone(tomb, synced):
 def list_changed_paths():
     """从 FILES 环境变量解析本次变更的文件路径。
 
-    返回 (记录新增/修改, 删除墓碑新增)：
-      - data/records/*.json  状态 A/M  → 追加行
-      - data/deleted/*.json  状态 A/M  → 删除行
+    返回 (记录新增/修改, 删除墓碑新增, 货品列事件)：
+      - data/records/*.json        状态 A/M  → 追加行
+      - data/deleted/*.json        状态 A/M  → 删除行
+      - data/catalog/wps-events/*.json 状态 A/M → 加/删金山台账列（货品目录增删联动）
     """
     recs = []
     toms = []
+    wps_evs = []
     for line in FILES.splitlines():
         line = line.strip()
         if not line:
@@ -504,7 +543,9 @@ def list_changed_paths():
             recs.append(path)
         elif path.startswith(DATA_ROOT + "/deleted/"):
             toms.append(path)
-    return recs, toms
+        elif path.startswith(DATA_ROOT + "/catalog/wps-events/"):
+            wps_evs.append(path)
+    return recs, toms, wps_evs
 
 
 def main():
@@ -523,13 +564,14 @@ def main():
         return sorted(os.path.join(d, f) for f in os.listdir(d) if f.endswith(".json"))
 
     if BACKFILL:
-        log(">>> 全量回填模式：扫描 data/records/ 与 data/deleted/ 全部文件")
+        log(">>> 全量回填模式：扫描 data/records/、data/deleted/ 与货品列事件全部文件")
         paths = scan_dir(os.path.join(DATA_ROOT, "records"))
         tomb_paths = scan_dir(os.path.join(DATA_ROOT, "deleted"))
+        wps_paths = scan_dir(os.path.join(DATA_ROOT, "catalog", "wps-events"))
     else:
-        paths, tomb_paths = list_changed_paths()
-        if not paths and not tomb_paths:
-            log("本次没有变更的记录/墓碑文件。")
+        paths, tomb_paths, wps_paths = list_changed_paths()
+        if not paths and not tomb_paths and not wps_paths:
+            log("本次没有变更的记录/墓碑/列事件文件。")
             # 仍回写标记（若本地有更新），但无需处理
             save_synced(synced)
             sys.exit(0)
@@ -581,6 +623,47 @@ def main():
     if tomb_paths:
         log("删除同步：成功 %d，失败 %d，跳过 %d" % (del_ok, del_fail, del_skip))
     fail_total += del_fail
+
+    # ---- 第三段：货品列事件（货品目录增删 → 金山台账加/删列）----
+    # 事件文件 {type:"wps-col-add"|"wps-col-del", name, sheet, col} 由前端 catalog.js 保存目录时写入；
+    # 独立命名空间 "wpscol:" 记已处理（幂等），失败在每小时兜底(backfill)重试。
+    wps_ok = 0
+    wps_fail = 0
+    if wps_paths:
+        wps_keys = synced.setdefault("__wpscol__", {})
+        for wpath in wps_paths:
+            base = os.path.basename(wpath)
+            key = "wpscol:" + base
+            if wps_keys.get(key, {}).get("ok"):
+                continue
+            try:
+                with open(wpath, "r", encoding="utf-8") as f:
+                    ev = json.load(f)
+            except Exception as e:
+                log("⚠️ 跳过无法解析的货品列事件 %s: %s" % (base, e))
+                continue
+            evtype = ev.get("type")
+            sheet = ev.get("sheet")
+            col = ev.get("col")
+            if evtype not in ("wps-col-add", "wps-col-del") or not sheet or not col:
+                log("⚠️ 忽略无效货品列事件 %s: %s" % (base, str(ev)[:120]))
+                continue
+            mode = "add_product_col" if evtype == "wps-col-add" else "del_product_col"
+            payload = {"Context": {"argv": {"mode": mode, "sheet_name": sheet, "col": col}}}
+            try:
+                body = post_to_wps(payload)
+                res = wps_result(body)
+                if res.get("ok") is False:
+                    raise RuntimeError(res.get("error") or "金山脚本返回 ok:false")
+                wps_keys[key] = {"ok": 1, "at": now_iso(), "mode": mode}
+                wps_ok += 1
+                log("✅ 金山%s列 %s/%s：%s" % ("加" if evtype.endswith("add") else "删", sheet, col, body[:100]))
+            except Exception as e:
+                wps_keys[key] = {"ok": 0, "fail": 1, "at": now_iso(), "err": str(e)[:200]}
+                wps_fail += 1
+                log("❌ 金山列%s失败 %s/%s：%s" % ("加" if evtype.endswith("add") else "删", sheet, col, e))
+        log("货品列同步：成功 %d，失败 %d" % (wps_ok, wps_fail))
+    fail_total += wps_fail
 
     synced["__bad__"] = bad_files
     save_synced(synced)

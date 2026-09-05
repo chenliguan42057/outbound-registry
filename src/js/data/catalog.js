@@ -124,10 +124,27 @@
     var names = cat.products.map(function (p) { return p.name; });
     Object.keys(cat.inventory).forEach(function (k) { if (names.indexOf(k) === -1) delete cat.inventory[k]; });
     names.forEach(function (n) { if (cat.inventory[n] === undefined) cat.inventory[n] = 0; });
+    // ===== 2026-09-05 金山列联动：diff 出本次增删，给新增货品自动登记金山归属 wps =====
+    var _prevNames = (catalog && Array.isArray(catalog.products)) ? catalog.products.map(function (p) { return p.name; }) : [];
+    var _addedNames = names.filter(function (n) { return _prevNames.indexOf(n) === -1; });
+    var _removedNames = _prevNames.filter(function (n) { return names.indexOf(n) === -1; });
+    _addedNames.forEach(function (nm) {
+      var w = guessWps(nm);
+      if (w) {
+        for (var pi = 0; pi < cat.products.length; pi++) {
+          if (cat.products[pi].name === nm) { cat.products[pi].wps = w; break; }
+        }
+      }
+    });
     catalog = cat;
     applyToConfig(cat);
     try { localStorage.setItem(Config.Sys.key("catalog_v1"), JSON.stringify(cat)); } catch (e) {}
-    if (!hasToken()) { if (cb) cb(true, "本机模式：目录已保存到本机"); return; }
+    function _fireWpsCol() {
+      try {
+        if (_addedNames.length || _removedNames.length) pushWpsColEvents(_addedNames, _removedNames);
+      } catch (e2) {}
+    }
+    if (!hasToken()) { _fireWpsCol(); if (cb) cb(true, "本机模式：目录已保存到本机"); return; }
     try {
       var content = Util.b64enc(JSON.stringify(cat));
       var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("catalog/catalog.json") + "?ref=" + Config.GH.branch;
@@ -147,6 +164,7 @@
         body: JSON.stringify(body)
       });
       if (!res.ok) { if (cb) cb(false, "云端保存失败：" + res.status); return; }
+      _fireWpsCol();
       if (cb) cb(true, "目录已保存到云端");
     } catch (e) { if (cb) cb(false, "云端保存异常：" + e.message); }
   }
@@ -257,6 +275,13 @@
   /** 新货品未配置金山台账映射时的提示（防呆：避免"系统有、金山没有"的静默分叉） */
   function wpsMapHint(name) {
     try {
+      // 目录中已登记金山归属（wps 字段，含快速新增/管理页保存时自动补录）→ 视为已同步
+      var cur = catalog && Array.isArray(catalog.products) ? catalog.products : null;
+      if (cur) {
+        for (var i = 0; i < cur.length; i++) {
+          if (cur[i].name === name && cur[i].wps && typeof cur[i].wps.sheet === "string") return "";
+        }
+      }
       var wm = window.APP_PRODUCT_MAP && window.APP_PRODUCT_MAP.wpsMap;
       if (wm && typeof wm[name] !== "undefined") return "";
     } catch (e) {}
@@ -304,12 +329,12 @@
   /* ---------- 推送货品目录事件到 data/catalog/notifications/{ts}.json ----------
      仅在云端写一条事件文件，由 GitHub Actions dingtalk_notify.py 识别并推送钉钉。
      与 save 走相同 Contents API 流程；无 token 时直接跳过（不影响主流程）。 */
-  function pushCatalogEvent(event) {
+  function pushCatalogEvent(event, subdir) {
     return new Promise(function (resolve) {
       if (!hasToken()) { resolve(false); return; }
       try {
         var ts = event.time || Date.now();
-        var path = Config.Sys.dir("catalog/notifications") + "/" + ts + ".json";
+        var path = Config.Sys.dir(subdir || "catalog/notifications") + "/" + ts + ".json";
         var content = Util.b64enc(JSON.stringify(event));
         var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
         var shaP = fetch(getUrl, { headers: { "Accept": "application/vnd.github+json",
@@ -328,6 +353,117 @@
     });
   }
 
+  /* ================= 2026-09-05 金山列联动（产品增删 → 金山台账加/删列） =================
+     产品在金山台账的归属：
+       ① 优先 product-map.js 的 wpsMap（老货品列名保持旧规则，如 20支盒/洁面150ml）；
+       ② 未命中则按系列词自动归属：洁面/精粹 → 2026鹿茸水乳系列；精华液/面膜/礼盒 → 2026时空鹿茸库存；
+          列名 = 名称去空格（如 精华液 40支装 → 精华液40支装）。表头统一「发放<列名>/库存<列名>」。
+       ③ 袋类等（牛皮纸袋/手提袋/帆布袋/透明袋…）→ null，不进金山台账。
+     save() 保存目录时自动把新增货品的归属写入 catalog 的 wps 字段（前后端共用该字段）。
+     增删 diff 会向 data(-saidis)/catalog/wps-events/{ts}.json 写事件，
+     GitHub Actions wps_sync 把事件转发给金山 AirScript 真正执行加列/删列（幂等）。 */
+  function guessWps(name) {
+    try {
+      var wm = window.APP_PRODUCT_MAP && window.APP_PRODUCT_MAP.wpsMap;
+      var nmap = window.APP_PRODUCT_MAP && window.APP_PRODUCT_MAP.nameMap;
+      var nm = (nmap && nmap[name]) || name;
+      if (wm) {
+        var hit = wm[nm] !== undefined ? wm[nm] : wm[name];
+        if (hit !== undefined && hit !== null && hit.length >= 2) return { sheet: hit[0], col: hit[1] };
+        if (hit === null) return null; // 明确不进台账（如手提袋）
+      }
+      var plain = nm.replace(/\s+/g, "");
+      if (!plain) return null;
+      if (/洁面|精粹/.test(nm)) return { sheet: "2026鹿茸水乳系列", col: plain };
+      if (/精华液|面膜|礼盒/.test(nm)) return { sheet: "2026时空鹿茸库存", col: plain };
+      if (/袋/.test(nm)) return null; // 牛皮纸袋/手提袋/帆布袋/透明袋等包装物不进台账
+    } catch (e) {}
+    return null;
+  }
+
+  /** 曾删除过金山列的产品名（localStorage 按系统记忆）：重加同名货品时需重新加列 */
+  function _delMem() {
+    try {
+      var v = JSON.parse(localStorage.getItem(Config.Sys.key("wps_del_mem")) || "[]");
+      return Array.isArray(v) ? v : [];
+    } catch (e) { return []; }
+  }
+  function _rememberDel(name) {
+    try {
+      var m = _delMem();
+      if (m.indexOf(name) === -1) { m.push(name); localStorage.setItem(Config.Sys.key("wps_del_mem"), JSON.stringify(m)); }
+    } catch (e) {}
+  }
+  function _clearDelMem(name) {
+    try {
+      var m = _delMem().filter(function (x) { return x !== name; });
+      localStorage.setItem(Config.Sys.key("wps_del_mem"), JSON.stringify(m));
+    } catch (e) {}
+  }
+  function _wmHasCol(name) {
+    try {
+      var wm = window.APP_PRODUCT_MAP && window.APP_PRODUCT_MAP.wpsMap;
+      var nmap = window.APP_PRODUCT_MAP && window.APP_PRODUCT_MAP.nameMap;
+      var nm = (nmap && nmap[name]) || name;
+      var hit = wm ? (wm[nm] !== undefined ? wm[nm] : wm[name]) : undefined;
+      return !!(hit && hit.length >= 2);
+    } catch (e) { return false; }
+  }
+
+  /** 把「需要加/删金山列」的产品写成 wps-events 事件文件（Actions 侧消费）。
+      去噪：目录首次全量保存时老货品（wpsMap 已映射）不发加列（列本来就在）；
+      重加曾删货品（本地记忆命中）必须发加列。 */
+  function pushWpsColEvents(added, removed) {
+    // 改名配对：同子表同列的新旧名（如"舒缓精粹水 120ml"→"精粹水 120ml"）只是换个名字，
+    // 金山列原样保留 → 不删旧列、不加新列（避免误伤台账历史数据）。
+    var adds = (added || []).slice();
+    var dels = (removed || []).slice();
+    for (var di = dels.length - 1; di >= 0; di--) {
+      var dw = guessWps(dels[di]);
+      if (!dw) { dels.splice(di, 1); continue; }
+      for (var ai = adds.length - 1; ai >= 0; ai--) {
+        var aw = guessWps(adds[ai]);
+        if (aw && aw.sheet === dw.sheet && aw.col === dw.col) { dels.splice(di, 1); adds.splice(ai, 1); break; }
+      }
+    }
+    var evs = [];
+    adds.forEach(function (nm) {
+      var w = guessWps(nm);
+      if (!w) return;
+      var needAdd = !_wmHasCol(nm) || _delMem().indexOf(nm) !== -1;
+      if (needAdd) evs.push({ type: "wps-col-add", name: nm, sheet: w.sheet, col: w.col });
+    });
+    dels.forEach(function (nm) {
+      var w = guessWps(nm);
+      if (!w) return;
+      evs.push({ type: "wps-col-del", name: nm, sheet: w.sheet, col: w.col });
+      _rememberDel(nm);
+    });
+    evs.forEach(function (ev, _ei) {
+      ev.time = Date.now() + _ei;   // 同批事件错开毫秒，避免事件文件互相覆盖
+      pushCatalogEvent(ev, "catalog/wps-events").then(function (ok2) {
+        if (ok2 && ev.type === "wps-col-add") _clearDelMem(ev.name);
+      })["catch"](function () {});
+    });
+  }
+
+  /** 库存页行内删除货品（深圳/赛迪斯共用）：移除目录条目 + 清库存键，
+      增删事件由 save() 内部统一派发（钉钉 product-deleted + 金山 wps-col-del） */
+  function removeProduct(name, cb) {
+    if (!name) { if (cb) cb(false, "货品名称不能为空"); return; }
+    var work = JSON.parse(JSON.stringify(catalog || defaultCatalog()));
+    var idx = -1;
+    for (var i = 0; i < work.products.length; i++) {
+      if (work.products[i].name === name) { idx = i; break; }
+    }
+    if (idx === -1) { if (cb) cb(false, "货品不存在：" + name); return; }
+    work.products.splice(idx, 1);
+    // 保存后目录/库存全站生效；diff 事件（钉钉 + 金山删列）在 save() 内部触发
+    save(work, function (ok, msg) {
+      if (cb) cb(ok, ok ? ("已删除货品「" + name + "」" + (msg ? "" : "")) : msg);
+    });
+  }
+
   window.App = window.App || {};
   window.App.Catalog = {
     load: load,
@@ -340,6 +476,9 @@
     save: save,
     openManager: openManager,
     quickAdd: quickAdd,
+    removeProduct: removeProduct,
+    guessWps: guessWps,
+    pushWpsColEvents: pushWpsColEvents,
     pushCatalogEvent: pushCatalogEvent,
     get: function () { return catalog; },
     isLoaded: function () { return loaded; }

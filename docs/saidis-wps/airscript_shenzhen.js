@@ -1,9 +1,5 @@
 /**
- * airscript_saidis.js — 赛迪斯版（部署到「赛迪斯：小鹿产品登记.ksheet」，与深圳逻辑逐字一致）
- * 深圳源文件：lurong-sync/airscript_append.js（8-08 版），本文件为同源副本，勿在此单独改逻辑，
- * 要改先改深圳源再同步。webhook 指向 cvuTJ0W1GSxl / V2-7Mj0bkvxlRW0lk3LE2edZJ/sync_task。
- *
- * 原名 airscript_append.js — 金山文档共享脚本（AirScript 2.0）
+ * airscript_append.js — 金山文档共享脚本（AirScript 2.0）
  *
  * 两种触发模式：
  *   [1] 日常提交（无 mode）：GitHub Action 调 webhook，单笔追加一行
@@ -675,6 +671,27 @@ function main() {
       return dor;
     }
 
+    // ---- 整段清理分支（整理尾部垃圾，需 confirm:true）----
+    if (a.mode === "clear_below") {
+      var cb = clearBelow(a);
+      console.log("===== 整段清理: " + JSON.stringify({ dryRun: cb.dryRun, deleted: cb.deleted }));
+      return cb;
+    }
+
+    // ---- 批量导入分支 ----
+    if (a.mode === "import_rows") {
+      var imp = doImport(a);
+      console.log("===== 导入成功: " + JSON.stringify(imp));
+      return imp;
+    }
+
+    // ---- 整列上色分支（首行颜色填整列 + 入库行标黄）----
+    if (a.mode === "style_columns") {
+      var st = styleColumns(a);
+      console.log("===== 整列上色成功: " + JSON.stringify(st));
+      return st;
+    }
+
     // ---- 产品列新增（目录加货品 → 金山加 [发放,库存] 两列，幂等）----
     if (a.mode === "add_product_col") {
       var apc = addProductCol(a);
@@ -709,6 +726,94 @@ function main() {
       var st = styleColumns(a);
       console.log("===== 整列上色成功: " + JSON.stringify(st));
       return st;
+    }
+
+    // ---- 多商品合并追加（一个订单 → 同一子表一行，多个商品填该行不同列）----
+    // 入参：sheet_name, type(in/out), date, picker, sender, purpose, dept,
+    //       items:[{product, qty}, ...]
+    // 行为：在子表真实末数据行之后追加「一行」，把 items 里每个商品写到它自己的
+    //       [发放列,库存列]；库存按各自列上一行独立计算；入库则整行标黄。
+    if (a.mode === "append_order") {
+      var sheetName2 = a.sheet_name;
+      var type2 = (a.type === "in") ? "in" : "out";
+      var date2 = a.date || "";
+      var picker2 = a.picker || "";
+      var sender2 = a.sender || "陈利冠";
+      var purpose2 = a.purpose || "";
+      var dept2 = a.dept || "";
+      var items2 = a.items || [];
+      var rid2 = a.rid || "";          // 记录ID：写进锚点列，供将来删除时精确定位
+
+      if (!sheetName2) throw new Error("缺少 sheet_name");
+      if (!items2.length) throw new Error("缺少 items");
+
+      var sh2 = Application.Sheets(sheetName2);
+      if (!sh2) throw new Error("找不到子表: " + sheetName2);
+
+      ensureHeaders(sh2, sheetName2);
+      var headerMap2 = buildHeaderMap(sh2);
+      var pairs2 = scanProductPairs(sh2);
+
+      var purposeCol2 = headerMap2["用途"];
+      var deptCol2 = headerMap2["部门"];
+      var idCol2 = rid2 ? ensureIdCol(sh2) : 0;
+
+      // 真实最后数据行（从 UsedRange 末行往上扫 A列/ B列非空，避免被整列底色撑大）
+      var lastRow2 = findLastDataRow(sh2);
+
+      // 先算每个商品的上一行库存（务必在写入新行之前扫描，避免同订单内互相污染）
+      var rowItems2 = [];
+      for (var i2 = 0; i2 < items2.length; i2++) {
+        var nm2 = items2[i2].product;
+        var q2 = toNum(items2[i2].qty);
+        if (!nm2 || q2 <= 0) continue;
+        var pr2 = pairs2[nm2];
+        if (!pr2) throw new Error("找不到商品列: " + nm2 + "，当前商品: " + Object.keys(pairs2).join(","));
+        var issueCol2 = pr2[0], stockCol2 = pr2[1];
+        var prevStock2 = 0;
+        for (var rr2 = lastRow2; rr2 >= 1; rr2--) {
+          var sv2 = getCellValue(sh2, stockCol2, rr2);
+          if (sv2 !== null && sv2 !== undefined && sv2 !== "") { prevStock2 = toNum(sv2); break; }
+        }
+        var newStock2 = (type2 === "in") ? (prevStock2 + q2) : (prevStock2 - q2);
+        rowItems2.push({ product: nm2, qty: q2, issueCol: issueCol2, stockCol: stockCol2,
+                         prevStock: prevStock2, newStock: newStock2 });
+      }
+      if (!rowItems2.length) throw new Error("没有有效的商品可写入");
+
+      var row2 = lastRow2 + 1;
+      setCellValue(sh2, 1, row2, date2);
+      setCellValue(sh2, 2, row2, (type2 === "in") ? "入库" : picker2);
+      setCellValue(sh2, 3, row2, sender2);
+      if (purposeCol2) setCellValue(sh2, purposeCol2, row2, purpose2);
+      if (deptCol2)    setCellValue(sh2, deptCol2, row2, dept2);
+      if (idCol2)      setCellValue(sh2, idCol2, row2, rid2);
+      for (var k2 = 0; k2 < rowItems2.length; k2++) {
+        var it2 = rowItems2[k2];
+        setCellValue(sh2, it2.issueCol, row2, (type2 === "in") ? ("➕" + it2.qty) : it2.qty);
+        setCellValue(sh2, it2.stockCol, row2, it2.newStock);
+      }
+      if (type2 === "in") {
+        try {
+          var maxCol2 = 0;
+          for (var mc2 = 1; mc2 <= 100; mc2++) {
+            var hv2 = getCellValue(sh2, mc2, 1);
+            if (hv2 !== null && hv2 !== undefined && hv2 !== "") maxCol2 = mc2;
+          }
+          // 标黄只覆盖正表范围，不把右侧的[记录ID]锚点列一起涂了
+          if (idCol2 && maxCol2 >= idCol2) maxCol2 = idCol2 - 2;
+          if (maxCol2 < 1) maxCol2 = 1;
+          sh2.Range("A" + row2 + ":" + colLetter(maxCol2) + row2).Interior.Color = 65535;
+          console.log("已标黄入库行");
+        } catch (e) { console.log("标黄失败（不影响写入）: " + e.message); }
+      }
+
+      var result2 = { ok: true, row: row2, sheet: sheetName2, type: type2,
+                      items: rowItems2.map(function (x) {
+                        return { product: x.product, qty: x.qty, prevStock: x.prevStock, newStock: x.newStock };
+                      }) };
+      console.log("===== 多商品合并追加成功: " + JSON.stringify(result2));
+      return result2;
     }
 
     // ---- 多商品合并追加（一个订单 → 同一子表一行，多个商品填该行不同列）----

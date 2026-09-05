@@ -126,7 +126,10 @@
         '<td>' + s.inQty + '</td>' +
         '<td>' + s.outQty + '</td>' +
         '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
-        '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
+        '<td style="white-space:nowrap">' +
+        '<button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button> ' +
+        '<button type="button" class="btn ghost sm del-btn" data-name="' + Util.esc(s.name) + '" style="color:#c0392b">🗑 删除</button>' +
+        '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -179,11 +182,51 @@
         '<td>' + Util.esc(s.name) + '</td>' +
         '<td class="stock-num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
         '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
-        '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
+        '<td style="white-space:nowrap">' +
+        '<button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button> ' +
+        '<button type="button" class="btn ghost sm del-btn" data-name="' + Util.esc(s.name) + '" style="color:#c0392b">🗑 删除</button>' +
+        '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
     rankBox.innerHTML = html;
+  }
+
+  /* ================= 库存页行内删除货品（2026-09-05） =================
+     删除 = 目录移除 + 库存归 0 + 钉钉通知 + 金山台账删列（若有列）。
+     历史出入库记录仍保留在系统内可查；金山整列删除不可恢复，弹窗强提醒。 */
+  function askDelProduct(name) {
+    if (!name) return;
+    var g = (window.App.Catalog && window.App.Catalog.get) ? window.App.Catalog.get() : null;
+    var p = null;
+    if (g && Array.isArray(g.products)) {
+      for (var i = 0; i < g.products.length; i++) {
+        if (g.products[i].name === name) { p = g.products[i]; break; }
+      }
+    }
+    var wps = null;
+    try {
+      if (p && p.wps && typeof p.wps.sheet === "string") wps = p.wps;
+      else if (window.App.Catalog && window.App.Catalog.guessWps) wps = window.App.Catalog.guessWps(name);
+    } catch (e) {}
+    var extra = wps
+      ? "\n\n⚠️ 该货品在金山台账子表【" + wps.sheet + "】登记着「" + wps.col + "」一列。删除后，金山文档上对应那一列（含该货品全部历史发放/库存记录）也会一并被删掉，且不可恢复！"
+      : "";
+    var msg = "确定删除货品「" + name + "」？\n\n删除后：\n· 系统库存目录移除、库存归 0，全站（出入库登记/库存/报表）不再可选该货品；\n· 钉钉群会收到删除通知；\n· 系统内已产生的出入库历史记录仍保留可查（不影响对账）。" + extra;
+    if (!window.App.UI || !window.App.UI.confirmDialog) return;
+    window.App.UI.confirmDialog(msg, "🗑 删除货品").then(function (ok) {
+      if (!ok) return;
+      if (!window.App.Catalog || !window.App.Catalog.removeProduct) { Util.toast("删除能力未就绪，请刷新页面", true); return; }
+      window.App.Catalog.removeProduct(name, function (ok2, msg2) {
+        Util.toast(msg2 || (ok2 ? "已删除" : "删除失败"), !ok2);
+        if (ok2) {
+          try { window.App.Stock && window.App.Stock.markDirty(); } catch (e2) {}
+          refresh();
+          try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e3) {}
+          try { if (window.App.Views.report && window.App.Views.report.refresh) window.App.Views.report.refresh(); } catch (e4) {}
+        }
+      });
+    })["catch"](function () {});
   }
 
   /* ================= B3 库存流水追溯 ================= */
@@ -192,6 +235,12 @@
     container.setAttribute("data-his", "1");
     // ① 点「📊 流水」按钮 → 弹窗（手机/电脑通用，主入口）
     container.addEventListener("click", function (e) {
+      var dbtn = e.target.closest(".del-btn");
+      if (dbtn && dbtn.getAttribute("data-name")) {
+        e.stopPropagation();
+        askDelProduct(dbtn.getAttribute("data-name"));
+        return;
+      }
       var btn = e.target.closest(".flow-btn");
       if (btn && btn.getAttribute("data-name")) {
         e.stopPropagation();

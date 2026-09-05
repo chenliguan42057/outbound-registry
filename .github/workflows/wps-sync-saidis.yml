@@ -7,6 +7,7 @@ on:
     paths:
       - 'data-saidis/records/*.json'
       - 'data-saidis/deleted/*.json'
+      - 'data-saidis/catalog/wps-events/*.json'
   # 兜底扫描：每小时补同步「因并发被取消/网络失败」而漏掉的记录（已同步的靠标记跳过，不会重复写）
   schedule:
     - cron: '20 * * * *'
@@ -40,12 +41,12 @@ jobs:
           # 同时盯两个目录：records=新增行，deleted=删除行
           if [ "${{ github.event_name }}" = "push" ]; then
             # 用 event.before..sha 全范围 diff（合并 push 会吞前序 commit 变更，导致漏同步）
-            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data-saidis/records/*.json' 'data-saidis/deleted/*.json' || true)
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- 'data-saidis/records/*.json' 'data-saidis/deleted/*.json' 'data-saidis/catalog/wps-events/*.json' || true)
           elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.backfill }}" = "true" ]; then
             # 全量扫描：列出所有记录/墓碑文件标记为新增；已处理的会被 .wps_synced_saidis.json 跳过，不会重复写/重复删
-            FILES=$(git ls-tree -r --name-only HEAD -- 'data-saidis/records/*.json' 'data-saidis/deleted/*.json' | sed 's/^/A\t/' || true)
+            FILES=$(git ls-tree -r --name-only HEAD -- 'data-saidis/records/*.json' 'data-saidis/deleted/*.json' 'data-saidis/catalog/wps-events/*.json' | sed 's/^/A\t/' || true)
           else
-            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data-saidis/records/*.json' 'data-saidis/deleted/*.json' || true)
+            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- 'data-saidis/records/*.json' 'data-saidis/deleted/*.json' 'data-saidis/catalog/wps-events/*.json' || true)
           fi
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
