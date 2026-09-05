@@ -381,6 +381,9 @@
       var rows = "";
       rows += '<div class="detail-row"><span class="k">类型</span><span class="v">' + (isRecIn ? '<span class="in-tag">入库</span>' : "出库") + '</span></div>';
       rows += '<div class="detail-row"><span class="k">时间</span><span class="v">' + Util.esc(r.time || "-") + '</span></div>';
+      if (r.transferNo) {
+        rows += '<div class="detail-row"><span class="k">调拨单号</span><span class="v">' + Util.esc(r.transferNo) + '</span></div>';
+      }
       if (!isRecIn) {
         rows += '<div class="detail-row"><span class="k">状态</span><span class="v">' + statusBadge(r) + '</span></div>';
         rows += '<div class="detail-row"><span class="k">领取人</span><span class="v">' + Util.esc(r.picker || "-") + '</span></div>';

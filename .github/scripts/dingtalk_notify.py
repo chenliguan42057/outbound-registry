@@ -168,6 +168,11 @@ def _layout_record(title, fields, data, status_label=None, tail_fields=None):
     status_label: 标题里附加的状态角标（"未提单"/"已提单" 等），可空。
     tail_fields: [(k, v), ...] 拼在货品明细与备注之后，用于把时间/状态放到明细下方、状态压在最后。
     """
+    # 调拨单号（两仓调拨业务单号 transferNo，2026-09-05 增量）：置字段区最前，调拨通知单号最醒目；
+    # 普通记录无该字段，自然跳过不影响。
+    transfer_no = str((data or {}).get("transferNo") or "").strip()
+    if transfer_no:
+        fields = [("调拨单号", transfer_no)] + list(fields)
     photos = photos_markdown(data)
     md = title
     if status_label:

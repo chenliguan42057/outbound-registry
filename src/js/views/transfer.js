@@ -53,6 +53,8 @@
         '</div>' +
         '<div class="field" style="margin-bottom:6px"><label>调拨货品<span class="req">*</span></label>' +
           '<div id="tfPicker"></div></div>' +
+        '<div class="field"><label for="tfNo">调拨单号<span class="req">*</span></label>' +
+          '<input type="text" id="tfNo" maxlength="50" placeholder="例：DB-20260905-001（纸质调拨单/物流单号，两端记录与钉钉通知都会带）" autocomplete="off" /></div>' +
         '<div class="field"><label for="tfNote">备注（选填）</label>' +
           '<input type="text" id="tfNote" maxlength="80" placeholder="例：主仓缺货应急调配、客户加急调货等" autocomplete="off" /></div>' +
         '<div class="actions" style="margin-top:8px">' +
@@ -67,6 +69,8 @@
 
     Util.$("tfReset").addEventListener("click", function () {
       picker.setSelected([]);
+      var noEl = Util.$("tfNo");
+      if (noEl) noEl.value = "";
       var note = Util.$("tfNote");
       if (note) note.value = "";
       var box = Util.$("tfResult");
@@ -108,6 +112,9 @@
     });
     if (shortage.length) { Util.toast("库存不足：" + shortage.join("；"), true); lock.unlock(); return; }
 
+    var transferNo = (Util.$("tfNo").value || "").trim();
+    if (!transferNo) { Util.toast("请填写调拨单号（必填）", true); lock.unlock(); return; }
+
     var srcName = Config.Sys.name();
     var dst = other();
     var dstName = dst.name;
@@ -124,12 +131,13 @@
       '<div style="margin-top:12px;line-height:2">' +
         '<div><b>' + Util.esc(srcName) + '</b>：出库 −' + items.reduce(function (s, it) { return s + it.qty; }, 0) + '（扣库存，推钉钉「出库」通知，进金山台账）</div>' +
         '<div><b>' + Util.esc(dstName) + '</b>：入库 +（增库存，推对方钉钉「入库」通知，进对方金山台账）</div>' +
+        '<div>调拨单号：<b>' + Util.esc(transferNo) + '</b></div>' +
         '<div class="hint" style="margin:6px 0 0">备注：' + Util.esc(note) + '</div>' +
       '</div>';
 
     UI.confirmDialog(body, "⇄ 确认调拨").then(function (ok) {
       if (!ok) { lock.unlock(); return; }
-      runTransfer(items, srcName, dst, dstName, note, lock);
+      runTransfer(items, srcName, dst, dstName, note, transferNo, lock);
     })["catch"](function () { lock.unlock(); });
   }
 
@@ -210,7 +218,7 @@
   /** 执行：①若对方仓缺本批货品，先在对方目录补产品 + 写 wps-col-add 事件；
       ②写对方仓入库记录（云端直写，幂等），成功后再建本仓出库记录（本地立即可见 + 云端推送）。
       顺序保证「对方目录/列没准备好，本仓绝不出库」，避免单向扣账 / 列错位。 */
-  async function runTransfer(items, srcName, dst, dstName, note, lock) {
+  async function runTransfer(items, srcName, dst, dstName, note, transferNo, lock) {
     var btn = Util.$("tfSubmit");
     try {
       if (!Cloud.hasToken()) {
@@ -241,7 +249,8 @@
         note: note,
         affectsStock: true,
         transferId: transferId,
-        transferRole: "in"
+        transferRole: "in",
+        transferNo: transferNo
       };
       var dstOk = await Cloud.pushRecordTo(inRec, dst.dataDir);
       if (!dstOk) {
@@ -260,7 +269,8 @@
         note: note,
         affectsStock: true,
         transferId: transferId,
-        transferRole: "out"
+        transferRole: "out",
+        transferNo: transferNo
       });
       var pushed = await Cloud.pushRecord(outRec).catch(function () { return false; });
       // 本仓「已上云」状态栏提示（与出库/入库页一致）
@@ -279,7 +289,7 @@
           : '';
         box.innerHTML =
           '<div style="padding:12px 16px;border:1px solid #C8E6C9;border-radius:12px;background:#F0FAF0;color:#1E6B2E;font-size:13.5px;line-height:1.9">' +
-          '<b>✅ 调拨成功</b>（单号 ' + Util.esc(transferId) + '）<br>' +
+          '<b>✅ 调拨成功</b>（调拨单号 ' + Util.esc(transferNo) + '）<br>' +
           '· ' + Util.esc(srcName) + '：出库 ' + items.reduce(function (s, it) { return s + it.qty; }, 0) + '（本页已生效，钉钉/金山稍后自动推送）<br>' +
           '· ' + Util.esc(dstName) + '：入库 +（对方仓库切过去即可看到；对方钉钉群会收到「入库」通知）' +
           addedMsg +
@@ -288,6 +298,8 @@
       }
       Util.toast("✅ 调拨成功：" + srcName + " 出库 → " + dstName + " 入库");
       picker.setSelected([]);
+      var noEl = Util.$("tfNo");
+      if (noEl) noEl.value = "";
       var noteEl = Util.$("tfNote");
       if (noteEl) noteEl.value = "";
       try { if (window.App.Stock) window.App.Stock.markDirty(); } catch (e) {}
