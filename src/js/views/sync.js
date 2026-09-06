@@ -68,8 +68,14 @@
           '<button type="button" class="btn" id="syncNow">' + UI.icon("sync", 16) + '<span>立即同步</span></button>' +
           '<button type="button" class="btn ghost" id="syncLogout">退出登录</button>' +
         '</div>' +
+        '<div class="actions" style="margin-top:6px">' +
+          '<button type="button" class="btn ghost sm" id="syncFullResync">🔄 全量重建同步</button>' +
+          '<button type="button" class="btn ghost sm" id="syncDiag">🔍 诊断同步</button>' +
+        '</div>' +
+        '<div id="syncDiagOut"></div>' +
         '<div class="hint">自动同步：手机/电脑只要打开页面就会定时从云端拉取，最迟约 ' + autoSec +
-          ' 秒；切回页面会立即同步，无需手动操作。</div>' +
+          ' 秒；切回页面会立即同步，无需手动操作。<br>' +
+          '遇到「对方仓新记录一直刷不出来 / 两端数据对不上」时：先点「🔍 诊断同步」看差异，再点「🔄 全量重建同步」强制重拉全部云端记录。</div>' +
         '<div class="sync-err" id="syncErr"></div>' +
       '</div>' +
       '<div class="card">' +
@@ -120,6 +126,10 @@
       '</div>';
     statusEl = Util.$("syncStateText");
     Util.$("syncNow").addEventListener("click", doSync);
+    var fullBtn = Util.$("syncFullResync");
+    if (fullBtn) fullBtn.addEventListener("click", doFullResync);
+    var diagBtn = Util.$("syncDiag");
+    if (diagBtn) diagBtn.addEventListener("click", doDiagSync);
     Util.$("syncRetryPhotos").addEventListener("click", retryAllPhotos);
     renderPhotoPending();
     renderSyncQueue();
@@ -263,6 +273,98 @@
         err.textContent = "同步失败：" + (res.error && res.error.message ? res.error.message : "未知错误");
       }
     });
+  }
+
+  /**
+   * 全量重建同步：清掉增量缓存 → 强制重拉全部云端记录/待取货/备忘录。
+   * 用于增量缓存异常（缓存投毒/漏拉）导致「对方仓新记录刷不出来」时的修复。
+   */
+  async function doFullResync() {
+    if (!Cloud.hasToken()) { Util.toast("未配置云端令牌，无法同步", true); return; }
+    var ok = await UI.confirmDialog(
+      "将清除本机「增量同步缓存」，随后重新拉取云端全部数据（记录/待取货/备忘录/盘点）。\n耗时比普通同步略长，本地数据不会丢失。继续？",
+      "全量重建同步");
+    if (!ok) return;
+    var btn = Util.$("syncFullResync");
+    if (btn) { btn.disabled = true; btn.textContent = "重建中…"; }
+    var err = Util.$("syncErr");
+    if (err) err.textContent = "";
+    Util.toast("正在全量重建同步…");
+    try {
+      var res = await Cloud.fullResync({ onStatus: function (text, isErr) {
+        if (window.App.Views.app && window.App.Views.app.setSyncStatus) window.App.Views.app.setSyncStatus(text, isErr);
+        if (statusEl) statusEl.textContent = text;
+      } });
+      refresh();
+      if (res.ok && window.App.Views.app && window.App.Views.app.scheduleNextSync) {
+        window.App.Views.app.scheduleNextSync();
+      }
+      updateCountdown();
+      if (res.ok) {
+        Util.toast("全量同步完成：本地 " + State.list.length + " 条记录");
+        var dout = Util.$("syncDiagOut");
+        if (dout) dout.innerHTML = "";
+      } else {
+        Util.toast("同步失败，请查看下方提示", true);
+        if (err) err.textContent = "同步失败：" + (res.error && res.error.message ? res.error.message : "未知错误");
+      }
+    } catch (e) {
+      Util.toast("全量同步异常：" + ((e && e.message) || "未知错误"), true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 全量重建同步"; }
+    }
+  }
+
+  /**
+   * 诊断同步：对比 云端文件数 / 本地记录数 / 增量缓存命中数 / 配额余量，
+   * 找出「云端有而本地缺」的记录；若缓存命中数异常偏高则提示先做全量重建。
+   */
+  async function doDiagSync() {
+    if (!Cloud.hasToken()) { Util.toast("未配置云端令牌，无法诊断", true); return; }
+    var outEl = Util.$("syncDiagOut");
+    if (!outEl) return;
+    Util.toast("正在诊断…");
+    outEl.innerHTML = '<div class="hint" style="padding:8px 12px">正在读取云端目录对比本地…</div>';
+    var d;
+    try { d = await Cloud.diagSyncStatus(); }
+    catch (e) {
+      outEl.innerHTML = '<div class="sync-err">诊断失败：' + Util.esc((e && e.message) || String(e)) + '</div>';
+      return;
+    }
+    if (!d || !d.ok) {
+      outEl.innerHTML = '<div class="sync-err">诊断失败：' + Util.esc((d && d.error) || "未知错误") + '</div>';
+      return;
+    }
+    var rateTxt = "";
+    if (d.rate && d.rate.remaining !== undefined) {
+      rateTxt = '<div class="sync-row"><span class="sync-k">API 额度余量</span><span class="sync-v" style="' +
+        (d.rate.remaining < 200 ? "color:var(--err,#C9877F)" : "") + '">' + d.rate.remaining + " / " + (d.rate.limit || "?") +
+        (d.rate.remaining < 200 ? "（偏低，可能影响同步）" : "") + '</span></div>';
+    }
+    var rows =
+      '<div style="border:1px solid var(--line-soft,#DCE6E0);border-radius:12px;padding:8px 12px;margin:10px 0 6px;background:var(--card-soft,#F7FAF7)">' +
+        '<div class="sync-row"><span class="sync-k">当前仓库</span><span class="sync-v"><b>' + Util.esc(d.sys) + '</b></span></div>' +
+        '<div class="sync-row"><span class="sync-k">云端记录</span><span class="sync-v">' + d.cloudCount + ' 条</span></div>' +
+        '<div class="sync-row"><span class="sync-k">本地记录</span><span class="sync-v">' + d.localCount + ' 条</span></div>' +
+        '<div class="sync-row"><span class="sync-k">缓存命中</span><span class="sync-v">' + d.cachedCount + ' 条（增量跳过）</span></div>' +
+        rateTxt +
+      '</div>';
+    var verdict = "";
+    if (d.localCount < d.cloudCount && d.missing.length === 0) {
+      verdict = '<div class="hint" style="padding:8px 12px;border:1px dashed #E0A800;border-radius:10px;background:#FFF9E6;color:#8a6d3b;margin-top:6px">' +
+        '⚠️ 本地记录（' + d.localCount + '）少于云端（' + d.cloudCount + '），但缓存认为都已同步——疑似「增量缓存异常」把新记录跳过了。' +
+        '请点上方「🔄 全量重建同步」强制重拉。</div>';
+    } else if (d.missing.length > 0) {
+      verdict = '<div class="hint" style="padding:8px 12px;border:1px dashed #C8E6C9;border-radius:10px;background:#F0FAF0;color:#1E6B2E;margin-top:6px">' +
+        '云端有 ' + d.missing.length + ' 条本地还没有，点「🔄 全量重建同步」拉取即可补齐。' +
+        (d.missing.length <= 8
+          ? '<br>缺失：' + d.missing.map(function (n) { return Util.esc(String(n).slice(0, 10)); }).join("、")
+          : '') + '</div>';
+    } else {
+      verdict = '<div class="hint" style="padding:8px 12px;border:1px solid #C8E6C9;border-radius:10px;background:#F0FAF0;color:#1E6B2E;margin-top:6px">' +
+        '✅ 云端与本地记录数一致，同步状态正常。</div>';
+    }
+    outEl.innerHTML = rows + verdict;
   }
 
   /* ================= C1 一键备份/恢复 ================= */

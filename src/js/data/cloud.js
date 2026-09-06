@@ -196,7 +196,13 @@
 
     var recs = [];
     var parseFail = 0;
+    // failPaths = 本次「没成功取到内容」的文件（网络/超时/解析失败）。
+    // 这些文件一律不写入增量缓存 —— 否则 sha 一旦入缓存，下次对比命中就会永久跳过，
+    // 新记录遇到一次弱网超时后就再也拉不到（2026-09-06 修复：缓存投毒导致跨仓调拨入库对方永远看不到）。
     var failPaths = [];
+    function pushFail(p) {
+      if (failPaths.indexOf(p) === -1) failPaths.push(p);
+    }
     // 无 tree（首次/失败）→ 全量拉取该目录（回退现有逻辑）
     if (!gotTree) {
       var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + dir + "?ref=" + Config.GH.branch;
@@ -209,35 +215,35 @@
           try {
             var j = await apiJson(files[i].url);
             var pr = tryParseRecord(j.content, dir + "/" + files[i].name);
-            if (pr.ok) recs.push(pr.rec); else { parseFail++; failPaths.push(dir + "/" + files[i].name); }
-          } catch (e) { /* 网络失败，sha 已入缓存，下次重试 */ }
+            if (pr.ok) recs.push(pr.rec); else { parseFail++; pushFail(dir + "/" + files[i].name); }
+          } catch (e) { pushFail(dir + "/" + files[i].name); }   // 网络失败也不入缓存，下次重试
         }
       }
       // 全量后更新缓存（把本目录拿到的文件 sha 写入分片，下次就能增量）
       var fbTree = Object.assign({}, cacheTree);
       fbTree[dir] = {};
       (arr || []).forEach(function (f) { if (String(f.name).endsWith(".json")) fbTree[dir][dir + "/" + f.name] = f.sha; });
-      failPaths.forEach(function (p) { delete fbTree[dir][p]; });   // 解析失败的剔除，允许重试
+      failPaths.forEach(function (p) { delete fbTree[dir][p]; });   // 拉取/解析失败的剔除，允许下次重试
       saveTreeCache({ tree: fbTree, ts: Date.now() });
       if (parseFail) { try { window.App.Util.toast(parseFail + " 条记录解析失败已跳过（可稍后重新同步重试）", true); } catch (e) {} }
-      return { recs: recs, fallback: true };
+      return { recs: recs, fallback: true, failCount: failPaths.length };
     }
 
-    // 增量：只拉变更文件
+    // 增量：只拉变更文件；失败文件剔除出缓存，下次同步重新视为变更再拉
     for (var i = 0; i < changed.length; i++) {
       try {
         var jc = await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + changed[i] + "?ref=" + Config.GH.branch);
         var pr2 = tryParseRecord(jc.content, changed[i]);
-        if (pr2.ok) recs.push(pr2.rec); else { parseFail++; failPaths.push(changed[i]); }
-      } catch (e) { /* 网络失败跳过（sha 不变，下次重试） */ }
+        if (pr2.ok) recs.push(pr2.rec); else { parseFail++; pushFail(changed[i]); }
+      } catch (e) { pushFail(changed[i]); }
     }
     // 更新缓存：仅按目录分片存储本目录的 sha，避免不同目录互相污染（修复同步回归的根因）
     var newTree = Object.assign({}, cacheTree);
     newTree[dir] = Object.assign({}, prev, cloudFiles);
-    failPaths.forEach(function (p) { delete newTree[dir][p]; });   // 解析失败的剔除，允许重试
+    failPaths.forEach(function (p) { delete newTree[dir][p]; });   // 失败文件不缓存 sha → 下次仍会重试
     saveTreeCache({ tree: newTree, ts: Date.now() });
     if (parseFail) { try { window.App.Util.toast(parseFail + " 条记录解析失败已跳过（可稍后重新同步重试）", true); } catch (e) {} }
-    return { recs: recs, fallback: false, changedCount: changed.length };
+    return { recs: recs, fallback: false, changedCount: changed.length, failCount: failPaths.length };
   }
 
   /** 拉取云端全部记录（目录 404 视为空）——保留原函数供降级/兼容调用 */
@@ -256,6 +262,45 @@
       } catch (e) { /* 单条失败跳过，不影响其余 */ }
     }
     return recs;
+  }
+
+  /** 全量重建同步（2026-09-06）：
+      当增量同步异常（缓存命中失败 / 网络超时 / 后台标签被冻结）导致部分新文件没拉到时，
+      清掉 outbound_tree_cache 后调用 syncPull，下一轮 pullDir 会把所有 cloudFiles 视为
+      changed → 全量拉取所有记录 / 待取货 / 备忘 / 墓碑 / 盘点。耗时但可靠。
+      与 syncPull 的区别：syncPull 只增量，本函数先清缓存。
+      返回 syncPull 的结果对象。 */
+  async function fullResync(opts) {
+    try { localStorage.removeItem(TREE_CACHE_KEY); } catch (e) {}
+    return await syncPull(opts || {});
+  }
+
+  /** 诊断：返回当前系统的同步状态摘要（云端文件数 vs 本地记录数 vs 缓存命中数）。
+      用在 sync 页"诊断"按钮，给用户/调试用，看增量同步为什么漏拉。 */
+  async function diagSyncStatus() {
+    var out = { ok: true, sys: Config.Sys.name(), dir: Config.Sys.dir("records"), localCount: (window.App.State && window.App.State.list || []).length, cloudCount: 0, cachedCount: 0, missing: [] };
+    try {
+      var tree = await fetchTree();
+      var prefix = Config.Sys.dir("records") + "/";
+      var cloudPaths = Object.keys(tree).filter(function (p) {
+        return p.indexOf(prefix) === 0 && p.slice(-5) === ".json";
+      });
+      out.cloudCount = cloudPaths.length;
+      var cache = loadTreeCache() || {};
+      var prev = (cache.tree || {})[Config.Sys.dir("records")] || {};
+      var localIds = {};
+      (window.App.State.list || []).forEach(function (r) { if (r && r.id) localIds[r.id] = 1; });
+      cloudPaths.forEach(function (p) {
+        if (prev[p] && prev[p] === tree[p]) out.cachedCount++;
+        else {
+          var name = p.split("/").pop().replace(/\.json$/, "");
+          if (!localIds[name]) out.missing.push(p.split("/").pop());
+        }
+      });
+      var rate = getRate();
+      if (rate && rate.remaining !== null) out.rate = { remaining: rate.remaining, limit: rate.limit };
+    } catch (e) { out.ok = false; out.error = (e && e.message) || String(e); }
+    return out;
   }
 
   /** 推送前剥离 photos base64（只留 photoUrls CDN 链接）：
@@ -1197,6 +1242,8 @@
     pushRemind: pushRemind,
     pushNotifyFile: pushNotifyFile,
     rollbackTransfer: rollbackTransfer,
+    fullResync: fullResync,
+    diagSyncStatus: diagSyncStatus,
     fetchWpsMarker: fetchWpsMarker,
     readWpsState: readWpsState,
     waitWpsReceipt: waitWpsReceipt,
