@@ -168,6 +168,21 @@
     }
   }
 
+  /* ================= 视图切换淡入（流畅顺捷 D7） ================= */
+  // 等一帧，确保 Router 的 hashchange 监听（早于本文件注册）已完成 render，
+  // 再给当前可见视图容器重放淡入动画（移除→强制回流→加回 class，动画才能重播）。
+  function fadeView() {
+    requestAnimationFrame(function () {
+      var app = document.getElementById("view-app");
+      var land = document.getElementById("view-landing");
+      var host = (app && app.style.display !== "none") ? app.querySelector(".win-content") : land;
+      if (!host) return;
+      host.classList.remove("ux-view-in");
+      void host.offsetWidth;
+      host.classList.add("ux-view-in");
+    });
+  }
+
   /* ================= 初始化 ================= */
   load();
   apply();
@@ -200,11 +215,13 @@
     startProgress();
     setTimeout(doneProgress, 650);
     injectButtons();          // 落地页 ⇄ 管理页切换会重建顶栏，需要重新补挂
+    fadeView();               // 视图切换淡入（流畅顺捷）
   });
   window.addEventListener("load", function () {
     startProgress();
     setTimeout(doneProgress, 700);
     boot();
+    fadeView();
   });
 
   // DOM 变动观察：① 成功页出现时响一声 ② 顶栏出现时补挂设置按钮

@@ -386,3 +386,72 @@
   color: var(--mint-600, #57826F);
 }
 .win-sysbar-item.active[data-sys="saidis"]::after { color: var(--lav-600, #7A6DA3); }
+
+/* ============================================================
+   十一、五感体验优化（2026-09-06）
+   目标：背景触感 / 点击触感 / 流畅顺捷。
+   原则：全部「后来者胜出」压 core/theme；不触碰受守卫文件；
+        尊重已在第六节定义的 prefers-reduced-motion 基线（动画会被自动关掉）。
+   ============================================================ */
+
+/* —— 1. 去除移动端点击蓝闪，触屏“触感”立刻干净 —— */
+button, a, .btn, .card, input, select, textarea,
+.clickable, .win-sidebar-item, .sel-item, .chip, .chip-add, .win-sysbar-trigger {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* —— 2. 全局过渡基线：颜色/背景/阴影/位移变化都顺滑 —— */
+.card, .recent-card, .win-sidebar-item, .win-topbar-menu, .win-topbar-sync,
+.sel-item, .chip, .chip-add, input, select, textarea, .search, .btn,
+.table tr, .win-sysbar-item, .ux-settings-chip, .suggest div, .landing-admin {
+  transition: background-color .2s ease, background-image .2s ease,
+              border-color .2s ease, box-shadow .2s ease,
+              color .2s ease, transform .12s ease, opacity .2s ease;
+}
+
+/* —— 3. 按钮点击触感：按下轻微回弹 + 微微变暗 —— */
+.btn { will-change: transform; }
+.btn:active {
+  transform: scale(.965);
+  transition: transform .06s ease, box-shadow .06s ease, filter .06s ease;
+  filter: brightness(.97);
+}
+.btn.ghost:active, .btn.danger:active, .btn-green:active { transform: scale(.965); }
+
+/* 通用可点元素按下反馈（侧栏 / 列表项 / 卡片 / 仓库切换项），避免“点了没反应”的错觉 */
+@media (hover: hover) {
+  .win-sidebar-item:active, .sel-item:active,
+  .chip:active, .recent-card:active, .win-sysbar-item:active {
+    transform: scale(.985);
+  }
+}
+
+/* —— 4. 背景触感：浅色模式在 theme 渐变之上叠柔和光晕，增加纵深与“呼吸感”
+       纯 background 实现（不引新伪元素、不动 z-index，零层叠风险）；
+       深色模式已由 ux.css 处理，此处排除。 —— */
+html:not([data-theme="dark"]) body {
+  background:
+    radial-gradient(1100px 720px at 6% -8%, rgba(127, 179, 165, .18), transparent 60%),
+    radial-gradient(900px 640px at 100% 6%, rgba(167, 158, 208, .15), transparent 58%),
+    radial-gradient(1000px 820px at 92% 104%, rgba(110, 163, 168, .13), transparent 60%),
+    radial-gradient(820px 600px at 10% 98%, rgba(214, 173, 106, .08), transparent 60%),
+    radial-gradient(1200px 380px at 50% -10%, rgba(255, 255, 255, .5), transparent 70%),
+    linear-gradient(160deg, #F1F8F4 0%, #FBF9F3 45%, #F0F6F5 100%);
+  background-attachment: fixed;
+}
+
+/* —— 5. 视图切换淡入（由 ux.js 在 hashchange 时给容器加 .ux-view-in） —— */
+@keyframes ux-view-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.ux-view-in { animation: ux-view-in .3s cubic-bezier(.2, .7, .3, 1) both; }
+
+/* —— 6. 滚动顺滑 + 键盘聚焦环（流畅 & 无障碍，focus-visible 才显示不扰民） —— */
+html { scroll-behavior: smooth; }
+:focus-visible {
+  outline: 2px solid var(--mint-400, #93BCA6);
+  outline-offset: 2px;
+  border-radius: 6px;
+}

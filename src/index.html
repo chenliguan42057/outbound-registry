@@ -24,6 +24,9 @@
 <!-- 体验修补层：必须最后加载（依赖后来者胜出压过 theme.css 若干规则）。
      2026-09-05 修复：此前该文件未被任何页面引用，导致 win-sysbar 等增量样式全部不生效。 -->
 <link rel="stylesheet" href="css/patch.css?v=__CACHE_BUST__" />
+<!-- 梦幻壁纸换肤（2026-09-06 启用）：置于 patch.css 之后，使其 body 背景覆盖 patch 的浅色渐变光晕；
+     深色模式（html[data-theme="dark"] body）特异性更高，会压住本文件，故深色下仍走深色背景，二者不冲突。 -->
+<link rel="stylesheet" href="css/wallpaper.css?v=__CACHE_BUST__" />
 <script>
   /* 应急回退：?legacy=1 直接跳转冻结的旧版单页 legacy.html */
   (function () {
