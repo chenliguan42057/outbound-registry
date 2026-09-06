@@ -15,4 +15,5 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           SECRET: ${{ secrets.DINGTALK_SECRET }}
+          SYS_NAME: '深圳细胞'
         run: python3 .github/scripts/pending_reminder.py

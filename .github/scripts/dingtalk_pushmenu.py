@@ -47,7 +47,7 @@ def guard_keyword(text, title):
         return text
     if KEYWORD in text:
         return text
-    return "【{}】出入库登记 · {}\n\n{}".format(SYS_NAME, title or "推送", text)
+    return "出入库登记 · {}\n\n{}".format(title or "推送", text)
 
 
 def main():
@@ -88,7 +88,7 @@ def main():
         text = guard_keyword(text, title)
         ok, err = send_action_card(
             text,
-            "【{}】出入库登记 · {}".format(SYS_NAME, title),
+            "出入库登记 · {}".format(title),
             WEBHOOK,
             SECRET,
             btns=[btn_landing(), btn_manage()],

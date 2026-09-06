@@ -34,6 +34,10 @@ def main():
     except OSError as e:
         print("读取报告失败: {}".format(e), file=sys.stderr)
         return 1
+    # 2026-09-06 统一系统名标记（深圳=深圳细胞 / 赛迪斯=赛迪斯，由 workflow 注入 SYS_NAME）
+    sys_name = (os.environ.get("SYS_NAME") or "").strip()
+    if sys_name:
+        text = "# 🏢 **【 " + sys_name + " 】**\n\n---\n\n" + text
     url = sign_url(WEBHOOK, SECRET)
     payload = {"msgtype": "markdown",
                "markdown": {"title": "系统排查报告", "text": text}}

@@ -73,6 +73,12 @@ def build_card_payload(text, title, btns=None, btn_orientation="0", decorate_tex
 
 
 def send_action_card(text, title, webhook, secret, btns=None, btn_orientation="0", decorate_text=True):
+    # 2026-09-06 统一加系统名标记：深圳=深圳细胞 / 赛迪斯=赛迪斯（由 workflow 注入 SYS_NAME）。
+    # 样式：# 一级标题（钉钉手机/电脑端都渲染成蓝色背景大号粗体块）+ 加粗 + 🏢 + --- 分隔线。
+    # 放在 send_action_card 统一处理，notify/remind/memo/pending/stock/sync_health/summary/pushmenu 全一致。
+    sys_name = (os.environ.get("SYS_NAME") or "").strip()
+    if sys_name:
+        text = "# 🏢 **【 " + sys_name + " 】**\n\n---\n\n" + text
     if not webhook:
         return False, "WEBHOOK 环境变量为空"
     if not secret:

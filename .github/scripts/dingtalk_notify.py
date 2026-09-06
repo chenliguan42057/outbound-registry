@@ -583,8 +583,7 @@ def main():
             len(records), "\n\n---\n\n".join(records)
         )
 
-    if SYS_NAME:
-        text = "【" + SYS_NAME + "】\n\n" + text
+    # 2026-09-06 系统名标记已统一由 ding_card.send_action_card 基于 SYS_NAME 注入（避免此处双重包裹），此处不再处理。
 
 
     ok, err = send(text, title="出入库登记通知")

@@ -41,6 +41,7 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           SECRET: ${{ secrets.DINGTALK_SECRET }}
+          SYS_NAME: '深圳细胞'    # 2026-09-06：消息顶部加「# 🏢 【 深圳细胞 】」醒目标记（钉钉一级标题=蓝色大块），对齐赛迪斯；同时满足机器人关键词「深圳细胞」校验
           FILES: ${{ steps.changed.outputs.files }}
           GITHUB_SHA: ${{ github.sha }}
           INPUT_TEXT: ${{ github.event.inputs.text }}

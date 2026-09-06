@@ -30,5 +30,6 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           SECRET: ${{ secrets.DINGTALK_SECRET }}
+          SYS_NAME: '深圳细胞'
           FILES: ${{ steps.changed.outputs.files }}
         run: python3 .github/scripts/dingtalk_remind.py
