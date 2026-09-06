@@ -35,7 +35,9 @@
     }
   })();
 
-  /* V2 视觉试点开关：?v2=1 打开新视觉，?v2=0 关回旧版；不带参数则沿用上次选择。
+  /* V2 视觉开关（2026-09-06 全量放开）：默认就是新视觉，无需任何参数。
+     原链接与已保存的二维码不含参数，扫出来即新版 —— 二维码不用重新生成。
+     ?v2=0 可切回旧版并记住，?v2=1 切回新版。
      必须在 head 内联执行 —— 若等 CSS/JS 加载后再加类，会出现先用旧样式渲染再跳变的闪烁。
      新样式全部写在 css/wallpaper.css 末尾的 html.v2 作用域内，本脚本只负责加一个类名，
      不触碰任何业务逻辑，删掉这几行即完全回到旧版。 */
@@ -43,7 +45,14 @@
     try {
       var q = location.search || "";
       var root = document.documentElement;
-      var on = localStorage.getItem("pilot-v2") === "1";
+      /* 放开当日清一次历史选择：试点期间点过 ?v2=0 的人（包括主理人自己）
+         否则会被永久留在旧版。pilot-v2-lock 保证这次清理只做一次，
+         之后用户自己的主动选择照常生效，不会被反复重置。 */
+      if (localStorage.getItem("pilot-v2-lock") !== "2026-09-06") {
+        localStorage.removeItem("pilot-v2");
+        localStorage.setItem("pilot-v2-lock", "2026-09-06");
+      }
+      var on = localStorage.getItem("pilot-v2") !== "0";
       if (q.indexOf("v2=1") !== -1) { on = true; localStorage.setItem("pilot-v2", "1"); }
       else if (q.indexOf("v2=0") !== -1) { on = false; localStorage.setItem("pilot-v2", "0"); }
       if (on) root.className = (root.className ? root.className + " " : "") + "v2";
