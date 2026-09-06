@@ -252,11 +252,16 @@
             }).join("") + (photos.length > 4 ? '<span class="badge">+' + (photos.length - 4) + '</span>' : "")
           : '<span class="badge">无</span>';
         var inMark = r.type === "in" ? '<span class="in-tag">入库</span>' : "";
+        // 调拨产生的记录（transferRole in/out）：加「⇄ 调拨入/出」标签，一眼区别于普通出入库
+        var tfLabel = r.transferRole === "in" ? "调拨入" : (r.transferRole === "out" ? "调拨出" : "");
+        var tfMark = tfLabel
+          ? '<span class="tf-tag" title="调拨单号：' + Util.esc(r.transferNo || "") + '">⇄ ' + tfLabel + '</span>'
+          : "";
         var pinMark = r.pinned === true ? ' <span title="已置顶" style="color:#BA7517;">📌</span>' : "";
         html += '<tr data-act="detail" data-id="' + r.id + '">' +
           '<td class="check-col"><input type="checkbox" class="rec-check" data-id="' + r.id + '"' +
             (selected[r.id] ? " checked" : "") + ' /></td>' +
-          '<td><div>' + (list.length - i) + pinMark + inMark + '</div></td>' +
+          '<td><div>' + (list.length - i) + pinMark + inMark + tfMark + '</div></td>' +
           '<td>' + Util.esc(r.time || "-") + '</td>' +
           '<td>' + Util.esc(r.picker || "-") + '</td>' +
           (!isIn ? '<td>' + statusPill(r) + '</td>' : '') +

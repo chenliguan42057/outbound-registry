@@ -62,6 +62,11 @@
           '<button type="button" class="btn ghost sm" id="tfReset">清空重选</button>' +
         '</div>' +
         '<div id="tfResult" style="margin-top:12px"></div>' +
+      '</div>' +
+      '<div class="card" style="margin-top:14px">' +
+        '<h2>调拨历史 <span class="tag">本仓</span></h2>' +
+        '<div class="hint" style="margin:-6px 0 10px;line-height:1.7">双仓调拨在本仓的记录：调出 = 本仓出库单，调入 = 对方调来的入库单。对方仓的对应记录请切换到对方系统查看。</div>' +
+        '<div id="tfHistoryList"></div>' +
       '</div>';
 
     picker = new UI.ProductPicker({ placeholder: "搜索并选择要调拨的货品（可多选，逐项填数量）" });
@@ -77,6 +82,41 @@
       if (box) box.innerHTML = "";
     });
     Util.$("tfSubmit").addEventListener("click", doTransfer);
+    renderHistory();
+  }
+
+  /** 调拨历史：列出本仓所有带 transferRole 的记录（一条记录 = 一次调拨在本仓侧的动作） */
+  function renderHistory() {
+    var box = Util.$("tfHistoryList");
+    if (!box) return;
+    var all = (window.App.State && window.App.State.list) || [];
+    var recs = all.filter(function (r) { return r.transferRole; }).sort(function (a, b) {
+      return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
+    });
+    if (!recs.length) {
+      box.innerHTML = '<div class="empty">本仓暂无调拨记录。执行调拨后，对应的出库/入库记录会自动显示在这里。</div>';
+      return;
+    }
+    box.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<th>时间</th><th>类型</th><th>调拨单号</th><th>货品与数量</th><th>方向</th></tr></thead><tbody>' +
+      recs.map(function (r) {
+        var isOut = r.transferRole === "out";
+        var badge = isOut
+          ? '<span class="tf-tag" style="color:#993C1D;background:#FAECE7;border-color:#F5C4B3">⇄ 调拨出</span>'
+          : '<span class="tf-tag">⇄ 调拨入</span>';
+        var itemsHtml = (r.items || []).map(function (it) {
+          return Util.esc(it.name) + ' × ' + it.qty;
+        }).join("、");
+        var counter = isOut ? (r.dept || "对方仓") : (r.picker && r.picker !== "盘点" ? r.picker : (r.dept || "对方仓"));
+        var dir = (isOut ? "调出 → <b>" : "调入 ← <b>") + Util.esc(counter) + '</b>';
+        return '<tr>' +
+          '<td>' + Util.esc(r.time || "-") + '</td>' +
+          '<td>' + badge + '</td>' +
+          '<td>' + Util.esc(r.transferNo || "-") + '</td>' +
+          '<td class="items-cell">' + itemsHtml + '</td>' +
+          '<td>' + dir + '</td>' +
+        '</tr>';
+      }).join("") + '</tbody></table></div>';
   }
 
   function lockBtn(btn) {
@@ -322,6 +362,7 @@
               var res = await Cloud.rollbackTransfer(tfId, srcName, dstName);
               if (res && res.ok) {
                 Util.toast("已撤回调拨：双方各写入一笔反向记录");
+                try { renderHistory(); } catch (e2) {}
                 box.innerHTML = '<div style="padding:12px 16px;border:1px solid #E0D7C1;border-radius:12px;background:#FAF6EE;color:#6E5B27;font-size:13.5px">↶ 已撤回调拨「' + Util.esc(tfNo) + '」</div>';
               } else {
                 Util.toast("撤销失败：" + (res && res.msg || "未知原因"), true);
@@ -337,6 +378,7 @@
         }
       }
       Util.toast("✅ 调拨成功：" + srcName + " 出库 → " + dstName + " 入库");
+      try { renderHistory(); } catch (e) {}
       picker.setSelected([]);
       var noEl = Util.$("tfNo");
       if (noEl) noEl.value = "";

@@ -598,6 +598,19 @@ label .req {
 /* 寰芥爣 */
 .badge { color: var(--ink-500); background: var(--mint-100); }
 .in-tag { background: var(--ok); }
+/* 调拨记录标签：淡紫描边，调出/调入同一底色，靠文案区分 */
+.tf-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lav-600, #534AB7);
+  background: var(--lav-100, #EEEDFE);
+  border: 1px solid var(--lav-200, #CECBF6);
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
 .tag.ok-tag { color: var(--ok); background: var(--ok-bg); }
 .tag.danger-tag { color: var(--err); background: var(--err-bg); }
 
