@@ -557,7 +557,6 @@
       Util.toast(msg, r.remain > 0);
       // 重推成功后刷新记录列表，让「已提单」状态及时体现
       try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
-      try { if (window.App.Views.landing && window.App.Views.landing.renderRecent) window.App.Views.landing.renderRecent(); } catch (e) {}
     } catch (e) {
       Util.toast("重推失败：" + ((e && e.message) || "未知错误"), true);
     } finally {

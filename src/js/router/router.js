@@ -73,6 +73,10 @@
     current = route;
 
     if (route.base === "landing") {
+      // 离开管理页：先回收当前模块视图的定时器/监听（sync 倒计时等），再渲染落地页（2026-09-06 防泄漏）
+      if (window.App.Views.app && typeof window.App.Views.app.teardownView === "function") {
+        try { window.App.Views.app.teardownView(); } catch (e) {}
+      }
       showView("view-landing");
       window.App.Views.landing.render();
       return;

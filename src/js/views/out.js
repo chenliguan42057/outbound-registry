@@ -494,10 +494,7 @@
     // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
     // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。
     submitPush(rec, wasEditing)["catch"](function () {})["finally"](function () { setSubmitting(false); });
-    // D1 成功动效：刷新最近提交 + 打勾涟漪（含出库单号）并滚动定位
-    if (window.App.Views.landing && window.App.Views.landing.renderRecent) {
-      window.App.Views.landing.renderRecent();
-    }
+    // D1 成功动效：打勾涟漪（含出库单号）+ 滚动定位（2026-09-06 最近提交卡已移除，不再刷新列表）
     UI.celebrate({ orderNo: rec.orderNo || "" });
   }
 

@@ -524,6 +524,17 @@
     nextSyncAt = 0;
   }
 
+  /** 离开管理页（回到落地页）时调用：销毁当前模块视图 + 停自动同步，
+      回收定时器/窗口监听（2026-09-06 防泄漏：此前从 #/app/sync 回落地页，
+      sync 面板的每秒倒计时定时器不会停，直到再次进管理页才被 mount 清理）。 */
+  function teardownView() {
+    if (currentView && typeof currentView.destroy === "function") {
+      try { currentView.destroy(); } catch (e) { console.warn("[app] 视图清理失败", e); }
+    }
+    currentView = null;
+    stopAutoSync();
+  }
+
   /** 路由守卫：进入 #/app 启动自动同步，离开 #/app 停止（防泄漏） */
   function onRouteChange() {
     if (Router.parse().base !== "app") stopAutoSync();
@@ -595,6 +606,7 @@
     autoSync: autoSync,
     startAutoSync: startAutoSync,
     stopAutoSync: stopAutoSync,
+    teardownView: teardownView,
     triggerSync: triggerSync,
     scheduleNextSync: scheduleNextSync,
     isAutoSyncOn: isAutoSyncOn,
