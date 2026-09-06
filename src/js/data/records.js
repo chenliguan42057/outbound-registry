@@ -3,7 +3,7 @@
  * 记录 schema 冻结：{id, time, picker?, dept?, purpose, items:[{name,qty}], photos:[dataURL], _ts, affectsStock, type?, status?}
  * status?: "pending" | "submitted" —— 仅出库记录（type 非 "in"）使用的可选字段；入库不写。
  * entity?: 出货仓库单位（仅出库记录，chip 必填）；note?: 备注（非必填）——均为纯追加可选字段。
- * source?: 入库来源（厂家直发/采购/退货/盘点补录/自定义…；调拨入=调拨入库、调拨出=调拨出库）——纯追加可选字段。
+ * source?: 入库来源（原厂直发/采购/退货/盘点补录/自定义…；调拨入=调拨入库、调拨出=调拨出库）——纯追加可选字段。
  * Records.InSource：入库来源词典（预设 + 按仓自定义存取 + 筛选匹配 + 展示取值），入库登记/记录列表/报表共用。
  */
 (function () {
@@ -292,7 +292,8 @@
      「入库登记页新增一次 → 自动保存 → 入库记录/报表的下拉与 chips 立即可选」。
      调拨来源不入自定义库：调拨入/调拨出由 transfer.js 写入记录 source 时系统自动打标。
      match/of 对老数据兜底：只有 transferRole 没有 source 的旧调拨记录也能筛出来、能显示标记。 */
-  var SRC_PRESETS = ["厂家直发", "采购", "退货", "盘点补录"];
+  var SRC_PRESETS = ["原厂直发", "采购", "退货", "盘点补录"];
+  var SRC_ALIAS = { "厂家直发": "原厂直发" };   // 旧叫法兼容：登记/筛选/展示统一归到「原厂直发」
   var SRC_TRANSFER_IN = "调拨入库";
   var SRC_TRANSFER_OUT = "调拨出库";
 
@@ -313,6 +314,7 @@
   function srcAdd(name) {
     var n = String(name == null ? "" : name).trim();
     if (!n) return "";
+    if (SRC_ALIAS[n]) n = SRC_ALIAS[n];   // 「厂家直发」旧叫法 → 统一存「原厂直发」
     if (SRC_PRESETS.indexOf(n) !== -1) return n;
     if (n === SRC_TRANSFER_IN || n === SRC_TRANSFER_OUT) return n;
     var arr = srcLoad();
@@ -326,20 +328,21 @@
   function srcOptions() {
     return SRC_PRESETS.concat(srcLoad());
   }
-  /** 筛选匹配：source 字段精确命中，或命中调拨来源时兼容仅有 transferRole 的旧记录 */
+  /** 筛选匹配：source 字段精确命中；旧叫法「厂家直发」归到「原厂直发」；命中调拨来源时兼容仅有 transferRole 的旧记录 */
   function srcMatch(r, sel) {
     if (!sel) return true;
     var s = String((r && r.source) || "");
     if (s === sel) return true;
+    if (SRC_ALIAS[s] === sel) return true;   // 旧值「厂家直发」→ 新筛选「原厂直发」也能命中
     if (sel === SRC_TRANSFER_IN && (s === SRC_TRANSFER_IN || r.transferRole === "in")) return true;
     if (sel === SRC_TRANSFER_OUT && (s === SRC_TRANSFER_OUT || r.transferRole === "out")) return true;
     return false;
   }
-  /** 记录 → 展示用来源：优先 source；旧调拨记录按 transferRole 兜底成 调拨入/调拨出 */
+  /** 记录 → 展示用来源：优先 source（旧叫法归一为 原厂直发）；旧调拨记录按 transferRole 兜底成 调拨入/调拨出 */
   function srcOf(r) {
     if (!r) return "";
     var s = String(r.source || "");
-    if (s) return s;
+    if (s) return SRC_ALIAS[s] || s;
     if (r.transferRole === "in") return SRC_TRANSFER_IN;
     if (r.transferRole === "out") return SRC_TRANSFER_OUT;
     return "";
