@@ -54,8 +54,18 @@
     },
 
     /* ---- 记录（键按当前系统：outbound_records_v2 / outbound_saidis_records_v2） ---- */
-    loadRecords: function () { return Store.get(Config.Sys.key("records_v2"), []); },
-    saveRecords: function (list) { Store.set(Config.Sys.key("records_v2"), list); },
+    /* 记录（2026-09-06 跨仓隔离）：读写按当前仓库过滤，丢弃明确属于其他仓的残留记录
+       （防御旧版串仓污染残留在 localStorage 的脏数据；无 warehouse 字段的旧记录按迁移兼容保留）。 */
+    loadRecords: function () {
+      var wid = Config.Sys.current().id;
+      var arr = Store.get(Config.Sys.key("records_v2"), []);
+      return (arr || []).filter(function (r) { return !r || !r.warehouse || r.warehouse === wid; });
+    },
+    saveRecords: function (list) {
+      var wid = Config.Sys.current().id;
+      var clean = (list || []).filter(function (r) { return !r || !r.warehouse || r.warehouse === wid; });
+      Store.set(Config.Sys.key("records_v2"), clean);
+    },
 
     /* ---- 导航状态（最后停留目录项 / 折叠状态） ---- */
     loadNav: function () {
@@ -119,8 +129,17 @@
     },
 
     /* ---- 盘点校准记录（键按当前系统：outbound_stocktakes_v1 / outbound_saidis_stocktakes_v1） ---- */
-    loadStocktakes: function () { return Store.get(Config.Sys.key("stocktakes_v1"), []); },
-    saveStocktakes: function (list) { Store.set(Config.Sys.key("stocktakes_v1"), list); },
+    /* 盘点（2026-09-06 跨仓隔离）：同记录，读写按当前仓库过滤。 */
+    loadStocktakes: function () {
+      var wid = Config.Sys.current().id;
+      var arr = Store.get(Config.Sys.key("stocktakes_v1"), []);
+      return (arr || []).filter(function (r) { return !r || !r.warehouse || r.warehouse === wid; });
+    },
+    saveStocktakes: function (list) {
+      var wid = Config.Sys.current().id;
+      var clean = (list || []).filter(function (r) { return !r || !r.warehouse || r.warehouse === wid; });
+      Store.set(Config.Sys.key("stocktakes_v1"), clean);
+    },
 
     /* ---- 历史补全（部门 / 领取人，冻结键） ---- */
     getHistory: function (key) { return Store.get(key, []); },

@@ -506,6 +506,9 @@
       先写墓碑再删原文件，保证删除可追踪、其他设备可同步删除残留。 */
   async function pushTombstone(rec, reason) {
     if (!rec || !rec.id) return;
+    // 双仓物理隔离：仅对归属当前仓库的记录写墓碑，防止对方仓记录被误标删除
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (rec.warehouse && rec.warehouse !== wid) { console.warn("[cloud] 跳过跨仓墓碑:", rec.id, "记录仓=", rec.warehouse, "当前仓=", wid); return; }
     var path = Config.Sys.dir("deleted") + "/" + rec.id + ".json";
     var tomb = { type: "tombstone", id: rec.id, deletedAt: Util.serverNow(), reason: String(reason || ""), rec: rec };
     var content = Util.b64enc(JSON.stringify(tomb));
@@ -704,6 +707,9 @@
   /** 批量上传记录照片，返回 photoUrls 数组（兼容旧调用方；失败项自动入补传队列）。
       limit 可选：只传前 limit 张（文件名带随机短后缀，跨设备唯一、互不覆盖） */
   async function pushPhotos(rec, limit) {
+    // 双仓物理隔离：仅上传归属当前仓库记录的照片，防止照片串入对方仓 photos/ 目录
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (rec && rec.warehouse && rec.warehouse !== wid) { return []; }
     var r = await pushPhotosDetailed(rec, limit);
     if (r.failedIndexes.length) markPhotoPending(rec.id, r.failedIndexes);
     return r.urls;
@@ -713,6 +719,9 @@
       返回 { ok, fail }。成功全部后清补传队列项。 */
   async function retryPhotosFor(rec) {
     if (!rec || !Array.isArray(rec.photos) || !rec.photos.length) return { ok: 0, fail: 0 };
+    // 双仓物理隔离：仅补传归属当前仓库记录的照片
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (rec.warehouse && rec.warehouse !== wid) return { ok: 0, fail: 0 };
     var n = rec.photos.length;
     // 按 index 占位的定长数组：photoUrls[i] 对应第 i 张照片（允许 undefined/null 表示未成功），杜绝中间失败错位
     var urls = new Array(n);
@@ -743,7 +752,11 @@
   /** 逐条推送本地全部记录 */
   async function pushAllLocal(list) {
     var ok = 0, fail = 0;
-    var arr = list || window.App.State.list;
+    // 双仓物理隔离：仅推送归属当前仓库的记录，跨仓脏数据不入云端（无标记旧记录兼容保留）
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    var arr = (list || window.App.State.list || []).filter(function (r) {
+      return !r || !r.warehouse || r.warehouse === wid;
+    });
     for (var i = 0; i < arr.length; i++) {
       try { await push(arr[i]); ok++; } catch (e) { fail++; }
     }
@@ -817,6 +830,12 @@
   /** 优先立即推送单条记录；失败入持久化队列，待冲刷。返回 Promise<boolean> */
   async function pushRecord(rec) {
     if (!rec || !rec.id) return false;
+    // 双仓物理隔离守卫：记录必须归属当前仓库，否则拒绝写入（杜绝脏记录污染对方仓）
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (rec.warehouse && rec.warehouse !== wid) {
+      console.warn("[cloud] 跳过跨仓记录写入:", rec.id, "记录仓=", rec.warehouse, "当前仓=", wid);
+      return false;
+    }
     if (!hasToken()) { enqueue(rec.id); return false; }
     var ok = await pushWithRetry(rec, 3);
     if (ok) { dequeue(rec.id); return true; }
@@ -827,8 +846,18 @@
   /** 跨系统推送：把记录写到指定数据根（如 data-saidis）的 records/ 下。
      供「两仓调拨」把对方仓的入库/出库记录直接写进对方目录（幂等：先 GET sha 再 PUT）。
      与 pushRecord 的区别：不做本地队列（对方系统状态不在这台设备），失败当场返回 false。 */
+  /** 由数据根目录反推仓库 id（data-saidis → saidis，data → shenzhen） */
+  function widOfDataDir(dir) {
+    return String(dir || "").indexOf("said") !== -1 ? "saidis" : "shenzhen";
+  }
+
   async function pushRecordTo(rec, dataDir) {
     if (!rec || !rec.id) return false;
+    // 跨仓直写守卫（调拨专用）：记录 warehouse 必须与目标目录所属仓库一致，否则拒写
+    if (rec.warehouse && rec.warehouse !== widOfDataDir(dataDir)) {
+      console.warn("[cloud] 跨仓直写被拒:", rec.id, "记录仓=", rec.warehouse, "目标仓=", widOfDataDir(dataDir));
+      return false;
+    }
     if (!hasToken()) return false;
     var dir = String(dataDir || "").replace(/[\\/]+$/, "");
     if (!dir) return false;
@@ -967,6 +996,7 @@
       _ts: Date.now(),
       time: now,
       type: "out",
+      warehouse: dstDef.id,   // 跨仓直写守卫：标记归属对方仓，pushRecordTo 据此放行
       items: items,
       purpose: "撤回调拨入库（" + transferNo + "）",
       picker: (srcName || "本系统") + "（撤销）",
@@ -1036,6 +1066,9 @@
   /** 推送「提醒」请求；返回文件名。失败抛错（调用方自行提示/重试）。 */
   async function pushRemind(obj) {
     if (!obj || !obj.orders || !obj.orders.length) throw new Error("empty remind payload");
+    // 双仓物理隔离（按需）：载荷显式带 warehouse 且与当前仓不符则拒写（不带标记的旧调用照常）
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (obj.warehouse && obj.warehouse !== wid) { console.warn("[cloud] 跳过跨仓提醒:", "载荷仓=", obj.warehouse, "当前仓=", wid); return ""; }
     var id = "r" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
     var path = Config.Sys.dir("notify") + "/" + id + ".json";
     var content = Util.b64enc(JSON.stringify(obj));
@@ -1049,6 +1082,9 @@
   /** 推送任意 notify 载荷到 data/notify/<prefix>-<id>.json，供 Actions 脚本消费；返回文件名。失败抛错。 */
   async function pushNotifyFile(prefix, payload) {
     if (!payload) throw new Error("empty notify payload");
+    // 双仓物理隔离（按需）：载荷显式带 warehouse 且与当前仓不符则拒写（不带标记的旧调用照常）
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (payload.warehouse && payload.warehouse !== wid) { console.warn("[cloud] 跳过跨仓通知:", "载荷仓=", payload.warehouse, "当前仓=", wid); return ""; }
     var id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
     var path = Config.Sys.dir("notify") + "/" + prefix + "-" + id + ".json";
     var content = Util.b64enc(JSON.stringify(payload));
@@ -1064,6 +1100,9 @@
       flushStocktakesPending 对 _local 未推送项补推）。 */
   async function pushStocktake(rec) {
     if (!rec || !rec.id) return false;
+    // 双仓物理隔离：仅推送归属当前仓库的盘点记录
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (rec.warehouse && rec.warehouse !== wid) { console.warn("[cloud] 跳过跨仓盘点写入:", rec.id, "记录仓=", rec.warehouse, "当前仓=", wid); return false; }
     if (!hasToken()) return false;
     var path = Config.Sys.dir("stocktakes") + "/" + rec.id + ".json";
     var content = Util.b64enc(JSON.stringify(rec));

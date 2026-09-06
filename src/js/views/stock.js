@@ -514,6 +514,7 @@
               _ts: Date.now(),
               time: stkTime,
               kind: "stocktake",
+              warehouse: (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen",
               picker: "盘点校准",
               dept: "盘点校准",
               purpose: "盘点调整",

@@ -42,7 +42,9 @@
       _ts: Util.serverNow(),   // 服务器校正时间：多设备时钟不一致时冲突/时序仍正确（见 util.serverNow）
       affectsStock: true,   // 新记录才参与库存计算
       items: [],
-      photos: []
+      photos: [],
+      // 双仓物理隔离（2026-09-06）：每条记录打上归属仓库标记，push/merge/store 均据此拒绝跨仓污染
+      warehouse: (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen"
     }, payload);
     State.list.unshift(rec);
     if (window.App.Stock) window.App.Stock.markDirty();
@@ -158,11 +160,15 @@
       排序 = time 降序，次 _ts 降序（与现网一致） */
   var _lastMergeConflicts = [];
 
-  function mergeAndSort(local, remote) {
+  function mergeAndSort(local, remote, warehouseId) {
     _lastMergeConflicts = [];
+    // 双仓物理隔离（2026-09-06）：仅保留归属当前仓库的记录，跨仓记录丢弃
+    // （无 warehouse 字段的旧记录按迁移兼容保留，避免历史数据被误清）。
+    var wid = warehouseId || (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current() && window.App.Config.Sys.current().id) || "shenzhen";
+    function owns(r) { return !r || !r.warehouse || r.warehouse === wid; }
     var map = new Map();
-    (local || []).forEach(function (r) { map.set(r.id, r); });
-    (remote || []).forEach(function (r) {
+    (local || []).filter(owns).forEach(function (r) { map.set(r.id, r); });
+    (remote || []).filter(owns).forEach(function (r) {
       var prev = map.get(r.id);
       if (!prev) { map.set(r.id, r); return; }
       var win = newerOf(prev, r);

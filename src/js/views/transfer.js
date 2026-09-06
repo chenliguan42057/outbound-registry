@@ -151,7 +151,7 @@
       photoUrls: (r.photoUrls || []).slice(0, 3)
     };
     try {
-      await Cloud.pushRemind({ _ts: Date.now(), type: "remind", kind: "transfer", orders: [order] });
+      await Cloud.pushRemind({ _ts: Date.now(), type: "remind", kind: "transfer", warehouse: (Config.Sys && Config.Sys.current().id) || "shenzhen", orders: [order] });
       Util.toast("已提交推送，该调拨单稍后到达钉钉群");
       window.App.Views.app.setSyncStatus("调拨提醒已提交", false);
     } catch (e) {
@@ -324,6 +324,7 @@
         _ts: Date.now(),
         time: now,
         type: "in",
+        warehouse: dst.id,   // 跨仓直写守卫：标记归属对方仓，pushRecordTo 据此放行
         items: items.map(function (it) { return { name: it.name, qty: it.qty }; }),
         purpose: "调拨入库来自" + srcName,
         picker: srcName + "（调拨）",
