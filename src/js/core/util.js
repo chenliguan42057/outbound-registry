@@ -58,6 +58,51 @@
   }
 
   /** Base64 编解码（UTF-8 安全，与现网一致） */
+
+  /* ================= 安全 URL（XSS 防护补丁，2026-09-06） =================
+     photoUrls/外链等"用户可控 URL"渲染进 img src / a href 前，必须：
+     ① safeUrl 掐掉危险协议（javascript: / data:text/html 等）；
+     ② 再经 esc 转义（防 " onerror= 属性逃逸）。
+     两件事缺一不可：只 esc 不拦协议 → javascript: 链接仍可点；只拦协议不 esc → 引号仍可逃逸。 */
+  function safeUrl(s) {
+    s = String(s == null ? "" : s);
+    if (/^(https?:)?\/\//i.test(s)) return s;    // http(s) 或协议相对 //host/path
+    if (/^data:image\//i.test(s)) return s;      // 本地照片 dataURL（仅图片）
+    if (/^blob:/i.test(s)) return s;             // 本地预览 blob
+    return "";
+  }
+
+  /* ================= 服务器时钟校正（2026-09-06） =================
+     多设备"冲突取较新 / 库存时序"此前依赖各自本地 Date.now()，
+     设备时钟不准时旧数据会覆盖新数据、库存时序算错。
+     方案：每次 GitHub API 成功响应都读 Date 响应头（HTTP GMT 时间），
+     算并缓存本机与服务器的时钟偏移；serverNow() 返回校正后的"现在"。
+     只要设备联网同步过一次，后续时间戳即与服务器对齐；从未联网时退化为 Date.now()。 */
+  var _clockOffset = 0;
+  var CLOCK_OFFSET_KEY = "outbound_clock_offset_v1";   // 设备级属性（非业务数据），不按仓隔离
+
+  function loadClockOffset() {
+    try {
+      var v = Number(localStorage.getItem(CLOCK_OFFSET_KEY) || 0);
+      if (isFinite(v)) _clockOffset = v;
+    } catch (e) {}
+  }
+  loadClockOffset();
+
+  /** 观测服务器时间（由 API 层在成功响应时调用；serverDateMs = Date.parse(res.headers.date)）。
+      偏移 <30s 不追：Date 头精度仅秒级，避免无谓抖动。 */
+  function observeServerTime(serverDateMs) {
+    if (!serverDateMs || isNaN(serverDateMs)) return;
+    var off = serverDateMs - Date.now();
+    if (Math.abs(off) < 30000) return;
+    _clockOffset = Math.round(off);
+    try { localStorage.setItem(CLOCK_OFFSET_KEY, String(_clockOffset)); } catch (e) {}
+  }
+
+  /** 服务器校正后的当前时间戳（毫秒）。新建/编辑/删除等写入时间戳统一走这里。 */
+  function serverNow() {
+    return Date.now() + _clockOffset;
+  }
   function b64enc(str) { return btoa(unescape(encodeURIComponent(str))); }
   function b64dec(b64) { return decodeURIComponent(escape(atob(String(b64).replace(/\s/g, "")))); }
 
@@ -105,6 +150,9 @@
     b64enc: b64enc,
     b64dec: b64dec,
     toast: toast,
-    download: download
+    download: download,
+    safeUrl: safeUrl,
+    observeServerTime: observeServerTime,
+    serverNow: serverNow
   };
 })();

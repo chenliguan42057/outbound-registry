@@ -110,6 +110,11 @@
     }
     clearTimeout(timer);
     readRate(res);
+    // 服务器时钟采样（2026-09-06）：Date 响应头为 HTTP GMT 时间，供多设备时间戳对齐（util.observeServerTime）
+    try {
+      var _dt = (res.headers && res.headers.get) ? res.headers.get("date") : null;
+      if (_dt) Util.observeServerTime(Date.parse(_dt));
+    } catch (e) {}
     if (!res.ok) {
       var t = await res.text().catch(function () { return ""; });
       // 状态码前缀必须保留：pull/pullTombstones 等处用 indexOf("404")===0 判断空目录
@@ -490,7 +495,7 @@
   async function pushTombstone(rec, reason) {
     if (!rec || !rec.id) return;
     var path = Config.Sys.dir("deleted") + "/" + rec.id + ".json";
-    var tomb = { type: "tombstone", id: rec.id, deletedAt: Date.now(), reason: String(reason || ""), rec: rec };
+    var tomb = { type: "tombstone", id: rec.id, deletedAt: Util.serverNow(), reason: String(reason || ""), rec: rec };
     var content = Util.b64enc(JSON.stringify(tomb));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
@@ -525,7 +530,7 @@
   /** 清空全部并写一条汇总墓碑（data/deleted/__clear-all__.json） */
   async function clearAllWithReason(reason) {
     var path = Config.Sys.dir("deleted") + "/__clear-all__.json";
-    var tomb = { type: "clear-all", id: "__clear-all__", deletedAt: Date.now(), reason: String(reason || "") };
+    var tomb = { type: "clear-all", id: "__clear-all__", deletedAt: Util.serverNow(), reason: String(reason || "") };
     var content = Util.b64enc(JSON.stringify(tomb));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
@@ -629,6 +634,37 @@
   /** 清除某记录的照片失败项 */
   function clearPhotoPending(id) {
     savePhotoPending(loadPhotoPending().filter(function (x) { return x.id !== id; }));
+  }
+
+  /** 删除记录对应的云端照片文件（2026-09-06 照片孤儿治理）。
+      删除记录 / 批量删除 / 回收站清空时调用，回收 data/photos/<id>-*.jpg（按当前仓目录隔离）。
+      仅接受 photoUrls 中属于「当前仓 photos 目录」的 raw.githubusercontent URL，杜绝删到别的仓/别的文件。
+      尽力而为：任一张失败仅计入 fail，不抛错、不阻塞记录删除主流程（下次删除同记录时再补）。 */
+  async function delCloudPhotos(urls) {
+    if (!hasToken() || !urls || !urls.length) return { ok: 0, fail: 0 };
+    var photoPrefix = Config.Sys.dir("photos") + "/";          // 例：data/photos/ 或 data-saidis/photos/
+    var done = {};
+    var ok = 0, fail = 0;
+    for (var i = 0; i < urls.length; i++) {
+      var u = String(urls[i] || "");
+      var at = u.indexOf("/" + photoPrefix);
+      if (at < 0) continue;                                    // 非本仓照片/非 raw URL：跳过
+      var rel = u.slice(at + 1);                               // data/photos/xxx.jpg
+      if (!/^[A-Za-z0-9._-]+\.jpg$/.test(rel.slice(rel.lastIndexOf("/") + 1))) continue;
+      if (done[rel]) continue; done[rel] = 1;
+      try {
+        var full = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + rel + "?ref=" + Config.GH.branch;
+        var ej = await apiJson(full);
+        if (ej && ej.sha) {
+          await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + rel, {
+            method: "DELETE", headers: ghHeaders(),
+            body: JSON.stringify({ message: "del photo " + rel.slice(rel.lastIndexOf("/") + 1), sha: ej.sha, branch: Config.GH.branch })
+          });
+          ok++;
+        }
+      } catch (e) { fail++; }
+    }
+    return { ok: ok, fail: fail };
   }
 
   /** 批量上传记录照片（带重试，不再静默吞错）。
@@ -1266,6 +1302,7 @@
     pushPhotos: pushPhotos,
     pushPhotosDetailed: pushPhotosDetailed,
     retryPhotosFor: retryPhotosFor,
+    delCloudPhotos: delCloudPhotos,
     loadPhotoPending: loadPhotoPending,
     clearPhotoPending: clearPhotoPending,
     pullPickups: pullPickups,

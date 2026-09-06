@@ -287,7 +287,8 @@
         var photos = (r.photoUrls && r.photoUrls.length) ? r.photoUrls : (r.photos || []);
         var photoHtml = photos.length
           ? photos.slice(0, 4).map(function (src, pi) {
-              return '<img class="mini-photo" src="' + src + '" data-act="photo" data-src="' + src + '" data-id="' + r.id + '" alt="照片' + (pi + 1) + '" />';
+              var safeSrc = Util.esc(Util.safeUrl(src));
+              return '<img class="mini-photo" src="' + safeSrc + '" data-act="photo" data-src="' + safeSrc + '" data-id="' + Util.esc(r.id || "") + '" alt="照片' + (pi + 1) + '" />';
             }).join("") + (photos.length > 4 ? '<span class="badge">+' + (photos.length - 4) + '</span>' : "")
           : '<span class="badge">无</span>';
         var inMark = r.type === "in" ? '<span class="in-tag">入库</span>' : "";
@@ -385,8 +386,9 @@
         "确认删除"
       );
       if (!res.ok) return;
-      // 先全部入本地墓碑队列再删，中途失败也不会让记录在下次同步复活
-      if (Cloud.hasToken()) recs.forEach(function (r) { Cloud.enqueueTomb(r.id, res.value); });
+      // 先全部入本地墓碑队列（2026-09-06：不再限 hasToken——离线删除也入队，
+      // 联网后 sync 冲刷补推墓碑，避免云端残留导致记录复活）；中途失败也不会让记录在下次同步复活
+      recs.forEach(function (r) { Cloud.enqueueTomb(r.id, res.value); });
       recs.forEach(function (r) { Records.remove(r.id); });
       selected = {};
       renderList();
@@ -397,6 +399,7 @@
           try {
             await Cloud.delWithTombstone(recs[i], res.value);
             Cloud.dequeueTomb(recs[i].id);
+            try { await Cloud.delCloudPhotos(recs[i].photoUrls); } catch (e) {}   // 照片孤儿治理：尽力而为，失败不影响删除
           } catch (e) { failed++; }
         }
         if (failed) {
@@ -415,11 +418,13 @@
       }).join("");
       var photosHtml = (r.photoUrls && r.photoUrls.length)
         ? '<div class="detail-photos">' + r.photoUrls.map(function (src, i) {
-            return '<img src="' + src + '" data-act="photo" data-src="' + src + '" alt="照片' + (i + 1) + '" />';
+            var safeSrc = Util.esc(Util.safeUrl(src));
+            return '<img src="' + safeSrc + '" data-act="photo" data-src="' + safeSrc + '" alt="照片' + (i + 1) + '" />';
           }).join("") + '</div>'
         : ((r.photos && r.photos.length)
           ? '<div class="detail-photos">' + r.photos.map(function (src, i) {
-              return '<img src="' + src + '" data-act="photo" data-src="' + src + '" alt="照片' + (i + 1) + '" />';
+              var safeSrc = Util.esc(Util.safeUrl(src));
+              return '<img src="' + safeSrc + '" data-act="photo" data-src="' + safeSrc + '" alt="照片' + (i + 1) + '" />';
             }).join("") + '</div>'
           : '<span style="color:var(--muted);">无照片</span>');
       var rows = "";
@@ -522,7 +527,7 @@
     }
 
     function showPhoto(src) {
-      UI.Modal.show("照片预览", '<img class="preview-img" src="' + src + '" alt="" />', { width: "fit-content" });
+      UI.Modal.show("照片预览", '<img class="preview-img" src="' + Util.esc(Util.safeUrl(src)) + '" alt="" />', { width: "fit-content" });
     }
 
     /** 生成单据打印 HTML（单个记录，供单条打印与批量打印复用） */
@@ -635,8 +640,9 @@
         "确认删除"
       );
       if (!res.ok) return;
-      // 先写本地墓碑队列：即使云端失败，也会在后续 sync 冲刷补推，避免记录复活
-      if (Cloud.hasToken()) Cloud.enqueueTomb(id, res.value);
+      // 先写本地墓碑队列（2026-09-06：不限 hasToken——离线删除也入队防复活）：
+      // 即使云端失败，也会在后续 sync 冲刷补推，避免记录复活
+      Cloud.enqueueTomb(id, res.value);
       Records.remove(id);
       renderList();
       Util.toast(affects ? "已删除，库存已自动恢复" : "已删除");
@@ -644,6 +650,7 @@
         try {
           await Cloud.delWithTombstone(r, res.value);
           Cloud.dequeueTomb(id);   // 云端墓碑+删除成功才出队
+          try { await Cloud.delCloudPhotos(r.photoUrls); } catch (e) {}   // 照片孤儿治理：尽力而为，失败不影响删除
         } catch (e) {
           window.App.Views.app.setSyncStatus("云端删除失败（已存本地墓碑，下次同步自动补推）", true);
         }
@@ -655,7 +662,7 @@
       Util.toast("正在同步…");
       Cloud.syncPull({ onStatus: function (text, isErr) {
         window.App.Views.app.setSyncStatus(text, isErr);
-      } }).then(function () { renderList(); });
+      } }).then(function () { renderList(); })["catch"](function () { renderList(); });
     }
 
     return {

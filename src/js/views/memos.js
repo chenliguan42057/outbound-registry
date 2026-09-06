@@ -194,7 +194,8 @@
     var urls = (m.photoUrls && m.photoUrls.length) ? m.photoUrls : (m.photos || []);
     if (!urls.length) return "";
     return '<div class="photos-cell">' + urls.slice(0, 4).map(function (src, pi) {
-      return '<img class="mini-photo" src="' + src + '" data-act="photo" data-src="' + src + '" alt="照片' + (pi + 1) + '" />';
+      var safeSrc = Util.esc(Util.safeUrl(src));
+      return '<img class="mini-photo" src="' + safeSrc + '" data-act="photo" data-src="' + safeSrc + '" alt="照片' + (pi + 1) + '" />';
     }).join("") +
       (urls.length > 4 ? '<span class="badge">+' + (urls.length - 4) + '</span>' : "") +
       '</div>';
@@ -254,7 +255,7 @@
     if (act === "done") markDone(id);
     else if (act === "remind") setReminder(id);
     else if (act === "del") doDel(id);
-    else if (act === "photo") UI.Modal.show("照片预览", '<img class="preview-img" src="' + btn.getAttribute("data-src") + '" alt="" />', { width: "fit-content" });
+    else if (act === "photo") UI.Modal.show("照片预览", '<img class="preview-img" src="' + Util.esc(Util.safeUrl(btn.getAttribute("data-src"))) + '" alt="" />', { width: "fit-content" });
   }
 
   /** 设/改提醒弹窗：datetime-local（step=60）+ 清空/取消/保存；保存 → updateRemind + 推送云端 + 重建列表 */

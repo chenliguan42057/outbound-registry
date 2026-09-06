@@ -39,7 +39,7 @@
   function create(payload) {
     var rec = Object.assign({
       id: Util.genId(),
-      _ts: Date.now(),
+      _ts: Util.serverNow(),   // 服务器校正时间：多设备时钟不一致时冲突/时序仍正确（见 util.serverNow）
       affectsStock: true,   // 新记录才参与库存计算
       items: [],
       photos: []
@@ -73,7 +73,7 @@
     var nextAffects = (patch && Object.prototype.hasOwnProperty.call(patch, "affectsStock"))
       ? patch.affectsStock
       : prev.affectsStock;
-    var rec = Object.assign({}, prev, patch, { updatedAt: Date.now(), affectsStock: nextAffects });
+    var rec = Object.assign({}, prev, patch, { updatedAt: Util.serverNow(), affectsStock: nextAffects });
     State.list[idx] = rec;
     if (patch && Object.prototype.hasOwnProperty.call(patch, "items")) {
       if (window.App.Stock) window.App.Stock.markDirty();
@@ -95,7 +95,7 @@
     if (idx < 0) return null;
     var borrowRec = State.list[idx];
     if (borrowRec.borrowDone === true) return null;
-    State.list[idx] = Object.assign({}, borrowRec, { borrowDone: true, updatedAt: Date.now() });
+    State.list[idx] = Object.assign({}, borrowRec, { borrowDone: true, updatedAt: Util.serverNow() });
     State.save();
     return borrowRec.id;
   }

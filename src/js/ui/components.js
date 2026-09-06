@@ -68,7 +68,7 @@
       if (img) {
         var src = img.getAttribute("src") || img.getAttribute("data-src");
         if (src) {
-          Modal.show("照片预览", '<img class="preview-img" src="' + src + '" alt="" />', { width: "fit-content" });
+          Modal.show("照片预览", '<img class="preview-img" src="' + Util.esc(Util.safeUrl(src)) + '" alt="" />', { width: "fit-content" });
         }
       }
     });
@@ -529,7 +529,7 @@
         return;
       }
       var img = e.target.closest(".thumb img");
-      if (img) Modal.show("照片预览", '<img class="preview-img" src="' + img.src + '" alt="" />', { width: "fit-content" });
+      if (img) Modal.show("照片预览", '<img class="preview-img" src="' + Util.esc(Util.safeUrl(img.src)) + '" alt="" />', { width: "fit-content" });
     });
     this.render();
   };
@@ -640,7 +640,7 @@
     this.photos.forEach(function (p, i) {
       var t = document.createElement("div");
       t.className = "thumb";
-      t.innerHTML = '<img src="' + p.src + '" alt="" /><span class="del" data-i="' + i + '">&times;</span>';
+      t.innerHTML = '<img src="' + Util.esc(Util.safeUrl(p.src)) + '" alt="" /><span class="del" data-i="' + i + '">&times;</span>';
       self.thumbsEl.appendChild(t);
     });
     var kb = Math.round(this.photos.reduce(function (s, p) { return s + p.src.length * 0.75 / 1024; }, 0));

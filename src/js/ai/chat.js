@@ -325,7 +325,7 @@
       ? '<img class="ai-wiki-thumb" src="' + Util.esc(d.thumb) + '" alt="' + Util.esc(d.title || "词条") + '" />'
       : "";
     var link = d.url
-      ? '<a class="ai-wiki-link" href="' + Util.esc(d.url) + '" target="_blank" rel="noopener">查看完整词条 ↗</a>'
+      ? '<a class="ai-wiki-link" href="' + Util.esc(Util.safeUrl(d.url)) + '" target="_blank" rel="noopener">查看完整词条 ↗</a>'
       : "";
     var html =
       '<div class="ai-msg ai-msg-ai"><div class="ai-bubble ai-type-wiki ai-wiki-card">' +
@@ -353,7 +353,7 @@
       var snippet = it.snippet ? '<div class="ai-news-snippet">' + Util.esc(it.snippet) + '</div>' : "";
       var url = it.url ? it.url : "#";
       return '<li class="ai-news-item">' +
-        '<a href="' + Util.esc(url) + '" target="_blank" rel="noopener">' + (i + 1) + '. ' + Util.esc(title) + '</a>' +
+        '<a href="' + Util.esc(Util.safeUrl(url) || "#") + '" target="_blank" rel="noopener">' + (i + 1) + '. ' + Util.esc(title) + '</a>' +
         snippet +
       '</li>';
     }).join("");
