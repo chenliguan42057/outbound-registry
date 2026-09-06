@@ -97,7 +97,10 @@
     var timer = setTimeout(function () { ctrl.abort(); }, API_TIMEOUT_MS);
     var res;
     try {
-      res = await fetch(url, Object.assign({ headers: ghHeaders() }, opts || {}, { signal: ctrl.signal }));
+      // 统一禁用浏览器 HTTP 缓存：Edge 的启发式缓存比 Chrome/Safari 激进，会让
+      // git/trees 与 contents 读取命中过期响应（HTTP 200 但内容是旧的），表现为
+      // 「别的设备都同步到了，就 Edge 同步不到」。放在 opts 之前，个别调用方仍可覆盖。
+      res = await fetch(url, Object.assign({ headers: ghHeaders(), cache: "no-store" }, opts || {}, { signal: ctrl.signal }));
     } catch (e) {
       clearTimeout(timer);
       if (e && e.name === "AbortError") {
@@ -133,7 +136,9 @@
      只拉 sha 变化/新增的文件（每轮约 1-4 次）；缓存存 localStorage。
      fetchTree 失败/无缓存 → 降级回退现有全量逻辑，绝不破坏同步。 */
 
-  var TREE_CACHE_KEY = "outbound_tree_cache";
+  // v2：旧版缓存可能已被 Edge 的过期 HTTP 响应「投毒」（存下不完整的旧树，
+  // 之后永远判断「无变化」而拉不到新记录）。升版本号强制所有设备一次性丢弃旧缓存。
+  var TREE_CACHE_KEY = "outbound_tree_cache_v2";
 
   function loadTreeCache() {
     try { return JSON.parse(localStorage.getItem(TREE_CACHE_KEY) || "null"); } catch (e) { return null; }
