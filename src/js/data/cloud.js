@@ -374,6 +374,12 @@
 
   /** 推送单条待取货（存在则更新，不存在则新增） */
   async function pushPickup(rec) {
+    // 双仓物理隔离守卫：待取货记录必须归属当前仓库，否则拒绝写入（杜绝脏记录污染对方仓）
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (rec && rec.warehouse && rec.warehouse !== wid) {
+      console.warn("[cloud] 跳过跨仓待取货写入:", rec && rec.id, "记录仓=", rec && rec.warehouse, "当前仓=", wid);
+      return;
+    }
     var slim = slimRecord(rec);
     var path = Config.Sys.dir("pickups") + "/" + slim.id + ".json";
     var content = Util.b64enc(JSON.stringify(slim));
@@ -433,6 +439,12 @@
 
   /** 推送单条备忘录（存在则更新，不存在则新增） */
   async function pushMemo(rec) {
+    // 双仓物理隔离守卫：备忘录记录必须归属当前仓库，否则拒绝写入（杜绝脏记录污染对方仓）
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (rec && rec.warehouse && rec.warehouse !== wid) {
+      console.warn("[cloud] 跳过跨仓备忘录写入:", rec && rec.id, "记录仓=", rec && rec.warehouse, "当前仓=", wid);
+      return;
+    }
     var slim = slimRecord(rec);
     var path = Config.Sys.dir("memos") + "/" + slim.id + ".json";
     var content = Util.b64enc(JSON.stringify(slim));

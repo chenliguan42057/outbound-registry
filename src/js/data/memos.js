@@ -21,7 +21,10 @@
       _ts: Date.now(),
       done: false,
       remindAt: "",
-      reminded: false
+      reminded: false,
+      /* 仓库归属标记（2026-09-06 跨仓隔离修复）：与待取货一致，创建时打当前仓库 id，
+         所有写路径按此字段拒绝跨仓写入。 */
+      warehouse: (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen"
     }, payload);
     State.memos.unshift(memo);
     State.saveMemos();
@@ -52,11 +55,14 @@
   /** 合并策略：同 id 冲突时云端覆盖本地（与待取货一致，云端为准），
       但「本地有 photos 而云端已剥离（photos 空但 photoUrls 有值）」时保留本地 photos
       （dataURL 为本机编辑回填/补传所需原始凭证）；
-      排序 = time 降序，次 _ts 降序（与记录一致） */
-  function mergeAndSort(local, remote) {
+      排序 = time 降序，次 _ts 降序（与记录一致）。
+      warehouseId 参数（2026-09-06 跨仓隔离）：仅保留归属当前仓库的记录，跨仓记录丢弃。 */
+  function mergeAndSort(local, remote, warehouseId) {
+    var wid = warehouseId || (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    function owns(m) { return m && (m.warehouse === wid || !m.warehouse); }
     var map = new Map();
-    (local || []).forEach(function (m) { map.set(m.id, m); });
-    (remote || []).forEach(function (m) {
+    (local || []).filter(owns).forEach(function (m) { map.set(m.id, m); });
+    (remote || []).filter(owns).forEach(function (m) {
       var prev = map.get(m.id);
       if (prev && (prev.photos && prev.photos.length) && !(m.photos && m.photos.length) && (m.photoUrls && m.photoUrls.length)) {
         map.set(m.id, Object.assign({}, m, { photos: prev.photos }));

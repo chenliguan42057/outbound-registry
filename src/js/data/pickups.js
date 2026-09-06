@@ -20,7 +20,11 @@
       confirmed: false,
       shipped: false,
       items: [],
-      note: ""
+      note: "",
+      /* 仓库归属标记（2026-09-06 跨仓隔离修复）：记录创建时即打上当前仓库 id，
+         深圳="shenzhen" / 赛迪斯="saidis"。所有写路径（pushPickup/pushAllPickups/
+         mergeAndSort/savePickups）均按此字段拒绝跨仓写入，从根上杜绝数据串仓。 */
+      warehouse: (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen"
     }, payload);
     State.pickups.unshift(pk);
     State.savePickups();
@@ -45,11 +49,15 @@
 
   /** 合并策略：同 id 冲突时，若本地已出库而云端旧副本未出库，保留本地版本（操作状态以本地为准，
       防止推送失败后云端旧副本把「已出库」回退成「未出库」导致重复确认出库）；其余情况云端覆盖本地；
-      排序 = time 降序，次 _ts 降序（与记录一致） */
-  function mergeAndSort(local, remote) {
+      排序 = time 降序，次 _ts 降序（与记录一致）。
+      warehouseId 参数（2026-09-06 跨仓隔离）：仅保留归属当前仓库的记录，
+      跨仓记录一律丢弃——这是内存态最后一道防线，配合 pushPickup 拒绝跨仓写入，彻底杜绝串仓。 */
+  function mergeAndSort(local, remote, warehouseId) {
+    var wid = warehouseId || (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    function owns(p) { return p && (p.warehouse === wid || !p.warehouse); }  // 无标记记录按迁移兼容保留
     var map = new Map();
-    (local || []).forEach(function (p) { map.set(p.id, p); });
-    (remote || []).forEach(function (p) {
+    (local || []).filter(owns).forEach(function (p) { map.set(p.id, p); });
+    (remote || []).filter(owns).forEach(function (p) {
       var lp = map.get(p.id);
       if (lp && lp.shipped === true && p.shipped !== true) return;   // 保留本地「已出库」操作状态
       if (lp && (lp.photos && lp.photos.length) && !(p.photos && p.photos.length) && (p.photoUrls && p.photoUrls.length)) {

@@ -87,8 +87,18 @@
     saveSearch: function (s) { Store.set(Config.SEARCH_KEY, s); },
 
     /* ---- 待取货（键按当前系统：outbound_pickups_v2 / outbound_saidis_pickups_v2） ---- */
-    loadPickups: function () { return Store.get(Config.Sys.key("pickups_v2"), []); },
-    savePickups: function (list) { Store.set(Config.Sys.key("pickups_v2"), list); },
+    /* 待取货（2026-09-06 跨仓隔离）：读写均按当前仓库过滤，丢弃明确属于其他仓的残留记录
+       （防御旧版串仓污染残留在 localStorage 的脏数据；无 warehouse 字段的旧记录按迁移兼容保留）。 */
+    loadPickups: function () {
+      var wid = Config.Sys.current().id;
+      var arr = Store.get(Config.Sys.key("pickups_v2"), []);
+      return (arr || []).filter(function (p) { return !p || !p.warehouse || p.warehouse === wid; });
+    },
+    savePickups: function (list) {
+      var wid = Config.Sys.current().id;
+      var clean = (list || []).filter(function (p) { return !p || !p.warehouse || p.warehouse === wid; });
+      Store.set(Config.Sys.key("pickups_v2"), clean);
+    },
 
     /* ---- 待取货登记草稿（按系统隔离） ---- */
     loadPickupsDraft: function () { return Store.get(Config.Sys.key("pickup_draft"), null); },
@@ -96,8 +106,17 @@
     clearPickupsDraft: function () { Store.remove(Config.Sys.key("pickup_draft")); },
 
     /* ---- 备忘录（键按当前系统：outbound_memos_v2 / outbound_saidis_memos_v2） ---- */
-    loadMemos: function () { return Store.get(Config.Sys.key("memos_v2"), []); },
-    saveMemos: function (list) { Store.set(Config.Sys.key("memos_v2"), list); },
+    /* 备忘录（2026-09-06 跨仓隔离）：同待取货，读写按当前仓库过滤。 */
+    loadMemos: function () {
+      var wid = Config.Sys.current().id;
+      var arr = Store.get(Config.Sys.key("memos_v2"), []);
+      return (arr || []).filter(function (m) { return !m || !m.warehouse || m.warehouse === wid; });
+    },
+    saveMemos: function (list) {
+      var wid = Config.Sys.current().id;
+      var clean = (list || []).filter(function (m) { return !m || !m.warehouse || m.warehouse === wid; });
+      Store.set(Config.Sys.key("memos_v2"), clean);
+    },
 
     /* ---- 盘点校准记录（键按当前系统：outbound_stocktakes_v1 / outbound_saidis_stocktakes_v1） ---- */
     loadStocktakes: function () { return Store.get(Config.Sys.key("stocktakes_v1"), []); },
