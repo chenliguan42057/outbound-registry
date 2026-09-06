@@ -181,7 +181,9 @@ def load_catalog_wps():
             if w is None:
                 continue
             if isinstance(w, dict) and w.get("sheet") and w.get("col"):
-                WPS_MAP[nm] = (w["sheet"], w["col"])
+                # 必须是 list 而非 tuple：classify() 用 isinstance(v, list) 判定要不要写金山，
+                # 之前写成 tuple 会被误判成 excluded，导致 catalog 新增货品永远进不了台账。
+                WPS_MAP[nm] = [w["sheet"], w["col"]]
             else:
                 WPS_MAP[nm] = None
             n += 1
@@ -219,11 +221,11 @@ def classify(name):
     nm = (name or "").strip()
     if nm in WPS_MAP:
         v = WPS_MAP[nm]
-        return ("mapped", v) if isinstance(v, list) else ("excluded", None)
+        return ("mapped", list(v)) if isinstance(v, (list, tuple)) else ("excluded", None)
     norm = NAME_MAP.get(nm)
     if norm and norm in WPS_MAP:
         v = WPS_MAP[norm]
-        return ("mapped", v) if isinstance(v, list) else ("excluded", None)
+        return ("mapped", list(v)) if isinstance(v, (list, tuple)) else ("excluded", None)
     return ("unknown", None)
 
 
