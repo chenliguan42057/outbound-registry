@@ -90,7 +90,12 @@
   async function load() {
     if (loaded) return;
     loaded = true;
+    // 双仓隔离守卫：记录本次加载发起时的仓库。加载是异步的（云端拉取最长 15s），
+    // 若期间用户切到另一仓（switchSystem → reload 会再发起一次新仓加载），
+    // 后返回的旧仓目录绝不能覆盖新仓内存基准 → 结果过期直接丢弃。
+    var sysId = Config.Sys.current().id;
     var cloud = await fetchCloud();
+    if (Config.Sys.current().id !== sysId) return;   // 已切仓：本次目录过期，丢弃（新仓加载会接管）
     if (cloud && Array.isArray(cloud.products)) {
       catalog = cloud;
       applyToConfig(cloud);
