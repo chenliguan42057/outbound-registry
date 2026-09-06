@@ -79,8 +79,10 @@ def send_action_card(text, title, webhook, secret, btns=None, btn_orientation="0
     # 放在 send_action_card 统一处理，notify/remind/memo/pending/stock/sync_health/summary/pushmenu 全一致。
     sys_name = (os.environ.get("SYS_NAME") or "").strip()
     if sys_name:
+        # 系统名前导 emoji：深圳细胞=🏢，赛迪斯=🏬（按仓区分，可调整）
+        sys_emoji = {"赛迪斯": "🏬", "深圳细胞": "🏢"}.get(sys_name, "🏢")
         # text 顶部加 # 一级标题大块标记（视觉显眼，手机/电脑端一致）
-        text = "# 🏢 **【 " + sys_name + " 】**\n\n---\n\n" + text
+        text = "# {} **【 {} 】**\n\n---\n\n".format(sys_emoji, sys_name) + text
         # 钉钉 actionCard 关键词校验只看 title 字段（实测），title 补系统名前缀确保过校验
         if sys_name not in title:
             title = "{} · {}".format(sys_name, title)
