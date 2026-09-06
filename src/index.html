@@ -101,75 +101,20 @@
     });
   })();
 
-  /* 全局错误兜底：任一模块抛错或资源 404 时，页面不再静默白屏，
-     而是顶部弹出可关闭的错误条并给出旧版回退入口。
-     刻意使用内联样式、不依赖任何外部 CSS/JS —— 样式表自身加载失败时也必须可见。 */
+  /* 全局错误兜底（2026-09-06 调整）：主理人明确要求不再弹出
+     「页面有部分功能未能正常加载 / 异步操作失败」错误条，
+     改为仅写入浏览器控制台（console.warn），排查时在 F12 看，页面上不再出现任何遮挡提示。
+     保留 window.__reportFatal 供 main.js 启动失败时复用（同样只记日志）。 */
   (function () {
-    var MAX = 3;                       // 最多同时展示 3 条，防错误风暴刷屏
-    var seen = Object.create(null);
-    var shown = 0;
-    var bar = null;
-
-    function ensureBar() {
-      if (bar && bar.parentNode) return bar;
-      if (!document.body) return null;
-      bar = document.createElement('div');
-      bar.id = 'fatal-error-bar';
-      bar.setAttribute('role', 'alert');
-      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;' +
-        'font:13px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;' +
-        'padding:10px 12px;box-sizing:border-box;background:#fff2f0;color:#a8071a;' +
-        'border-bottom:1px solid #ffccc7;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
-        'max-height:40vh;overflow:auto;';
-      document.body.appendChild(bar);
-      return bar;
-    }
-
     function report(msg) {
       if (!msg) return;
-      msg = String(msg).slice(0, 200);
-      if (seen[msg]) return;           // 同一错误只报一次
-      seen[msg] = 1;
-      if (shown >= MAX) return;
-      var host = ensureBar();
-      if (!host) {                     // body 尚未解析，等 DOM 就绪后补报
-        seen[msg] = 0;
-        document.addEventListener('DOMContentLoaded', function () { report(msg); });
-        return;
-      }
-      shown++;
-      var row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:2px 0;';
-      var txt = document.createElement('span');
-      txt.style.cssText = 'flex:1;word-break:break-all;';
-      txt.textContent = '页面有部分功能未能正常加载：' + msg;
-      var reload = document.createElement('a');
-      reload.href = location.href;
-      reload.textContent = '刷新重试';
-      reload.style.cssText = 'color:#a8071a;font-weight:600;white-space:nowrap;';
-      var legacy = document.createElement('a');
-      legacy.href = '?legacy=1';
-      legacy.textContent = '用旧版打开';
-      legacy.style.cssText = 'color:#a8071a;font-weight:600;white-space:nowrap;';
-      var close = document.createElement('button');
-      close.type = 'button';
-      close.textContent = '\u00d7';
-      close.setAttribute('aria-label', '关闭提示');
-      close.style.cssText = 'border:0;background:transparent;color:#a8071a;font-size:18px;line-height:1;cursor:pointer;padding:0 2px;';
-      close.onclick = function () {
-        if (row.parentNode) row.parentNode.removeChild(row);
-        if (bar && !bar.children.length && bar.parentNode) { bar.parentNode.removeChild(bar); bar = null; }
-      };
-      row.appendChild(txt); row.appendChild(reload); row.appendChild(legacy); row.appendChild(close);
-      host.appendChild(row);
+      try { console.warn("[app]", String(msg).slice(0, 300)); } catch (e) {}
     }
-
     window.addEventListener('error', function (e) {
       // 资源加载失败不冒泡到 window.onerror，只能在捕获阶段从 e.target 识别
       var t = e.target;
       if (t && t !== window && (t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IMG')) {
-        var url = t.src || t.href || '';
-        report('资源加载失败 ' + url.split('/').slice(-2).join('/'));
+        report('资源加载失败 ' + String(t.src || t.href || '').split('/').slice(-2).join('/'));
         return;
       }
       report((e.message || '未知错误') +
@@ -272,9 +217,9 @@
   <script defer src="js/ui/shortcuts.js?v=__CACHE_BUST__"></script>
   <script defer src="js/ui/ux.js?v=__CACHE_BUST__"></script>
   <script defer src="js/ui/dingtalk.js?v=__CACHE_BUST__"></script>
-  <!-- V2 试点（最后加载）：emoji→SVG 图标替换 + Web Audio 合成音效。
-       两者开头都判断 <html class="v2">，非试点模式直接 return，不触碰任何既有功能。 -->
+  <!-- V2 试点（最后加载）：emoji→SVG 图标替换。
+       开头判断 <html class="v2">，非试点模式直接 return，不触碰任何既有功能。
+       2026-09-06 按主理人要求移除 sound.js（右下角喇叭按钮 + 点击/结果音效不再加载）。 -->
   <script defer src="js/ui/icons.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ui/sound.js?v=__CACHE_BUST__"></script>
 </body>
 </html>

@@ -186,6 +186,9 @@
         selectedEntity = val;            // 立即同步选中态（视觉"点一下就亮"）
         renderEntityChips();
         appV.switchSystem(sysOf);
+        // 落地页顶栏仓标识跟随实时更新（仅落地页存在该元素；管理页内此行为空无副作用）
+        var sysTag = document.getElementById("landingSysTag");
+        if (sysTag) sysTag.textContent = Config.Sys.name();
         return;
       }
       setEntitySelected(val);

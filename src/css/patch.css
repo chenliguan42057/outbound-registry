@@ -455,3 +455,64 @@ html { scroll-behavior: smooth; }
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* ============================================================
+   十二、落地页精简（2026-09-06 主理人要求）
+   ------------------------------------------------------------
+   ① 顶栏「管理」按钮隐形但保留原位可点（点击仍弹密码框）——
+      opacity:0 可点击（visibility:hidden 则完全不可点），故用 opacity。
+   ② 出库表单「提交登记/清空」：默认 .btn 是靛蓝紫渐变（--grad-main），
+      落在薄荷白卡片上显违和；改为跟随主题强调色渐变 + 等大圆角，两钮协调。
+   ============================================================ */
+.landing-topbar .landing-admin {
+  opacity: 0 !important;
+  filter: none !important;
+  pointer-events: auto;      /* 保持可点击，位置不变 */
+}
+.landing-topbar .landing-admin:focus-visible { opacity: .7 !important; }
+
+/* 提交登记 = 主 CTA（薄荷渐变，白字）；清空 = 白底描边，两钮同高同圆角 */
+.landing .actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+.landing .actions .btn {
+  min-width: 0;
+  min-height: 46px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  padding: 0 30px;
+}
+.landing #outSubmit {
+  background: var(--grad-primary);      /* 薄荷强调渐变，替代默认紫色，与落地页主色一致 */
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 18px rgba(87, 130, 111, .26);
+}
+.landing #outSubmit:hover { filter: brightness(1.05); }
+.landing #outSubmit:active { transform: scale(.97); }
+.landing #outReset.btn.ghost {
+  background: rgba(255, 255, 255, .72);
+  color: var(--mint-600, #57826F);
+  border: 1px solid rgba(87, 130, 111, .45);
+  box-shadow: none;
+}
+.landing #outReset.btn.ghost:hover { background: #fff; }
+/* 桌面：两个按钮在卡片内靠右成组，收口不突兀 */
+@media (min-width: 561px) {
+  .landing .actions { justify-content: flex-end; }
+}
+/* 手机：两钮各占一半并排 */
+@media (max-width: 560px) {
+  .landing .actions { justify-content: stretch; flex-wrap: nowrap; }
+  .landing .actions .btn { flex: 1 1 0; }
+}
+html[data-theme="dark"] .landing #outReset.btn.ghost {
+  background: rgba(30, 40, 35, .55);
+  color: var(--mint-600, #9CC4AF);
+  border-color: rgba(156, 196, 175, .4);
+}
+html[data-theme="dark"] .landing #outReset.btn.ghost:hover { background: rgba(42, 58, 50, .9); }

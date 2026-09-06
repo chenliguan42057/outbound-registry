@@ -154,18 +154,7 @@
       btn.addEventListener("click", openSettings);
       right.insertBefore(btn, right.firstChild);
     }
-    // 落地页顶栏（管理按钮前）
-    var landing = document.querySelector(".landing-topbar");
-    if (landing && !landing.querySelector(".ux-settings-btn")) {
-      var lb = document.createElement("button");
-      lb.type = "button";
-      lb.className = "win-topbar-sync ux-settings-btn";
-      lb.title = "显示与体验设置";
-      lb.style.width = "34px"; lb.style.height = "34px";
-      lb.innerHTML = UI.icon("settings", 17);
-      lb.addEventListener("click", openSettings);
-      landing.insertBefore(lb, landing.querySelector(".landing-admin"));
-    }
+    // 落地页顶栏：2026-09-06 主理人要求移除 ⚙ 设置按钮（管理页顶栏保留），不再注入。
   }
 
   /* ================= 视图切换淡入（流畅顺捷 D7） ================= */

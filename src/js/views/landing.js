@@ -1,7 +1,7 @@
 /**
- * landing.js — 落地页：顶栏（品牌标题 + 卡通管理按钮）+ 免密出库表单（复用 Views.out 全能力）
- * 表单下方「最近提交」记录区域：只读展示最新 5 条（时间/领取人/部门/货物×数量/状态徽标）。
- * 页面渲染时先展示本地缓存，再自动从云端 syncPull 拉取最新并重渲染（刷新首页即可看到客户最新提交）。
+ * landing.js — 落地页：顶栏（品牌标题 + 当前仓标识 + 隐形管理入口）+ 免密出库表单（复用 Views.out 全能力）
+ * 2026-09-06 精简：移除「最近提交」卡片与 AI 浮动小机器人；「管理」按钮隐形但保留原位可点（弹密码框）。
+ * 顶栏仓标识（#landingSysTag）随法人切换实时更新（由 out.js 在 switchSystem 后写入）。
  * 管理入口：未登录弹登录框（UI.showLoginDialog），成功后跳 #/app/out-records；已登录直接进入。
  * pendingEditId：出库记录模块编辑某条记录时设置，落地页渲染后自动进入编辑态（保留照片等全字段）。
  */
@@ -13,167 +13,8 @@
   var Router = window.App.Router;
   var Config = window.App.Config;
   var Auth = window.App.Auth;
-  var State = window.App.State;
-  var Records = window.App.Records;
-  var Cloud = window.App.Cloud;
 
   var pendingEditId = null;
-
-  var RECENT_LIMIT = 5;
-
-  /* 云端首拉进行中标记。
-     换设备/无痕/清缓存首次进入时 State.list 为空，若直接渲染「暂无提交记录」，
-     用户会误以为自己之前提交的数据丢了（假空态）。拉取期间改显加载态。 */
-  var recentLoading = false;
-
-  /** 时间短格式：当年省略年份 "MM-DD HH:mm"，跨年补全 "YYYY-MM-DD HH:mm" */
-  function fmtRecentTime(t) {
-    if (!t) return "-";
-    var d = new Date(t);
-    if (isNaN(d.getTime())) return String(t);
-    var p = Util.pad2;
-    var full = Util.todayLocal(d);                       // "YYYY-MM-DD"
-    var datePart = (d.getFullYear() === new Date().getFullYear()) ? full.slice(5) : full;
-    return datePart + " " + p(d.getHours()) + ":" + p(d.getMinutes());
-  }
-
-  /** 货物文案：「名称×数量」逗号连接（超长由 CSS 截断） */
-  function fmtItems(rec) {
-    var items = (rec && rec.items) || [];
-    if (!items.length) return "-";
-    return items.map(function (it) {
-      return String(it.name == null ? "" : it.name) + "×" + String(it.qty == null ? "" : it.qty);
-    }).join("，");
-  }
-
-  /** 状态徽标 HTML：pending 红点「未提单」/ submitted 绿点「已提单」/ 入库无徽标
-      P1 增强：记录若在本机待同步队列（未推上云端）→ 显示「⚠️ 待同步」，优先于「未提单」，
-      让用户一眼看出这条没同步上去，而不是误以为只是流程上未提单。 */
-  function statusBadge(rec) {
-    if (rec && Cloud.loadQueue && Cloud.loadQueue().indexOf(rec.id) !== -1) {
-      return '<span class="status-pill static pending"><span class="dot"></span>待同步</span>';
-    }
-    var st = Records.getStatus(rec);
-    if (st === "pending") return '<span class="status-pill static pending"><span class="dot"></span>未提单</span>';
-    if (st === "submitted") return '<span class="status-pill static submitted"><span class="dot"></span>已提单</span>';
-    return "";
-  }
-
-  /** 单条骨架行（列表加载态用） */
-  function skelRow() {
-    return '<div class="recent-skel-row">' +
-      '<span class="skeleton recent-skel-avatar" aria-hidden="true"></span>' +
-      '<span class="skeleton recent-skel-line" aria-hidden="true"></span>' +
-      '<span class="skeleton recent-skel-line short" aria-hidden="true"></span>' +
-      '</div>';
-  }
-
-  /** 渲染最近提交列表（读 State.list，按 time 降序取最新 5 条；无记录显示空态） */
-  function renderRecent() {
-    var listEl = Util.$("recentList");
-    if (!listEl) return;
-    var arr = State.list.slice().sort(function (a, b) {
-      return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
-    }).slice(0, RECENT_LIMIT);
-
-    if (!arr.length) {
-      if (recentLoading) {
-        // 骨架屏：列表加载态，避免「暂无记录」假空态闪现
-        listEl.innerHTML = '<div class="recent-skel" role="status" aria-live="polite" aria-label="正在从云端加载最近提交…">' +
-          skelRow() + skelRow() + skelRow() + '</div>';
-      } else {
-        listEl.innerHTML = '<div class="recent-empty">暂无提交记录，填写上方表单提交后会自动显示在这里。</div>';
-      }
-      return;
-    }
-
-    listEl.innerHTML = arr.map(function (rec) {
-      var who = [];
-      if (rec.picker) who.push(Util.esc(rec.picker));
-      if (rec.dept) who.push(Util.esc(rec.dept));
-      // 出库记录出货仓库单位（若有）：追加展示，便于快速识别法人口径
-      if (rec.entity && rec.type !== "in") who.push(Util.esc(rec.entity));
-      var whoHtml = who.length ? who.join(" · ") : "—";
-      return '<div class="recent-item" data-id="' + Util.esc(rec.id || "") + '">' +
-        '<div class="recent-item-main">' +
-          '<div class="recent-item-top">' +
-            '<span class="recent-item-time">' + Util.esc(fmtRecentTime(rec.time)) + '</span>' +
-            (rec.orderNo ? '<span class="recent-item-no">' + Util.esc(rec.orderNo) + '</span>' : '') +
-            '<span class="recent-item-who">' + whoHtml + '</span>' +
-          '</div>' +
-          '<div class="recent-item-items">' + Util.esc(fmtItems(rec)) + '</div>' +
-        '</div>' +
-        '<div class="recent-item-side">' + statusBadge(rec) + '</div>' +
-      '</div>';
-    }).join("");
-  }
-
-  /** 云端刷新最近提交：有 token → syncPull → 重渲染；失败/无 token → 本地缓存 + 可选轻提示 */
-  function refreshRecentWithCloud() {
-    if (!Cloud.hasToken()) {
-      recentLoading = false;
-      renderRecent();
-      return Promise.resolve(false);
-    }
-    recentLoading = true;
-    renderRecent();   // 同一帧内把空态换成加载态，用户看不到「暂无提交记录」的闪现
-    return Cloud.syncPull({ onStatus: function () {} }).then(function (res) {
-      recentLoading = false;
-      renderRecent();
-      if (!res || !res.ok) {
-        Util.toast("云端同步失败，已显示本地缓存", true);
-        return false;
-      }
-      return true;
-    }).catch(function () {
-      recentLoading = false;
-      renderRecent();
-      Util.toast("云端同步失败，已显示本地缓存", true);
-      return false;
-    });
-  }
-
-  /** 清空最近 RECENT_LIMIT 条提交记录（2026-09-06 主理人要求）：
-      二次确认（删除条数 / 库存影响提示）→ 必填删除理由 → 本地 Records.remove + 云端墓碑队列。
-      复用 doBulkDel 的删除流程，但目标固定为"最近"列表，避免误删历史数据。 */
-  function getRecentList() {
-    return State.list.slice().sort(function (a, b) {
-      return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
-    }).slice(0, RECENT_LIMIT);
-  }
-
-  async function clearRecentWithConfirm() {
-    var recs = getRecentList();
-    if (!recs.length) { Util.toast("最近提交为空，无可清空", true); return; }
-    var stockAffects = recs.filter(function (r) { return r.affectsStock === true; }).length;
-    var ok = await UI.confirmDialog(
-      "将清空最近 " + recs.length + " 条记录" + (stockAffects ? "（" + stockAffects + " 条影响库存，库存会自动恢复）" : "") + "。此操作不可撤销，是否继续？",
-      "清空最近提交"
-    );
-    if (!ok) return;
-    var reasonRes = await UI.promptDialog(
-      "请填写清空理由：",
-      "例如：测试数据 / 重复登记 / 不再需要…",
-      "清空最近 " + recs.length + " 条",
-      "确认清空"
-    );
-    if (!reasonRes.ok) return;
-    var reason = reasonRes.value || "未填写";
-    // 先全部入本地墓碑队列（云端推送失败也能在下次同步补推），再删除本地 → 中途失败不会让记录复活
-    if (Cloud.hasToken()) recs.forEach(function (r) { Cloud.enqueueTomb(r.id, reason); });
-    recs.forEach(function (r) { Records.remove(r.id); });
-    renderRecent();
-    Util.toast("已清空 " + recs.length + " 条（理由：" + reason + "）");
-    // 后台异步推云端墓碑
-    if (Cloud.hasToken()) {
-      for (var i = 0; i < recs.length; i++) {
-        try {
-          await Cloud.delWithTombstone(recs[i], reason);
-          Cloud.dequeueTomb(recs[i].id);
-        } catch (e) { /* 失败已在本地墓碑队列，下次同步自动补推 */ }
-      }
-    }
-  }
 
   function render() {
     var el = Util.$("view-landing");
@@ -182,48 +23,22 @@
       '<div class="landing">' +
         '<header class="landing-topbar">' +
           '<span class="landing-brand">' + Util.esc(Config.BRAND_TITLE) +
-            '<span class="landing-sys" style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#fff;vertical-align:2px;background:linear-gradient(120deg,#A79ED0 0%,#7FB3A5 100%)">' +
+            '<span class="landing-sys" id="landingSysTag" style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#fff;vertical-align:2px;background:linear-gradient(120deg,#A79ED0 0%,#7FB3A5 100%)">' +
               Util.esc(Config.Sys.name()) + '</span></span>' +
           '<button type="button" class="landing-admin" id="landingAdmin"><span class="landing-admin-emoji">🖥️</span> 管理 ➜</button>' +
         '</header>' +
         '<div class="landing-body">' +
           '<div class="landing-form" id="landingForm"></div>' +
-          '<section class="recent-card" id="recentBox" aria-label="最近提交">' +
-            '<div class="recent-card-head">' +
-              '<span class="recent-icon">🕘</span>' +
-              '<span class="recent-card-title">最近提交</span>' +
-              '<span class="recent-card-tag">最新 ' + RECENT_LIMIT + ' 条 · 刷新自动同步</span>' +
-              '<button type="button" class="recent-clear" id="recentClearBtn" title="清空最近 ' + RECENT_LIMIT + ' 条记录（不可恢复，库存会自动恢复）" aria-label="清空最近提交">🗑 清空</button>' +
-            '</div>' +
-            '<div class="recent-list" id="recentList"></div>' +
-          '</section>' +
         '</div>' +
-        '<button type="button" class="ai-fab" id="aiFab" title="AI 助手">🤖</button>' +
       '</div>';
 
+    // 顶栏「管理」按钮：位置不变、肉眼不可见（CSS opacity:0），点击仍弹登录框 —— 主理人 2026-09-06 要求
     Util.$("landingAdmin").addEventListener("click", function () {
       if (Auth.isAuthed()) { Router.navigate("/app/out-records"); return; }
       UI.showLoginDialog().then(function (ok) {
         if (ok) Router.navigate("/app/out-records");
       });
     });
-
-    // AI 助手浮动气泡（免登录即可用）
-    Util.$("aiFab").addEventListener("click", function () {
-      window.App.AI.Chat.openFloat();
-    });
-
-    // 最近提交列表事件委托（只读：点击提示前往管理后台；本项目禁止内联 onclick）
-    Util.$("recentList").addEventListener("click", function (e) {
-      var t = e.target;
-      var item = t && t.closest ? t.closest(".recent-item") : null;
-      if (!item) return;
-      Util.toast("查看完整记录请前往管理后台");
-    });
-
-    // 「🗑 清空最近」按钮：一键清空落地页展示的最近 RECENT_LIMIT 条记录（带确认 + 删除理由 + 云端墓碑同步）
-    var recentClearBtn = Util.$("recentClearBtn");
-    if (recentClearBtn) recentClearBtn.addEventListener("click", clearRecentWithConfirm);
 
     // 复用 out.js 免密出库表单（out* 前缀 id 仅存在于落地页）
     window.App.Views.out.render(Util.$("landingForm"));
@@ -234,22 +49,12 @@
       pendingEditId = null;
       window.App.Views.out.edit(id);
     }
-
-    // 最近提交：先本地立即显示（有 token 时空列表显加载态而非假空态），再云端拉取刷新
-    recentLoading = Cloud.hasToken();
-    renderRecent();
-    refreshRecentWithCloud();
-
-    // 队列变更 → 刷新最近提交徽标（提交失败入队时立刻把「未提单」换成「待同步」）
-    if (Cloud.onQueueChange) Cloud.onQueueChange(renderRecent);
   }
 
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
   window.App.Views.landing = {
     render: render,
-    renderRecent: renderRecent,
-    refreshRecentWithCloud: refreshRecentWithCloud,
     get pendingEditId() { return pendingEditId; },
     set pendingEditId(v) { pendingEditId = v; }
   };
