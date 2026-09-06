@@ -611,6 +611,49 @@ label .req {
   margin-left: 4px;
   vertical-align: middle;
 }
+/* ================= 入库来源（source）：登记页 chips + 自定义行 + 列表/报表来源标签 ================= */
+.src-pick { display: flex; flex-direction: column; gap: 8px; }
+.src-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.src-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; line-height: 1;
+  padding: 7px 12px;
+  border: 1px solid var(--line-soft, #DCE6E0);
+  border-radius: 999px;
+  background: var(--card-soft, #F7FAF7);
+  color: var(--ink-800, #2E3A37);
+  cursor: pointer;
+  transition: all .15s;
+  user-select: none;
+}
+.src-chip:hover { border-color: var(--ok, #2E8B57); color: var(--ok, #2E8B57); }
+.src-chip.on {
+  background: #E6F4EA; border-color: #7FBF8F; color: #1E6B2E; font-weight: 600;
+  box-shadow: 0 0 0 3px rgba(46, 139, 87, .12);
+}
+.src-chip.static { cursor: not-allowed; opacity: .95; }
+.src-chip .src-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  font-size: 12px; line-height: 1;
+  color: #B96A4A; background: #FBE9E2;
+  margin-left: 2px;
+}
+.src-chip .src-x:hover { color: #fff; background: #C0502A; }
+.src-custom-row { display: flex; gap: 8px; align-items: center; max-width: 460px; }
+/* 列表「来源」列/详情：绿色小标签（与 ⇄ 调拨的淡紫标签区分） */
+.src-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #1E6B2E;
+  background: #E9F5EC;
+  border: 1px solid #BCE3C8;
+  border-radius: 6px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.cell-sub { font-size: 11px; color: var(--muted, #7A8A85); margin-left: 4px; }
 .tag.ok-tag { color: var(--ok); background: var(--ok-bg); }
 .tag.danger-tag { color: var(--err); background: var(--err-bg); }
 

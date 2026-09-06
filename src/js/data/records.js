@@ -3,6 +3,8 @@
  * 记录 schema 冻结：{id, time, picker?, dept?, purpose, items:[{name,qty}], photos:[dataURL], _ts, affectsStock, type?, status?}
  * status?: "pending" | "submitted" —— 仅出库记录（type 非 "in"）使用的可选字段；入库不写。
  * entity?: 出货仓库单位（仅出库记录，chip 必填）；note?: 备注（非必填）——均为纯追加可选字段。
+ * source?: 入库来源（厂家直发/采购/退货/盘点补录/自定义…；调拨入=调拨入库、调拨出=调拨出库）——纯追加可选字段。
+ * Records.InSource：入库来源词典（预设 + 按仓自定义存取 + 筛选匹配 + 展示取值），入库登记/记录列表/报表共用。
  */
 (function () {
   'use strict';
@@ -285,6 +287,64 @@
     Util.toast("已导出对账 CSV");
   }
 
+  /* ================= 入库来源（source）词典（2026-09-06） =================
+     预设 + 用户自定义来源。自定义来源存本机 localStorage、按仓隔离（Config.Sys.key），
+     「入库登记页新增一次 → 自动保存 → 入库记录/报表的下拉与 chips 立即可选」。
+     调拨来源不入自定义库：调拨入/调拨出由 transfer.js 写入记录 source 时系统自动打标。
+     match/of 对老数据兜底：只有 transferRole 没有 source 的旧调拨记录也能筛出来、能显示标记。 */
+  var SRC_PRESETS = ["厂家直发", "采购", "退货", "盘点补录"];
+  var SRC_TRANSFER_IN = "调拨入库";
+  var SRC_TRANSFER_OUT = "调拨出库";
+
+  function srcKey() {
+    var C = window.App.Config;
+    return (C && C.Sys && C.Sys.key) ? C.Sys.key("in_source_custom_v1") : "in_source_custom_v1";
+  }
+  function srcLoad() {
+    try {
+      var v = JSON.parse(localStorage.getItem(srcKey()) || "[]");
+      return Array.isArray(v) ? v.filter(function (x) { return x && typeof x === "string"; }) : [];
+    } catch (e) { return []; }
+  }
+  function srcSave(arr) {
+    try { localStorage.setItem(srcKey(), JSON.stringify(arr || [])); } catch (e) {}
+  }
+  /** 新增/选中自定义来源：预设或系统调拨来源不入自定义库；返回最终生效的来源名（去空格） */
+  function srcAdd(name) {
+    var n = String(name == null ? "" : name).trim();
+    if (!n) return "";
+    if (SRC_PRESETS.indexOf(n) !== -1) return n;
+    if (n === SRC_TRANSFER_IN || n === SRC_TRANSFER_OUT) return n;
+    var arr = srcLoad();
+    if (arr.indexOf(n) === -1) { arr.push(n); srcSave(arr); }
+    return n;
+  }
+  function srcRemove(name) {
+    srcSave(srcLoad().filter(function (x) { return x !== name; }));
+  }
+  /** 入库表单 chips / 下拉的完整可选来源 = 预设 + 自定义（自定义含手动新增与编辑旧单自动补齐） */
+  function srcOptions() {
+    return SRC_PRESETS.concat(srcLoad());
+  }
+  /** 筛选匹配：source 字段精确命中，或命中调拨来源时兼容仅有 transferRole 的旧记录 */
+  function srcMatch(r, sel) {
+    if (!sel) return true;
+    var s = String((r && r.source) || "");
+    if (s === sel) return true;
+    if (sel === SRC_TRANSFER_IN && (s === SRC_TRANSFER_IN || r.transferRole === "in")) return true;
+    if (sel === SRC_TRANSFER_OUT && (s === SRC_TRANSFER_OUT || r.transferRole === "out")) return true;
+    return false;
+  }
+  /** 记录 → 展示用来源：优先 source；旧调拨记录按 transferRole 兜底成 调拨入/调拨出 */
+  function srcOf(r) {
+    if (!r) return "";
+    var s = String(r.source || "");
+    if (s) return s;
+    if (r.transferRole === "in") return SRC_TRANSFER_IN;
+    if (r.transferRole === "out") return SRC_TRANSFER_OUT;
+    return "";
+  }
+
   window.App = window.App || {};
   window.App.Records = {
     create: create,
@@ -300,6 +360,17 @@
     toCsv: toCsv,
     exportCsv: exportCsv,
     toReconCsv: toReconCsv,
-    exportReconCsv: exportReconCsv
+    exportReconCsv: exportReconCsv,
+    InSource: {
+      PRESETS: SRC_PRESETS.slice(),
+      TRANSFER_IN: SRC_TRANSFER_IN,
+      TRANSFER_OUT: SRC_TRANSFER_OUT,
+      loadCustom: srcLoad,
+      addCustom: srcAdd,
+      removeCustom: srcRemove,
+      options: srcOptions,
+      match: srcMatch,
+      of: srcOf
+    }
   };
 })();

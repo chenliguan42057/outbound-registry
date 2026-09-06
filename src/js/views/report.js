@@ -15,6 +15,7 @@
 
   var container = null;
   var range = { start: "", end: "" };   // 日期范围（YYYY-MM-DD），空=不限制
+  var src = "";                         // 入库来源筛选（空=全部）
 
   function render(el) {
     container = el;
@@ -29,6 +30,7 @@
               '<input type="date" id="reportStart" style="width:130px;" />' +
               '<span class="muted">至</span>' +
               '<input type="date" id="reportEnd" style="width:130px;" />' +
+              '<select id="reportSource" class="search" style="width:150px;" title="按入库来源筛选（含调拨入/出）"></select>' +
               '<button type="button" class="btn sm" id="reportApply">筛选</button>' +
             '</div>' +
             '<button type="button" class="btn ghost sm" id="reportExport">&#11015; 导出 CSV</button>' +
@@ -80,6 +82,13 @@
       if (!arr.length) { Util.toast("当前区间没有记录可导出", true); return; }
       Records.exportCsv(arr);
     });
+    // 来源筛选下拉：全部来源 + 预设 + ⇄ 调拨入/出 + 本仓自定义（与入库登记 chips 同一数据源）
+    var srcSel = el.querySelector("#reportSource");
+    fillReportSource(srcSel);
+    srcSel.addEventListener("change", function () {
+      src = srcSel.value;
+      refresh();
+    });
 
     var tabs = el.querySelectorAll(".trend-tabs .btn");
     for (var i = 0; i < tabs.length; i++) {
@@ -94,14 +103,33 @@
     applyPreset("week");
   }
 
-  /** 按当前 range 过滤记录（日期基于 time 前 10 位 YYYY-MM-DD） */
+  /** 筛选标签的纯文本形式（去掉下拉里的 ⇄ 前缀） */
+  function srcLbl(v) {
+    var INS = Records.InSource;
+    if (v === INS.TRANSFER_IN) return "调拨入库";
+    if (v === INS.TRANSFER_OUT) return "调拨出库";
+    return v;
+  }
+
+  /** 来源下拉选项渲染（预设 + 调拨入/出 + 本仓自定义；当前值被删时补回以便清空） */
+  function fillReportSource(sel) {
+    var INS = Records.InSource;
+    var vals = [""].concat(INS.PRESETS.slice()).concat([INS.TRANSFER_IN, INS.TRANSFER_OUT]).concat(INS.loadCustom());
+    if (src && vals.indexOf(src) === -1) vals.push(src);
+    sel.innerHTML = vals.map(function (v) {
+      var lab = v === "" ? "全部来源"
+        : (v === INS.TRANSFER_IN ? "⇄ 调拨入库" : (v === INS.TRANSFER_OUT ? "⇄ 调拨出库" : v));
+      return '<option value="' + Util.esc(v) + '"' + (v === src ? " selected" : "") + '>' + Util.esc(lab) + '</option>';
+    }).join("");
+  }
+
+  /** 按当前 range + 来源 过滤记录（日期基于 time 前 10 位 YYYY-MM-DD） */
   function filteredRecords() {
-    var list = State.list;
-    if (!range.start && !range.end) return list;
-    return list.filter(function (r) {
+    return State.list.filter(function (r) {
       var t = String(r.time || "").slice(0, 10);
       if (range.start && t < range.start) return false;
       if (range.end && t > range.end) return false;
+      if (src && !Records.InSource.match(r, src)) return false;
       return true;
     });
   }
@@ -210,6 +238,7 @@
     var label = range.start
       ? (range.start + (range.end && range.end !== range.start ? " ~ " + range.end : ""))
       : "全部";
+    if (src) label += " · " + srcLbl(src);
     container.querySelector("#reportRangeLabel").textContent = label + " · " + list.length + " 条";
     if (!list.length) {
       container.querySelector("#reportTable").innerHTML = '<div class="empty">该区间暂无出入库记录</div>';
@@ -217,9 +246,11 @@
     }
     var rows = list.map(function (r) {
       var items = (r.items || []).map(function (it) { return Util.esc(it.name) + " ×" + it.qty; }).join("； ");
+      var s = Records.InSource.of(r);
       return '<tr>' +
         '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
         '<td>' + (r.type === "in" ? "入库" : "出库") + '</td>' +
+        '<td>' + (s ? '<span class="src-tag">' + Util.esc(s) + '</span>' : "-") + '</td>' +
         '<td>' + Util.esc(r.picker || "-") + '</td>' +
         '<td>' + Util.esc(r.purpose || "-") + '</td>' +
         '<td>' + items + '</td>' +
@@ -227,7 +258,7 @@
     }).join("");
     container.querySelector("#reportTable").innerHTML =
       '<div class="table-wrap"><table class="table"><thead><tr>' +
-      '<th>时间</th><th>类型</th><th>领取人</th><th>用途</th><th>货品</th>' +
+      '<th>时间</th><th>类型</th><th>来源</th><th>领取人</th><th>用途</th><th>货品</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
 

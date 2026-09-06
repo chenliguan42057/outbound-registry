@@ -318,6 +318,7 @@
           '</div>';
       }
       // ② 对方仓入库记录 → 云端直写对方 records/
+      var INS = (Records && Records.InSource) || {};
       var inRec = {
         id: Util.genId(),
         _ts: Date.now(),
@@ -329,6 +330,7 @@
         dept: srcName,
         note: note,
         affectsStock: true,
+        source: INS.TRANSFER_IN || "调拨入库",   // 入库来源打标：两端报表/列表按「调拨入库」统计
         transferId: transferId,
         transferRole: "in",
         transferNo: transferNo
@@ -349,6 +351,7 @@
         entity: Config.Sys.entity(),
         note: note,
         affectsStock: true,
+        source: INS.TRANSFER_OUT || "调拨出库",   // 出库来源打标：报表/出库列表可按「调拨出库」筛出
         transferId: transferId,
         transferRole: "out",
         transferNo: transferNo

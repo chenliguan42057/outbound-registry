@@ -48,7 +48,10 @@
             '<button type="button" class="btn ghost sm" id="recBulkCancel">取消选择</button>' +
           '</div>' +
           '<div class="rec-filters">' +
-            '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "来源" : "部门/客户") + '" autocomplete="off" />' +
+            (isIn
+              ? '<select id="recSource" class="search" title="按来源筛选"></select>'
+              : '<select id="recSource" class="search" title="按来源筛选"><option value="">全部（普通出库+调拨）</option><option value="' + Records.InSource.TRANSFER_OUT + '">⇄ 调拨出库</option></select>') +
+            '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "部门/对方仓" : "部门/客户") + '" autocomplete="off" />' +
             '<input type="text" id="recPicker" class="search" placeholder="' + (isIn ? "经办人" : "领取人") + '" autocomplete="off" />' +
             '<input type="date" id="recFrom" class="search" title="开始日期" />' +
             '<input type="date" id="recTo" class="search" title="结束日期" />' +
@@ -58,17 +61,25 @@
 
       listBox = Util.$("recListBox");
       var deptEl = Util.$("recDept"), pickerEl = Util.$("recPicker"),
-          fromEl = Util.$("recFrom"), toEl = Util.$("recTo");
+          fromEl = Util.$("recFrom"), toEl = Util.$("recTo"), srcEl = Util.$("recSource");
       deptEl.value = searchState.dept;
       pickerEl.value = searchState.picker;
       fromEl.value = searchState.from;
       toEl.value = searchState.to;
+      // 来源下拉：状态键按列表类型分存（srcIn / srcOut），避免入库、出库两个列表共用搜索状态时互相串值
+      var savedSrc = isIn
+        ? (searchState.srcIn || "")
+        : (searchState.srcOut === Records.InSource.TRANSFER_OUT ? Records.InSource.TRANSFER_OUT : "");
+      if (isIn) fillInSourceOptions(srcEl, savedSrc);
+      srcEl.value = savedSrc;
 
       function save() {
         searchState.dept = deptEl.value.trim();
         searchState.picker = pickerEl.value.trim();
         searchState.from = fromEl.value;
         searchState.to = toEl.value;
+        if (isIn) searchState.srcIn = srcEl.value;
+        else searchState.srcOut = (srcEl.value === Records.InSource.TRANSFER_OUT) ? Records.InSource.TRANSFER_OUT : "";
         Store.saveSearch(searchState);
         renderList();
       }
@@ -76,6 +87,7 @@
         input.addEventListener("input", save);
         input.addEventListener("change", save);
       });
+      srcEl.addEventListener("change", save);
 
       Util.$("recExport").addEventListener("click", function () {
         Records.exportCsv(filter());
@@ -154,6 +166,11 @@
         if (r.borrowed === true) return false;   // 已转入先借后还的出库单，不在普通出库记录列表显示
         if (searchState.dept && !(r.dept || "").toLowerCase().includes(searchState.dept.toLowerCase())) return false;
         if (searchState.picker && !(r.picker || "").toLowerCase().includes(searchState.picker.toLowerCase())) return false;
+        // 来源筛选（入库=预设/自定义/调拨入库；出库=调拨出库）。旧调拨记录无 source 时按 transferRole 兜底匹配
+        var srcSel = isIn
+          ? (searchState.srcIn || "")
+          : (searchState.srcOut === Records.InSource.TRANSFER_OUT ? Records.InSource.TRANSFER_OUT : "");
+        if (srcSel && !Records.InSource.match(r, srcSel)) return false;
         if (from !== null) {
           var t1 = new Date(r.time || 0).getTime();
           if (isNaN(t1) || t1 < from) return false;
@@ -173,6 +190,28 @@
         if (pa === 1) return (Number(b.pinnedAt) || 0) - (Number(a.pinnedAt) || 0);
         return 0;
       });
+    }
+
+    /** 入库列表「来源筛选」下拉选项：全部来源 + 预设 + ⇄ 调拨入库 + 本仓自定义（与入库登记 chips 同一数据源） */
+    function fillInSourceOptions(sel, cur) {
+      var INS = Records.InSource;
+      var vals = [""].concat(INS.PRESETS.slice()).concat([INS.TRANSFER_IN]).concat(INS.loadCustom());
+      // 当前选中值不在列表里（如自定义来源后来被删，但旧筛选仍引用）→ 补回，保证还能看到并清掉
+      if (cur && vals.indexOf(cur) === -1) vals.push(cur);
+      sel.innerHTML = vals.map(function (v) {
+        var lab = v === "" ? "全部来源" : (v === INS.TRANSFER_IN ? "⇄ 调拨入库" : v);
+        return '<option value="' + Util.esc(v) + '"' + (v === cur ? " selected" : "") + '>' + Util.esc(lab) + '</option>';
+      }).join("");
+    }
+
+    /** 入库记录「来源」列单元格：来源标签（旧调拨记录兜底 调拨入库）+ 对方仓小字 */
+    function srcCellHtml(r) {
+      var s = Records.InSource.of(r);
+      var dept = (r && r.dept) || "";
+      if (!s) return Util.esc(dept || "-");
+      var html = '<span class="src-tag"' + (dept ? ' title="' + Util.esc(dept) + '"' : '') + '>' + Util.esc(s) + '</span>';
+      if (dept && dept !== s) html += ' <span class="cell-sub">' + Util.esc(dept) + '</span>';
+      return html;
     }
 
     /** 云端同步后刷新（保留搜索框，重建表格） */
@@ -266,7 +305,7 @@
           '<td>' + Util.esc(r.picker || "-") + '</td>' +
           (!isIn ? '<td>' + statusPill(r) + '</td>' : '') +
           (!isIn ? '<td>' + Util.esc(r.entity || "-") + '</td>' : '') +
-          '<td>' + Util.esc(r.dept || "-") + '</td>' +
+          (isIn ? '<td>' + srcCellHtml(r) + '</td>' : '<td>' + Util.esc(r.dept || "-") + '</td>') +
           '<td>' + Util.esc(r.purpose || "-") + '</td>' +
           '<td class="items-cell">' + items + '</td>' +
           '<td>' + qtySum + '</td>' +
@@ -389,6 +428,11 @@
       if (r.transferNo) {
         rows += '<div class="detail-row"><span class="k">调拨单号</span><span class="v">' + Util.esc(r.transferNo) + '</span></div>';
       }
+      // 入库来源（2026-09-06）：与列表「来源」列同源；调拨入/出在类型旁另有 ⇄ 记号
+      var srcShown = isRecIn ? Records.InSource.of(r) : "";
+      if (srcShown) {
+        rows += '<div class="detail-row"><span class="k">来源</span><span class="v"><span class="src-tag">' + Util.esc(srcShown) + '</span></span></div>';
+      }
       if (!isRecIn) {
         rows += '<div class="detail-row"><span class="k">状态</span><span class="v">' + statusBadge(r) + '</span></div>';
         rows += '<div class="detail-row"><span class="k">领取人</span><span class="v">' + Util.esc(r.picker || "-") + '</span></div>';
@@ -397,7 +441,7 @@
           rows += '<div class="detail-row"><span class="k">出货仓库单位</span><span class="v">' + Util.esc(r.entity) + '</span></div>';
         }
       }
-      rows += '<div class="detail-row"><span class="k">' + (isRecIn ? "用途/来源" : "用途/项目") + '</span><span class="v">' + Util.esc(r.purpose || "-") + '</span></div>';
+      rows += '<div class="detail-row"><span class="k">' + (isRecIn ? "用途/说明" : "用途/项目") + '</span><span class="v">' + Util.esc(r.purpose || "-") + '</span></div>';
       if (r.note) {
         rows += '<div class="detail-row"><span class="k">备注</span><span class="v">' + Util.esc(r.note) + '</span></div>';
       }
@@ -497,7 +541,7 @@
           '<b>' + (isRecIn ? "经办人" : "领取人") + '：</b>' + Util.esc(r.picker || "-") + '<br>' +
           (isRecIn ? '' : '<b>部门/客户：</b>' + Util.esc(r.dept || "-") + '<br>') +
           (isRecIn ? '' : (r.entity ? '<b>出货仓库单位：</b>' + Util.esc(r.entity) + '<br>' : '')) +
-          '<b>' + (isRecIn ? "用途/来源" : "用途/项目") + '：</b>' + Util.esc(r.purpose || "-") + '<br>' +
+          '<b>' + (isRecIn ? "用途/说明" : "用途/项目") + '：</b>' + Util.esc(r.purpose || "-") + '<br>' +
           (isRecIn ? '' : '<b>状态：</b>' + statusLabel + '<br>') +
           (r.note ? '<b>备注：</b>' + Util.esc(r.note) + '<br>' : '') +
         '</div>' +
