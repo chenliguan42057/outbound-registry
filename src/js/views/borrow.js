@@ -172,6 +172,7 @@
         '<td>' +
           (!isDone(r) ? '<button type="button" class="btn sm" data-act="return" data-id="' + r.id + '">归还</button> ' : '') +
           (!isDone(r) && !hasReturned(r) ? '<button type="button" class="btn ghost sm" data-act="unborrow" data-id="' + r.id + '">退回</button> ' : '') +
+          '<button type="button" class="btn ghost sm" data-act="notify" data-id="' + r.id + '" title="把这张借出单详情推送到钉钉群">&#128276; 推送</button> ' +
           '<button type="button" class="btn ghost sm" data-act="detail" data-id="' + r.id + '">详细</button>' +
         '</td>' +
       '</tr>';
@@ -190,6 +191,40 @@
     if (act === "return") openReturn(id);
     else if (act === "unborrow") doUnborrow(id);
     else if (act === "detail") showDetail(id);
+    else if (act === "notify") notifyOne(id);
+  }
+
+  /* ---------- 单条推送 ---------- */
+
+  /** 把某张借出单详情推送到钉钉（复用提醒链路：data/notify/*.json → dingtalk-remind workflow）。
+      带 borrowed 标记与已还映射，钉钉侧渲染成「借出单：借出｜已还｜剩余」一目了然。 */
+  async function notifyOne(id) {
+    var r = State.list.find(function (x) { return x.id === id; });
+    if (!r) return Util.toast("记录不存在，请刷新后重试", true);
+    if (!Cloud.hasToken()) return Util.toast("未配置云端令牌，无法推送", true);
+    var order = {
+      id: r.id,
+      type: r.type || "out",
+      time: r.time || "",
+      picker: r.picker || "",
+      dept: r.dept || "",
+      purpose: r.purpose || "",
+      entity: r.entity || "",
+      note: r.note || "",
+      status: r.status || "submitted",
+      borrowed: true,
+      items: (r.items || []).map(function (it) { return { name: it.name, qty: it.qty }; }),
+      returned: returnedMap(r),
+      photoUrls: (r.photoUrls || []).slice(0, 3)
+    };
+    try {
+      await Cloud.pushRemind({ _ts: Date.now(), type: "remind", kind: "borrow", orders: [order] });
+      Util.toast("已提交推送，该借出单稍后到达钉钉群");
+      window.App.Views.app.setSyncStatus("借出单提醒已提交", false);
+    } catch (e) {
+      Util.toast("推送提交失败：" + (e && e.message ? e.message : e) + "（请重试）", true);
+      window.App.Views.app.setSyncStatus("借出单提醒提交失败", true);
+    }
   }
 
   /* ---------- 添加借出 ---------- */

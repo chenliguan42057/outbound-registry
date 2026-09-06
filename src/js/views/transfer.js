@@ -98,7 +98,7 @@
       return;
     }
     box.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr>' +
-      '<th>时间</th><th>类型</th><th>调拨单号</th><th>货品与数量</th><th>方向</th></tr></thead><tbody>' +
+      '<th>时间</th><th>类型</th><th>调拨单号</th><th>货品与数量</th><th>方向</th><th>操作</th></tr></thead><tbody>' +
       recs.map(function (r) {
         var isOut = r.transferRole === "out";
         var badge = isOut
@@ -115,8 +115,49 @@
           '<td>' + Util.esc(r.transferNo || "-") + '</td>' +
           '<td class="items-cell">' + itemsHtml + '</td>' +
           '<td>' + dir + '</td>' +
+          '<td><button type="button" class="btn ghost sm" data-act="notify" data-id="' + Util.esc(r.id) + '" title="把这张调拨单详情推送到钉钉群">&#128276; 推送</button></td>' +
         '</tr>';
       }).join("") + '</tbody></table></div>';
+    // 委托处理行内按钮；onclick 单实例赋值，列表重建不叠加监听
+    box.onclick = function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest("[data-act='notify']") : null;
+      if (!btn) return;
+      var rid = btn.getAttribute("data-id");
+      if (rid) notifyTransferOne(rid);
+    };
+  }
+
+  /** 把某笔调拨记录详情推送到钉钉（复用提醒链路：data/notify/*.json → dingtalk-remind workflow）。
+      带 transferNo/transferRole，钉钉侧渲染成「⇄ 调拨出库/入库」+ 调拨单号。 */
+  async function notifyTransferOne(id) {
+    var all = (window.App.State && window.App.State.list) || [];
+    var r = all.find(function (x) { return x.id === id; });
+    if (!r) return Util.toast("记录不存在，请刷新后重试", true);
+    if (!Cloud.hasToken()) return Util.toast("未配置云端令牌，无法推送", true);
+    var order = {
+      id: r.id,
+      type: r.type || "out",
+      time: r.time || "",
+      picker: r.picker || "",
+      dept: r.dept || "",
+      purpose: r.purpose || "",
+      entity: r.entity || "",
+      note: r.note || "",
+      status: r.status || "submitted",
+      transferRole: r.transferRole,
+      transferId: r.transferId,
+      transferNo: r.transferNo,
+      items: (r.items || []).map(function (it) { return { name: it.name, qty: it.qty }; }),
+      photoUrls: (r.photoUrls || []).slice(0, 3)
+    };
+    try {
+      await Cloud.pushRemind({ _ts: Date.now(), type: "remind", kind: "transfer", orders: [order] });
+      Util.toast("已提交推送，该调拨单稍后到达钉钉群");
+      window.App.Views.app.setSyncStatus("调拨提醒已提交", false);
+    } catch (e) {
+      Util.toast("推送提交失败：" + (e && e.message ? e.message : e) + "（请重试）", true);
+      window.App.Views.app.setSyncStatus("调拨提醒提交失败", true);
+    }
   }
 
   function lockBtn(btn) {
