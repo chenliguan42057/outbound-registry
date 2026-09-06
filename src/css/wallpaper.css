@@ -100,3 +100,118 @@ body,
 @media (max-width: 720px) {
   .win-sidebar { background: rgba(255,255,255,.85); }
 }
+
+/* ============================================================
+   V2 试点层（2026-09-06 启用）
+   ── 开关：URL 加 ?v2=1 打开 / ?v2=0 关闭，选择存 localStorage
+   ── 内容：抽象渐变+噪点背景 / ②档微质感 / 圆角外大内小 / 数字等宽 / 点击回弹
+   ── 回滚：删掉下面整段即可，上方原壁纸样式完全不受影响
+   ── 两条性能红线（务必守住）：
+      ① 卡片的 backdrop-filter 一律关掉 —— 列表里几十张卡，毛玻璃是移动端掉帧首因
+      ② box-shadow 外阴影层数 ≤2（inset 高光不算，它几乎不耗性能）
+   ============================================================ */
+
+html.v2 body,
+html.v2 .landing,
+html.v2 .win-content {
+  background-color: #F7F6F1;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E"),
+    radial-gradient(1100px 620px at 10% -12%, rgba(147,188,166,.26), transparent 62%),
+    radial-gradient(900px 520px at 92% -4%, rgba(169,205,208,.22), transparent 64%),
+    radial-gradient(820px 600px at 46% 112%, rgba(203,196,226,.18), transparent 62%);
+  background-attachment: fixed;
+}
+
+/* 顶栏 / 侧栏：常驻单元素，毛玻璃开销可控，保留；但底色提亮、去掉紫色描边 */
+html.v2 .win-topbar,
+html.v2 .win-sidebar {
+  background: rgba(253,252,249,.78);
+  border-color: rgba(60,72,69,.10);
+}
+html.v2 .win-topbar-menu:hover,
+html.v2 .win-sidebar-item:hover { background: rgba(87,130,111,.08); }
+html.v2 .win-sidebar-item.active {
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 2px 8px rgba(60,72,69,.10), inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+/* 卡片：② 档微质感 —— 实底替毛玻璃，外阴影 + 顶部高光 + 底部内阴影 */
+html.v2 .card {
+  background: #FBF9F3;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: .5px solid rgba(60,72,69,.07);
+  border-radius: 16px;
+  box-shadow:
+    0 4px 12px rgba(60,72,69,.11),
+    0 1px 2px rgba(60,72,69,.06),
+    inset 0 1px 0 rgba(255,255,255,.95),
+    inset 0 -1px 0 rgba(60,72,69,.05);
+}
+
+/* 弹窗 / 登录盒：比卡片重一档，明显浮起来 */
+html.v2 .modal-box,
+html.v2 .landing .login-box,
+html.v2 .landing .container {
+  background: rgba(251,249,243,.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 20px;
+  box-shadow:
+    0 18px 44px rgba(60,72,69,.16),
+    0 4px 10px rgba(60,72,69,.08),
+    inset 0 1px 0 rgba(255,255,255,1);
+}
+
+/* 圆角体系：外大内小（卡片16 / 控件10 / 小标8）—— 统一尺度是去廉价感的关键 */
+html.v2 .btn,
+html.v2 .chip,
+html.v2 .win-import-btn { border-radius: 10px; }
+html.v2 .badge,
+html.v2 .tag,
+html.v2 .status-pill { border-radius: 8px; }
+
+/* 替换后的 SVG 图标：尺寸跟随字号（1em），基线对齐文字，不撑破行高 */
+html.v2 .v2-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  margin: 0 .14em;
+  vertical-align: -.14em;
+  flex: none;
+}
+html.v2 .v2-ico svg { display: block; width: 100%; height: 100%; }
+
+/* 数字等宽：库存数字增减时不再左右跳动 */
+html.v2 .card,
+html.v2 td,
+html.v2 th { font-variant-numeric: tabular-nums; }
+
+/* 点击回弹：补偿不做音效震动，按下去必须有实感 */
+html.v2 .btn,
+html.v2 .chip,
+html.v2 .win-sidebar-item,
+html.v2 .win-topbar-menu {
+  transition: transform .12s cubic-bezier(.2,0,0,1), background-color .18s ease, box-shadow .18s ease;
+}
+html.v2 .btn:active,
+html.v2 .chip:active { transform: scale(.965); }
+html.v2 .win-sidebar-item:active,
+html.v2 .win-topbar-menu:active { transform: scale(.98); }
+
+/* 表格：去斑马纹，改 hover 高亮；表头换成薄荷调 */
+html.v2 .table-wrap { background: transparent; }
+html.v2 .table th { background: rgba(244,250,247,.72); color: #44685A; }
+html.v2 .table tbody tr:hover { background: rgba(234,244,239,.55); }
+
+/* 移动端：侧栏关掉毛玻璃走实底，省 GPU */
+@media (max-width: 720px) {
+  html.v2 .win-sidebar {
+    background: rgba(253,252,249,.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
