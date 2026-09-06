@@ -817,6 +817,75 @@
     return { ok: ok, remain: remain, errors: errors };
   }
 
+  /* ================= 调拨撤回调拨（2026-09-06） =================
+     调拨成功后，用户在调拨结果卡里点「↶ 撤回调拨」→ 在 src 侧写一笔「入库回滚」（用 Records.create 落到本地 State.list），
+     在 dst 侧写一笔「出库回滚」（用 pushRecordTo 写对方云端）。两条反向记录共享同一 transferId，
+     transferRole="rollback-in/rollback-out"；这样后续报表/流水可追溯是回滚单（不影响真实库存）。
+     入参：transferId（必填）、srcName（用于 picker/dept 文案）、dstName（同理）。
+     返回 {ok:boolean, msg?:string}。 */
+  async function rollbackTransfer(transferId, srcName, dstName) {
+    if (!transferId) return { ok: false, msg: "调拨单 id 缺失" };
+    if (!hasToken()) return { ok: false, msg: "未配置云端令牌" };
+    // 找本系统（src 侧）原 out 记录（含 items/transferNo）作为模板
+    var srcRec = (window.App.State.list || []).find(function (r) {
+      return r.transferId === transferId && r.transferRole === "out";
+    });
+    if (!srcRec) return { ok: false, msg: "本地未找到原调拨记录，请切换到「调出方」系统再撤销" };
+    var items = (srcRec.items || []).map(function (it) { return { name: it.name, qty: it.qty }; });
+    var now = (window.App.Util && window.App.Util.nowLocal) ? window.App.Util.nowLocal() : new Date().toISOString();
+    var transferNo = srcRec.transferNo || transferId;
+    // ① src 侧：写「入库回滚」（库存增回去，本地 State.list 立即可见 + 上云）
+    var rollbackIn;
+    try {
+      rollbackIn = (window.App.Records && window.App.Records.create) ? window.App.Records.create({
+        time: now,
+        type: "in",
+        items: items,
+        purpose: "撤回调拨出库（" + transferNo + "）",
+        picker: (dstName || "对方仓库") + "（撤销）",
+        dept: dstName || "",
+        entity: window.App.Config && window.App.Config.Sys ? window.App.Config.Sys.entity() : "",
+        note: "撤回调拨：" + transferNo,
+        affectsStock: true,
+        transferId: transferId,
+        transferRole: "rollback-in",
+        transferNo: transferNo
+      }) : null;
+    } catch (e) {
+      return { ok: false, msg: "src 侧入库回滚失败：" + (e && e.message ? e.message : e) };
+    }
+    // 推送 src 侧入库回滚到本系统云端
+    try { if (rollbackIn) await pushRecord(rollbackIn); } catch (e) {
+      return { ok: false, msg: "src 侧入库回滚上云失败：" + (e && e.message ? e.message : e) };
+    }
+    // ② dst 侧：写「出库回滚」（库存减回去）
+    var dstDef = (window.App.Config && window.App.Config.SYSTEM_DEFS)
+      ? (window.App.Config.Sys.current().id === "saidis" ? window.App.Config.SYSTEM_DEFS.shenzhen : window.App.Config.SYSTEM_DEFS.saidis)
+      : null;
+    var dstDir = dstDef ? dstDef.dataDir : "";
+    if (!dstDir) return { ok: false, msg: "无法解析对方系统目录" };
+    var rollbackOut = {
+      id: (window.App.Util && window.App.Util.genId) ? window.App.Util.genId() : ("rb" + Date.now()),
+      _ts: Date.now(),
+      time: now,
+      type: "out",
+      items: items,
+      purpose: "撤回调拨入库（" + transferNo + "）",
+      picker: (srcName || "本系统") + "（撤销）",
+      dept: srcName || "",
+      note: "撤回调拨：" + transferNo,
+      affectsStock: true,
+      transferId: transferId,
+      transferRole: "rollback-out",
+      transferNo: transferNo
+    };
+    var dstOk = await pushRecordTo(rollbackOut, dstDir);
+    if (!dstOk) {
+      return { ok: false, msg: "dst 侧出库回滚上云失败（src 侧已回滚，需要手动到对方仓库补一笔出库）" };
+    }
+    return { ok: true, msg: "已撤回调拨：src 入库+" + items.reduce(function (s, it) { return s + it.qty; }, 0) + " / dst 出库-" + items.reduce(function (s, it) { return s + it.qty; }, 0) };
+  }
+
   /* ================= 本地删除墓碑队列 =================
      解决「删除时云端墓碑写入失败，下轮 syncPull 又把记录拉回复活」的问题。
      - 删除时立即把 {id, reason} 写入本地队列（localStorage outbound_tomb_queue）。
@@ -1127,6 +1196,7 @@
     getLocalTombIds: getLocalTombIds,
     pushRemind: pushRemind,
     pushNotifyFile: pushNotifyFile,
+    rollbackTransfer: rollbackTransfer,
     fetchWpsMarker: fetchWpsMarker,
     readWpsState: readWpsState,
     waitWpsReceipt: waitWpsReceipt,

@@ -287,14 +287,54 @@
         var addedMsg = (missingOk && missingOk.length)
           ? '<br>· <span style="color:#1E6B2E">' + Util.esc(dstName) + ' 首次新增产品：</span>' + missingOk.map(function (n) { return Util.esc(n); }).join('、') + '（目录与金山列已自动创建并生效）'
           : '';
+        // 2026-09-06 调拨结果更直观：给出双方云端文件直链 + 「撤回调拨」入口；
+        // 解决「赛迪斯侧明明看到入库、感觉没动账」的疑虑——其实那是对方侧的入库、
+        // 落账后赛迪斯侧本地缓存未刷新才会有这种错觉。下次手动刷新即可对齐。
+        var dstPath = (dst.dataDir || "") + "/records/" + inRec.id + ".json";
+        var srcPath = (Config.Sys.root() || "") + "/records/" + outRec.id + ".json";
+        var ghUrl = "https://github.com/" + Config.GH.repo + "/blob/main/";
+        var rollbackBtn = '<button type="button" class="btn ghost sm" id="tfUndo" data-tfid="' + Util.esc(transferId) + '" data-tfno="' + Util.esc(transferNo) + '" style="margin-top:8px">↶ 撤回调拨</button>';
         box.innerHTML =
           '<div style="padding:12px 16px;border:1px solid #C8E6C9;border-radius:12px;background:#F0FAF0;color:#1E6B2E;font-size:13.5px;line-height:1.9">' +
           '<b>✅ 调拨成功</b>（调拨单号 ' + Util.esc(transferNo) + '）<br>' +
-          '· ' + Util.esc(srcName) + '：出库 ' + items.reduce(function (s, it) { return s + it.qty; }, 0) + '（本页已生效，钉钉/金山稍后自动推送）<br>' +
-          '· ' + Util.esc(dstName) + '：入库 +（对方仓库切过去即可看到；对方钉钉群会收到「入库」通知）' +
+          '· ' + Util.esc(srcName) + '：出库 ' + items.reduce(function (s, it) { return s + it.qty; }, 0) + '（已扣库存，钉钉/金山稍后自动推送）<br>' +
+          '· ' + Util.esc(dstName) + '：入库 +（已写入对方云端，' + Util.esc(dstName) + ' 切换后刷新即看到）' +
           addedMsg +
+          '<br><span class="hint" style="color:#5a6a64">云端凭证：</span>' +
+          '<a href="' + ghUrl + srcPath + '" target="_blank" rel="noopener" style="color:#1E6B2E;margin-right:10px">' + Util.esc(srcName) + '出库</a>' +
+          '<a href="' + ghUrl + dstPath + '" target="_blank" rel="noopener" style="color:#1E6B2E">' + Util.esc(dstName) + '入库</a>' +
+          '<br><span class="hint" style="color:#8a6d3b">若对方侧未立即显示，请点击「云同步」或切换系统一次拉取最新。</span>' +
           '<br><span class="hint">备注：' + Util.esc(note) + '</span>' +
+          '<div style="margin-top:6px">' + rollbackBtn + '</div>' +
           '</div>';
+        // 撤销按钮 → 调 Cloud.rollbackTransfer（在两侧各写一条反向记录，同 transferId）
+        var undoBtn = box.querySelector("#tfUndo");
+        if (undoBtn) {
+          undoBtn.addEventListener("click", async function () {
+            var tfId = undoBtn.getAttribute("data-tfid");
+            var tfNo = undoBtn.getAttribute("data-tfno");
+            if (!tfId) return;
+            var ok = await UI.confirmDialog("撤回调拨「" + tfNo + "」？将在 " + srcName + " 写入一笔入库回滚、在 " + dstName + " 写入一笔出库回滚（钉钉/金山同步触发）。", "确认撤回调拨");
+            if (!ok) return;
+            undoBtn.disabled = true;
+            undoBtn.textContent = "撤销中…";
+            try {
+              var res = await Cloud.rollbackTransfer(tfId, srcName, dstName);
+              if (res && res.ok) {
+                Util.toast("已撤回调拨：双方各写入一笔反向记录");
+                box.innerHTML = '<div style="padding:12px 16px;border:1px solid #E0D7C1;border-radius:12px;background:#FAF6EE;color:#6E5B27;font-size:13.5px">↶ 已撤回调拨「' + Util.esc(tfNo) + '」</div>';
+              } else {
+                Util.toast("撤销失败：" + (res && res.msg || "未知原因"), true);
+                undoBtn.disabled = false;
+                undoBtn.textContent = "↶ 撤回调拨";
+              }
+            } catch (e) {
+              Util.toast("撤销异常：" + (e && e.message ? e.message : e), true);
+              undoBtn.disabled = false;
+              undoBtn.textContent = "↶ 撤回调拨";
+            }
+          });
+        }
       }
       Util.toast("✅ 调拨成功：" + srcName + " 出库 → " + dstName + " 入库");
       picker.setSelected([]);
@@ -303,6 +343,7 @@
       var noteEl = Util.$("tfNote");
       if (noteEl) noteEl.value = "";
       try { if (window.App.Stock) window.App.Stock.markDirty(); } catch (e) {}
+      try { if (window.App.Stock && window.App.Views.stock && window.App.Views.stock.refresh) window.App.Views.stock.refresh(); } catch (e) {}
       try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
       try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
       try { if (window.App.Views.report && window.App.Views.report.refresh) window.App.Views.report.refresh(); } catch (e) {}

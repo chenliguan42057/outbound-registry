@@ -398,6 +398,11 @@
       }
       rows += '<div class="detail-row"><span class="k">货品明细</span><span class="v detail-items">' + (itemsHtml || "-") + '</span></div>';
       rows += '<div class="detail-row"><span class="k">照片</span><span class="v">' + photosHtml + '</span></div>';
+      // 2026-09-06：调拨记录详情显示「↶ 撤回调拨」入口（一键在双方各写一笔反向记录）
+      var transferOps = "";
+      if (r.transferId && r.transferRole === "out") {
+        transferOps = '<button type="button" class="btn ghost sm" data-detail-act="rollback" style="margin-left:6px;color:#8a6d3b">↶ 撤回调拨</button>';
+      }
       // 2026-08-08：操作按钮（打印/编辑/删除）从列表行移入详情弹窗，列表行只展示数据
       rows += '<div class="detail-row" style="display:block;border-bottom:none;padding-top:16px">' +
         '<div class="modal-actions">' +
@@ -406,6 +411,7 @@
           '<button type="button" class="btn ghost sm" data-detail-act="print">🖨 打印</button> ' +
           '<button type="button" class="btn sm" data-detail-act="edit">编辑</button> ' +
           '<button type="button" class="btn danger sm" data-detail-act="del">删除</button>' +
+          transferOps +
         '</div></div>';
       UI.Modal.show(isRecIn ? "入库详情" : "出库详情", rows, { width: "560px" });
       // 绑定详情弹窗内的操作按钮（Modal 内事件不会冒泡到 listBox）
@@ -418,8 +424,33 @@
             else if (act === "edit") doEdit(id);
             else if (act === "del") doDel(id);
             else if (act === "pin") doTogglePin(id);
+            else if (act === "rollback") doRollback(r);
           });
         });
+      }
+    }
+
+    /** 调拨详情页的「撤回调拨」入口（2026-09-06）：
+        只在本系统（src）能撤销（需要原 out 记录在 State.list 里）；
+        写入一笔入库回滚到本系统云端，同时写一笔出库回滚到对方系统云端。 */
+    async function doRollback(rec) {
+      if (!rec || !rec.transferId) return;
+      var cfg = window.App.Config;
+      var srcName = (rec.dept && /调拨/.test(rec.dept)) ? rec.dept.replace("（调拨）", "") : (cfg && cfg.Sys ? cfg.Sys.name() : "本系统");
+      var dstName = rec.picker && /调拨/.test(rec.picker) ? rec.picker.replace("（调拨）", "") : "";
+      var ok = await UI.confirmDialog("撤回调拨「" + (rec.transferNo || rec.transferId) + "」？将在本系统写一笔入库回滚、在对方系统写一笔出库回滚（钉钉/金山同步触发）。", "确认撤回调拨");
+      if (!ok) return;
+      try {
+        var res = await Cloud.rollbackTransfer(rec.transferId, srcName, dstName);
+        if (res && res.ok) {
+          Util.toast(res.msg || "已撤回调拨");
+          UI.Modal.hide();
+          refresh();
+        } else {
+          Util.toast("撤销失败：" + (res && res.msg || "未知原因"), true);
+        }
+      } catch (e) {
+        Util.toast("撤销异常：" + (e && e.message ? e.message : e), true);
       }
     }
 
