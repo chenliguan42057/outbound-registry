@@ -654,6 +654,21 @@ label .req {
   white-space: nowrap;
 }
 .cell-sub { font-size: 11px; color: var(--muted, #7A8A85); margin-left: 4px; }
+/* 最近提交流右上角「清空」按钮（2026-09-06）：紧凑 ghost，与 tag 同行不喧宾夺主 */
+.recent-clear {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: transparent;
+  border: 1px solid #E0B7A8;
+  color: #B96A4A;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.recent-clear:hover { background: #FBE9E2; color: #8E3F1A; border-color: #C8825F; }
+.recent-clear:active { transform: scale(.96); }
 .tag.ok-tag { color: var(--ok); background: var(--ok-bg); }
 .tag.danger-tag { color: var(--err); background: var(--err-bg); }
 
@@ -717,24 +732,15 @@ label .req {
   .btn { width: 100%; }
   .actions { gap: 10px; }
   .actions .btn { width: auto; }
-
-  /* 搴曢儴鍥哄畾涓绘彁浜ゆ寜閽細闅忔椂鍙繚瀛樺嚭搴撳崟 */
+  /* 提交登记按钮：2026-09-06 主理人要求与「清空」并排显示，移除固定到底部的定位，回到 .actions 排内自然换行 */
   .landing #outSubmit {
-    position: fixed;
-    left: 14px;
-    right: 14px;
-    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     width: auto;
-    height: 52px;
-    border-radius: 999px;
-    font-size: 16px;
+    min-height: 44px;
+    border-radius: 12px;
+    font-size: 15px;
     font-weight: 600;
-    z-index: 50;
-    box-shadow: 0 12px 30px rgba(87, 130, 111, .40);
   }
   .landing #outSubmit.loading { font-size: 15px; }
-
-  .toast { bottom: 92px; }   /* 鎶崌锛岄伩鍏嶈鍥哄畾鎸夐挳閬尅 */
 }
 
 /* ============================================================

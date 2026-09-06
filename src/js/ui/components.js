@@ -687,13 +687,12 @@
       ".fx-success.show{opacity:1;}" +
       ".fx-success-card{position:relative;width:min(340px,90vw);background:#FDFCF9;border:1px solid #DCE6E0;border-radius:20px;padding:32px 24px 22px;text-align:center;box-shadow:0 22px 60px rgba(30,50,42,.35);transform:translateY(12px) scale(.96);transition:transform .28s cubic-bezier(.2,.9,.3,1.2);}" +
       ".fx-success.show .fx-success-card{transform:translateY(0) scale(1);}" +
-      ".fx-success .rings{position:relative;width:88px;height:88px;margin:0 auto 4px;}" +
-      ".fx-success .ring{position:absolute;inset:0;border-radius:50%;border:2.5px solid rgba(111,169,138,.55);opacity:0;}" +
-      ".fx-success.show .ring{animation:fx-ripple 1.1s ease-out .05s forwards;}" +
-      ".fx-success .ring.r2{border-color:rgba(150,138,190,.5);animation-delay:.22s;}" +
-      ".fx-success .ring.r3{border-color:rgba(111,163,168,.45);animation-delay:.4s;}" +
-      "@keyframes fx-ripple{0%{transform:scale(.4);opacity:0;}30%{opacity:.9;}100%{transform:scale(1.5);opacity:0;}}" +
-      ".fx-success .check{position:absolute;inset:0;margin:auto;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#7FB08E,#5E9A79);display:flex;align-items:center;justify-content:center;box-shadow:0 12px 26px rgba(87,130,111,.45);}" +
+      ".fx-success .stage{position:relative;width:96px;height:96px;margin:0 auto 4px;}" +
+      ".fx-success .fx-particles{position:absolute;inset:0;pointer-events:none;overflow:visible;}" +
+      ".fx-success .fx-particles .p{position:absolute;left:50%;top:50%;width:6px;height:6px;border-radius:50%;opacity:0;transform:translate(-50%,-50%) scale(.3);}" +
+      ".fx-success.show .fx-particles .p{animation:fx-fly 1.35s cubic-bezier(.15,.55,.35,1) forwards;}" +
+      "@keyframes fx-fly{0%{opacity:0;transform:translate(-50%,-50%) scale(.3);}15%{opacity:1;transform:translate(calc(-50% + var(--fx-dx) * .25),calc(-50% + var(--fx-dy) * .25)) scale(1);}55%{opacity:1;}100%{opacity:0;transform:translate(calc(-50% + var(--fx-dx)),calc(-50% + var(--fx-dy))) scale(.55);}}" +
+      ".fx-success .check{position:absolute;inset:0;margin:auto;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#7FB08E,#5E9A79);display:flex;align-items:center;justify-content:center;box-shadow:0 12px 26px rgba(87,130,111,.45);z-index:1;}" +
       ".fx-success .check svg{width:30px;height:30px;}" +
       ".fx-success .check path{stroke:#fff;stroke-width:3.4;stroke-linecap:round;stroke-linejoin:round;fill:none;stroke-dasharray:40;stroke-dashoffset:40;}" +
       ".fx-success.show .check path{animation:fx-draw .5s ease-out .15s forwards;}" +
@@ -710,7 +709,7 @@
     document.head.appendChild(st);
   }
 
-  /** 提交成功全屏页面（体验升级）：双层涟漪 + 打勾描边 + 单号胶囊 + 随机暖心话 + 自动关闭。
+  /** 提交成功全屏页面（体验升级）：粒子烟花绽放 + 中央 ✓ + 单号胶囊 + 随机暖心话 + 自动关闭。
       opts: { orderNo?, target? } */
   function celebrate(opts) {
     opts = opts || {};
@@ -723,8 +722,10 @@
     el.className = "fx-success";
     el.innerHTML =
       '<div class="fx-success-card">' +
-        '<div class="rings"><span class="ring"></span><span class="ring r2"></span><span class="ring r3"></span>' +
-        '<span class="check"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg></span></div>' +
+        '<div class="stage">' +
+          '<div class="fx-particles" id="fxBurstHost"></div>' +
+          '<span class="check"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg></span>' +
+        '</div>' +
         (orderNo ? '<span class="order-no">' + Util.esc(orderNo) + '</span>' : '') +
         '<h3>提交成功</h3>' +
         '<div class="warm">' + Util.esc(warm) + '</div>' +
@@ -734,6 +735,27 @@
         '</div>' +
       '</div>';
     document.body.appendChild(el);
+    // 烟花粒子：70 颗从中心向四周随机角度爆裂，颜色随机、距离随机、稍错延迟
+    var host = el.querySelector("#fxBurstHost");
+    if (host) {
+      var palette = ["#FF5757", "#FFD93D", "#6BCB77", "#4D96FF", "#FF6BCB", "#9D5CFF", "#FFA94D", "#3DCCFF"];
+      for (var i = 0; i < 70; i++) {
+        var p = document.createElement("span");
+        p.className = "p";
+        var ang = Math.random() * Math.PI * 2;
+        var dist = 70 + Math.random() * 130;     // px，最终扩散距离
+        p.style.setProperty("--fx-dx", Math.cos(ang) * dist + "px");
+        p.style.setProperty("--fx-dy", Math.sin(ang) * dist + "px");
+        var c = palette[i % palette.length];
+        var sz = 5 + Math.random() * 6;
+        p.style.background = c;
+        p.style.width = sz + "px";
+        p.style.height = sz + "px";
+        p.style.boxShadow = "0 0 6px " + c;
+        p.style.animationDelay = (Math.random() * 0.22) + "s";
+        host.appendChild(p);
+      }
+    }
     requestAnimationFrame(function () { el.classList.add("show"); });
     function close() {
       el.classList.remove("show");

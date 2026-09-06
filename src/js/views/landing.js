@@ -133,6 +133,48 @@
     });
   }
 
+  /** 清空最近 RECENT_LIMIT 条提交记录（2026-09-06 主理人要求）：
+      二次确认（删除条数 / 库存影响提示）→ 必填删除理由 → 本地 Records.remove + 云端墓碑队列。
+      复用 doBulkDel 的删除流程，但目标固定为"最近"列表，避免误删历史数据。 */
+  function getRecentList() {
+    return State.list.slice().sort(function (a, b) {
+      return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
+    }).slice(0, RECENT_LIMIT);
+  }
+
+  async function clearRecentWithConfirm() {
+    var recs = getRecentList();
+    if (!recs.length) { Util.toast("最近提交为空，无可清空", true); return; }
+    var stockAffects = recs.filter(function (r) { return r.affectsStock === true; }).length;
+    var ok = await UI.confirmDialog(
+      "将清空最近 " + recs.length + " 条记录" + (stockAffects ? "（" + stockAffects + " 条影响库存，库存会自动恢复）" : "") + "。此操作不可撤销，是否继续？",
+      "清空最近提交"
+    );
+    if (!ok) return;
+    var reasonRes = await UI.promptDialog(
+      "请填写清空理由：",
+      "例如：测试数据 / 重复登记 / 不再需要…",
+      "清空最近 " + recs.length + " 条",
+      "确认清空"
+    );
+    if (!reasonRes.ok) return;
+    var reason = reasonRes.value || "未填写";
+    // 先全部入本地墓碑队列（云端推送失败也能在下次同步补推），再删除本地 → 中途失败不会让记录复活
+    if (Cloud.hasToken()) recs.forEach(function (r) { Cloud.enqueueTomb(r.id, reason); });
+    recs.forEach(function (r) { Records.remove(r.id); });
+    renderRecent();
+    Util.toast("已清空 " + recs.length + " 条（理由：" + reason + "）");
+    // 后台异步推云端墓碑
+    if (Cloud.hasToken()) {
+      for (var i = 0; i < recs.length; i++) {
+        try {
+          await Cloud.delWithTombstone(recs[i], reason);
+          Cloud.dequeueTomb(recs[i].id);
+        } catch (e) { /* 失败已在本地墓碑队列，下次同步自动补推 */ }
+      }
+    }
+  }
+
   function render() {
     var el = Util.$("view-landing");
     if (!el) return;
@@ -151,6 +193,7 @@
               '<span class="recent-icon">🕘</span>' +
               '<span class="recent-card-title">最近提交</span>' +
               '<span class="recent-card-tag">最新 ' + RECENT_LIMIT + ' 条 · 刷新自动同步</span>' +
+              '<button type="button" class="recent-clear" id="recentClearBtn" title="清空最近 ' + RECENT_LIMIT + ' 条记录（不可恢复，库存会自动恢复）" aria-label="清空最近提交">🗑 清空</button>' +
             '</div>' +
             '<div class="recent-list" id="recentList"></div>' +
           '</section>' +
@@ -177,6 +220,10 @@
       if (!item) return;
       Util.toast("查看完整记录请前往管理后台");
     });
+
+    // 「🗑 清空最近」按钮：一键清空落地页展示的最近 RECENT_LIMIT 条记录（带确认 + 删除理由 + 云端墓碑同步）
+    var recentClearBtn = Util.$("recentClearBtn");
+    if (recentClearBtn) recentClearBtn.addEventListener("click", clearRecentWithConfirm);
 
     // 复用 out.js 免密出库表单（out* 前缀 id 仅存在于落地页）
     window.App.Views.out.render(Util.$("landingForm"));

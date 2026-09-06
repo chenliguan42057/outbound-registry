@@ -175,6 +175,7 @@
 
     // 出货仓库单位 chip 单选：事件委托（互斥高亮）；选项固定二选一（深圳细胞/赛迪斯），无「+ 添加」。
     // 点击另一仓库 = 切换系统（数据目录随之切换，chip 默认值跟随系统），由 Views.app.switchSystem 热切换。
+    // P1 修复：首次点击时同步更新 selectedEntity + 渲染 chip，避免视觉无反馈（switchSystem 异步重挂导致用户误以为要点两下）
     els.entityChips.addEventListener("click", function (ev) {
       var btn = ev.target && ev.target.closest ? ev.target.closest(".chip") : null;
       if (!btn) return;
@@ -182,7 +183,9 @@
       var sysOf = { "深圳细胞法人": "shenzhen", "赛迪斯法人": "saidis" }[val];
       var appV = window.App.Views && window.App.Views.app;
       if (sysOf && appV && appV.switchSystem && sysOf !== Config.Sys.current().id) {
-        appV.switchSystem(sysOf);   // 切换系统 → 视图重挂 → chip 默认值跟随新系统
+        selectedEntity = val;            // 立即同步选中态（视觉"点一下就亮"）
+        renderEntityChips();
+        appV.switchSystem(sysOf);
         return;
       }
       setEntitySelected(val);

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>V2 视觉试点 · 新旧对比预览</title>
+<link rel="stylesheet" href="css/core.css" />
+<link rel="stylesheet" href="css/theme.css" />
+<link rel="stylesheet" href="css/patch.css" />
+<link rel="stylesheet" href="css/wallpaper.css" />
+<style>
+  html, body { margin: 0; }
+  .pv-bar {
+    position: sticky; top: 0; z-index: 999;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 18px;
+    background: rgba(255, 255, 255, .88);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(60, 72, 69, .12);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #3C4845;
+  }
+  .pv-bar b { font-size: 14px; font-weight: 500; }
+  .pv-bar .pv-state { color: #6FA08A; font-weight: 500; }
+  .pv-bar button {
+    font: 500 13px/1 inherit; padding: 8px 16px; cursor: pointer;
+    border: 1px solid #6FA08A; border-radius: 999px;
+    background: #6FA08A; color: #fff;
+  }
+  .pv-bar button.alt { background: transparent; color: #6FA08A; }
+  .pv-bar .pv-tip { color: #74837E; font-size: 12px; }
+  .pv-body { padding: 20px 18px 60px; max-width: 1180px; margin: 0 auto; }
+  .pv-sec { margin-bottom: 26px; }
+  .pv-h { font: 500 13px/1.5 -apple-system, "PingFang SC", sans-serif; color: #74837E; margin: 0 0 10px; }
+  .pv-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .pv-card { padding: 16px 18px; }
+  .pv-card .k { font-size: 12px; color: #74837E; margin: 0 0 6px; }
+  .pv-card .v { font-size: 26px; font-weight: 500; color: #3C4845; margin: 0; letter-spacing: -.01em; }
+  .pv-card .s { font-size: 12px; color: #74837E; margin: 6px 0 0; }
+  .pv-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .pv-side { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+  .pv-side aside { width: 208px; padding: 12px; }
+  .pv-side main { flex: 1; min-width: 260px; }
+  .pv-navitem { padding: 9px 12px; font-size: 13px; color: #3C4845; margin-bottom: 2px; }
+  .pv-navitem.active { font-weight: 500; }
+  .pv-topbar { padding: 10px 14px; font-size: 13px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+</style>
+</head>
+<body>
+
+<div class="pv-bar">
+  <b>V2 视觉试点</b>
+  <span class="pv-state" id="pvState">当前：旧版</span>
+  <button type="button" id="pvToggle">切换到新版</button>
+  <button type="button" class="alt" id="pvSide">并排对比</button>
+  <span class="pv-tip">改动只写在这一个 CSS 文件里，随时一键切回</span>
+</div>
+
+<div class="pv-body">
+
+  <div class="pv-sec">
+    <p class="pv-h">外壳：顶栏 + 侧边栏（毛玻璃保留，底色提亮去紫边）</p>
+    <div class="pv-side">
+      <aside class="win-sidebar">
+        <div class="win-sidebar-nav">
+          <div class="win-sidebar-item active pv-navitem">库存总览</div>
+          <div class="win-sidebar-item pv-navitem">出库登记</div>
+          <div class="win-sidebar-item pv-navitem">入库登记</div>
+          <div class="win-sidebar-item pv-navitem">出入库记录</div>
+          <div class="win-sidebar-item pv-navitem">报表</div>
+          <div class="win-sidebar-item pv-navitem">云同步</div>
+        </div>
+      </aside>
+      <main>
+        <div class="win-topbar pv-topbar">
+          <span><b>深圳细胞 · 时空仓</b></span>
+          <span style="color:#74837E">已同步 · 2 条待上传</span>
+        </div>
+        <div class="pv-grid">
+          <div class="card pv-card">
+            <p class="k">库存总量</p>
+            <p class="v">1,284</p>
+            <p class="s">较昨日 +36</p>
+          </div>
+          <div class="card pv-card">
+            <p class="k">低库存预警</p>
+            <p class="v">3</p>
+            <p class="s">阈值 95 以下</p>
+          </div>
+          <div class="card pv-card">
+            <p class="k">呆滞 &gt;180 天</p>
+            <p class="v">7</p>
+            <p class="s">聚焦时空仓</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="pv-sec">
+    <p class="pv-h">按钮与标签（圆角外大内小：卡片 16 / 控件 10 / 标签 8）</p>
+    <div class="pv-row">
+      <button type="button" class="btn">登记出库</button>
+      <button type="button" class="btn">登记入库</button>
+      <span class="badge">时空仓</span>
+      <span class="badge">深圳细胞法人</span>
+      <span class="status-pill">充足</span>
+      <span class="chip">冻干精华液</span>
+      <span class="chip">精粹水</span>
+    </div>
+    <p class="pv-tip" style="font-size:12px;color:#74837E;margin:0">按一下按钮 —— 新版有回弹（因为不做音效震动，触感全靠它补偿）</p>
+  </div>
+
+  <div class="pv-sec">
+    <p class="pv-h">图标替换（下面这些原本是 emoji，新版会变成 SVG 线图标）</p>
+    <div class="pv-row" style="font-size:14px;gap:16px">
+      <span>⚠ 警告</span><span>✅ 成功</span><span>📊 报表</span><span>📅 日期</span>
+      <span>🧮 库存核对</span><span>📋 记录</span><span>🗑 删除</span><span>📷 拍照</span>
+      <span>📦 库存</span><span>🔍 搜索</span><span>⚙ 设置</span><span>🔄 同步</span>
+      <span>🤖 AI 助手</span><span>📌 置顶</span><span>🕘 历史</span><span>💰 金额</span>
+      <span>📣 推送</span><span>⇄ 调拨</span><span>❌ 失败</span><span>↶ 归还</span>
+    </div>
+    <p class="pv-tip" style="font-size:12px;color:#74837E;margin:0">
+      刻意不换的：→ 方向箭头（是文字不是图标）· ☀ 🌧 天气（AI 回复里当内容用）· ⚪ 🔵 状态点（带颜色语义，单色 SVG 会丢信息）
+    </p>
+  </div>
+
+  <div class="pv-sec">
+    <p class="pv-h">音效（点一下听听，右下角喇叭可随时静音）</p>
+    <div class="pv-row">
+      <button type="button" class="btn" onclick="window.__pilotSound && window.__pilotSound('ok')">成功音</button>
+      <button type="button" class="btn" onclick="window.__pilotSound && window.__pilotSound('err')">失败音</button>
+      <button type="button" class="btn" onclick="window.__pilotSound && window.__pilotSound('del')">删除音</button>
+      <span class="pv-tip" style="font-size:12px;color:#74837E">任意按钮点击都有极轻一「嗒」· 总音量 22%，刻意压低</span>
+    </div>
+  </div>
+
+  <div class="pv-sec">
+    <p class="pv-h">表格（去斑马纹改 hover 高亮，数字等宽不再跳动）</p>
+    <div class="table-wrap" style="border-radius:16px;overflow:hidden">
+      <table class="table">
+        <thead>
+          <tr><th>产品</th><th>规格</th><th>库存</th><th>库龄</th><th>保质期</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>韶初泌语 冻干精华液</td><td>5 片装</td><td>128</td><td>42 天</td><td>充足</td></tr>
+          <tr><td>韶初泌语 精粹水</td><td>120ml</td><td>96</td><td>188 天</td><td>关注</td></tr>
+          <tr><td>韶初泌语 精粹乳</td><td>100ml</td><td>1,024</td><td>15 天</td><td>充足</td></tr>
+          <tr><td>韶初泌语 精粹霜</td><td>50g</td><td>36</td><td>210 天</td><td>即将到期</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var state = document.getElementById('pvState');
+    var btn = document.getElementById('pvToggle');
+
+    function sync() {
+      var on = root.classList.contains('v2');
+      state.textContent = '当前：' + (on ? '新版（V2）' : '旧版');
+      btn.textContent = on ? '切回旧版' : '切换到新版';
+    }
+
+    // 图标与音效模块在页面加载时就判断 v2 类，所以切换必须带参数刷新才能真实生效
+    btn.onclick = function () {
+      location.search = root.classList.contains('v2') ? '?v2=0' : '?v2=1';
+    };
+
+    document.getElementById('pvSide').onclick = function () {
+      var w = 760, h = 900;
+      var l = (screen.width - w * 2) / 2;
+      window.open(location.href + '?v2=0', 'old', 'width=' + w + ',height=' + h + ',left=' + l);
+      window.open(location.href + '?v2=1', 'new', 'width=' + w + ',height=' + h + ',left=' + (l + w));
+    };
+
+    // 支持 ?v2=1 直接进入新版，与线上开关一致
+    var q = location.search || '';
+    if (q.indexOf('v2=1') !== -1) root.classList.add('v2');
+    else if (q.indexOf('v2=0') !== -1) root.classList.remove('v2');
+    sync();
+  })();
+</script>
+<script defer src="js/ui/icons.js"></script>
+<script defer src="js/ui/sound.js"></script>
+</body>
+</html>
