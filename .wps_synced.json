@@ -329,6 +329,18 @@
       "at": "2026-08-31T13:43:53Z",
       "reason": "borrow_diff_cleanup",
       "err": []
+    },
+    "mtpl9qhrw11oe": {
+      "ok": 1,
+      "at": "2026-09-07T06:54:24Z",
+      "detail": {
+        "2026时空鹿茸库存": {
+          "rows": [
+            550
+          ],
+          "recalced": 1
+        }
+      }
     }
   },
   "msk9j458x3ivt": {
