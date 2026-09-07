@@ -193,7 +193,7 @@
   </script>
 
   <!-- 经典 <script> 顺序加载（不用 ES Module，保证 file:// 调试与加载顺序） -->
-  <script defer src="qrcode.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="qrcode.js?v=__CACHE_BUST__"></script>
   <!-- 商品映射「单一真相源」：前后端共用，须在 config.js 之前加载 -->
   <script defer src="js/data/product-map.js?v=__CACHE_BUST__"></script>
   <script defer src="js/core/config.js?v=__CACHE_BUST__"></script>
@@ -223,20 +223,20 @@
   <script defer src="js/views/transfer.js?v=__CACHE_BUST__"></script>
   <script defer src="js/views/trash.js?v=__CACHE_BUST__"></script>
   <script defer src="js/views/push.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/report.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/views/report.js?v=__CACHE_BUST__"></script>
   <script defer src="js/views/sync.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ai/knowledge.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ai/tools.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ai/check.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ai/engine.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ai/llm.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ai/web.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ai/chat.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/ai.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/ai/knowledge.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/ai/tools.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/ai/check.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/ai/engine.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/ai/llm.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/ai/web.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/ai/chat.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/views/ai.js?v=__CACHE_BUST__"></script>
   <script defer src="js/main.js?v=__CACHE_BUST__"></script>
   <script defer src="js/ui/shortcuts.js?v=__CACHE_BUST__"></script>
   <script defer src="js/ui/ux.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ui/dingtalk.js?v=__CACHE_BUST__"></script>
+  <script defer fetchpriority="low" src="js/ui/dingtalk.js?v=__CACHE_BUST__"></script>
   <!-- V2 试点（最后加载）：emoji→SVG 图标替换。
        开头判断 <html class="v2">，非试点模式直接 return，不触碰任何既有功能。
        2026-09-06 按主理人要求移除 sound.js（右下角喇叭按钮 + 点击/结果音效不再加载）。 -->
