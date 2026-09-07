@@ -31,7 +31,7 @@
         '<div class="hint" style="margin-bottom:10px;">' +
           '这里列出所有<strong>已删除但可还原</strong>的记录（来自云端删除标记）。' +
           '点「还原」会把单据连同原始编号、时间一起放回记录列表，库存自动重算。' +
-          '<br/>另外系统每天凌晨自动生成一份全量数据快照，保留 30 天，存放在仓库 <code>data/backups/</code>。' +
+          '<br/>另外系统每天凌晨自动生成一份全量数据快照，保留最近 7 天（每月 1 号那份长期保留），存放在仓库 <code>data/backups/</code>。' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
           '<button type="button" class="btn" id="trashRefresh">刷新列表</button>' +

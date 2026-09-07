@@ -26,7 +26,7 @@ DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据
 
 # 业务时区（东八区），保证快照日期与用户认知的"今天"一致
 TZ = timezone(timedelta(hours=8))
-KEEP_DAYS = 30
+KEEP_DAYS = 7          # 常规快照只留最近 7 天；每月 1 号的快照永久保留（清理逻辑里单独豁免）
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA = os.path.join(ROOT, "data")
@@ -93,7 +93,11 @@ def main():
     for fn in sorted(os.listdir(BACKUP_DIR)):
         if not fn.endswith(".json"):
             continue
-        if fn[:-5] < cutoff:
+        day = fn[:-5]
+        # 每月 1 号的快照长期保留：跨月回溯的锚点，且一年只有 12 份，体积可控
+        if day.endswith("-01"):
+            continue
+        if day < cutoff:
             os.remove(os.path.join(BACKUP_DIR, fn))
             removed.append(fn)
     if removed:
