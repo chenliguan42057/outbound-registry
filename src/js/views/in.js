@@ -18,6 +18,7 @@
   var editingId = null;
   var els = null;
   var submitting = false;   // 提交互斥锁：防止连点造成重复入库
+  var optimisticNotified = false;   // 顺捷感一：乐观 UI 已弹过提示，后台推送就不再重复弹
   var sourceVal = "";       // 当前选中的入库来源
   var editingTransfer = false; // 编辑的是调拨/回滚生成的入库单 → 来源由系统固定，禁止改
 
@@ -268,6 +269,15 @@
       rec = Records.create(payload);
     }
     resetForm();
+    // 顺捷感一（乐观 UI）：本地已落库 = 这件事已经成了，不必等云端回话。
+    // 立刻解锁按钮、给提示、把记录放进同步队列（列表行会显示转圈），云端推送转后台慢慢跑。
+    // 云端失败时队列会留着，云同步页一键重推即可，数据不会丢。
+    if (Util.feature("optimistic")) {
+      optimisticNotified = true;
+      if (Cloud.enqueue) Cloud.enqueue(rec.id);
+      setSubmitting(false);
+      Util.toast(wasEditing ? "✅ 修改已保存（本地已生效，云端后台同步中）" : "✅ 入库成功（本地已生效，云端后台同步中）");
+    }
     // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
     // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。
     submitPush(rec, wasEditing)["catch"](function () {})["finally"](function () { setSubmitting(false); });
@@ -318,7 +328,8 @@
       window.App.Views.app.setSyncStatus("⚠️ 未配置云端令牌，本条只存在本机，换设备看不到", true);
       return;
     }
-    Util.toast(msg);
+    // 乐观 UI 已提前提示过，这里就不再重复弹（否则用户会看到两条「成功」提示）
+    if (!optimisticNotified) Util.toast(msg);
     // 优先单条带重试推送本条；失败自动入持久化队列，下次启动/自动同步时补推（关页面也不丢）
     Cloud.pushRecord(rec).then(function (pushed) {
       return Cloud.flushQueue().then(function (fres) { return { pushed: pushed, fres: fres }; });

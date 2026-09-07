@@ -23,6 +23,7 @@
   var els = null;
   /** 提交互斥锁：防止移动端双击 / 快速连点产生重复出库单（编号也会随之错乱） */
   var submitting = false;
+  var optimisticNotified = false;   // 顺捷感一：乐观 UI 已弹过提示，后台推送就不再重复弹
   /** 当前选中的用途值（chip 单选，互斥高亮） */
   var selectedPurpose = "";
   /** 出货仓库单位默认值：跟随当前系统（深圳系统=深圳细胞法人，赛迪斯系统=赛迪斯法人）。
@@ -491,6 +492,15 @@
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
     resetForm();
+    // 顺捷感一（乐观 UI）：本地已落库 = 这件事已经成了，不必等云端回话。
+    // 立刻解锁按钮、给提示、把记录放进同步队列（列表行会显示转圈），云端推送转后台慢慢跑。
+    // 云端失败时队列会留着，云同步页一键重推即可，数据不会丢。
+    if (Util.feature("optimistic")) {
+      optimisticNotified = true;
+      if (Cloud.enqueue) Cloud.enqueue(rec.id);
+      setSubmitting(false);
+      Util.toast(wasEditing ? "✅ 修改已保存（本地已生效，云端后台同步中）" : "✅ 登记成功（本地已生效，云端后台同步中）");
+    }
     // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
     // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。
     submitPush(rec, wasEditing)["catch"](function () {})["finally"](function () { setSubmitting(false); });
@@ -584,7 +594,8 @@
       appStatus("⚠️ 未配置云端令牌，本条只存在本机，换设备看不到", true);
       return;
     }
-    Util.toast(msg);
+    // 乐观 UI 已提前提示过，这里就不再重复弹（否则用户会看到两条「成功」提示）
+    if (!optimisticNotified) Util.toast(msg);
     // 优先单条带重试推送本条；失败自动入持久化队列，下次启动/自动同步时补推（关页面也不丢）
     Cloud.pushRecord(rec).then(function (pushed) {
       return Cloud.flushQueue().then(function (fres) { return { pushed: pushed, fres: fres }; });
