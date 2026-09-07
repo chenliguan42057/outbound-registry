@@ -155,6 +155,7 @@
         else if (act === "photo") showPhoto(btn.getAttribute("data-src"));
         else if (act === "print") doPrint(id);
       });
+      bindSwipe();
       renderList();
     }
 
@@ -387,10 +388,13 @@
           ? '<span class="tf-tag" title="调拨单号：' + Util.esc(r.transferNo || "") + '">⇄ ' + tfLabel + '</span>'
           : "";
         var pinMark = r.pinned === true ? ' <span title="已置顶" style="color:#BA7517;">📌</span>' : "";
-        html += '<tr data-act="detail" data-id="' + r.id + '">' +
+        // 顺捷感三：还在同步队列里 = 云端没确认。本地数据已经生效，转圈只是告诉你"还没上云"，不影响使用
+        var isPending = pendingIds.indexOf(r.id) !== -1;
+        var spinMark = isPending ? ' <span class="row-spinner" title="已存本地，正在同步云端"></span>' : "";
+        html += '<tr data-act="detail" data-id="' + r.id + '"' + (isPending ? ' class="pending"' : '') + '>' +
           '<td class="check-col"><input type="checkbox" class="rec-check" data-id="' + r.id + '"' +
             (selected[r.id] ? " checked" : "") + ' /></td>' +
-          '<td><div>' + (list.length - i) + pinMark + inMark + tfMark + '</div></td>' +
+          '<td><div>' + (list.length - i) + pinMark + inMark + tfMark + spinMark + '</div></td>' +
           '<td>' + Util.esc(r.time || "-") + '</td>' +
           '<td>' + Util.esc(r.picker || "-") + '</td>' +
           (!isIn ? '<td>' + statusPill(r) + '</td>' : '') +
