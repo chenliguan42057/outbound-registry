@@ -628,33 +628,100 @@
       }
     }
 
-    /** 删除：必填删除理由 → 本地删除 + 云端墓碑（其他设备同步后自动清除残留） */
+    /* 顺捷感一（撤销删除）所需的模块内状态 */
+    var undoState = null;   // 当前可撤销的那一条：{id, snapshot, affects}
+    var undoedIds = {};     // id -> true，标记「已撤销」，供在途云端删除感知并做补偿
+
+    /** 删除：本地删除 + 云端墓碑（其他设备同步后自动清除残留）
+        2026-09-07 新增顺捷模式：直接删 + 底部 10 秒撤销条。
+        ?audit=1 时走 requireReason 分支，保持原来的必填理由逻辑一字不动。 */
     async function doDel(id) {
       var r = State.list.find(function (x) { return x.id === id; });
       if (!r) return;
       var affects = r.affectsStock === true;
-      var res = await UI.promptDialog(
-        affects ? "删除后库存会自动恢复。请填写删除理由：" : "请填写删除理由：",
-        "例如：登记错误 / 重复登记 / 已撤销…",
-        "删除记录",
-        "确认删除"
-      );
-      if (!res.ok) return;
-      // 先写本地墓碑队列（2026-09-06：不限 hasToken——离线删除也入队防复活）：
-      // 即使云端失败，也会在后续 sync 冲刷补推，避免记录复活
-      Cloud.enqueueTomb(id, res.value);
+
+      /* 审计模式：保持原有逻辑不变 */
+      if (Util.feature("requireReason")) {
+        var res = await UI.promptDialog(
+          affects ? "删除后库存会自动恢复。请填写删除理由：" : "请填写删除理由：",
+          "例如：登记错误 / 重复登记 / 已撤销…",
+          "删除记录",
+          "确认删除"
+        );
+        if (!res.ok) return;
+        // 先写本地墓碑队列（2026-09-06：不限 hasToken——离线删除也入队防复活）：
+        // 即使云端失败，也会在后续 sync 冲刷补推，避免记录复活
+        Cloud.enqueueTomb(id, res.value);
+        Records.remove(id);
+        renderList();
+        Util.toast(affects ? "已删除，库存已自动恢复" : "已删除");
+        if (Cloud.hasToken()) {
+          try {
+            await Cloud.delWithTombstone(r, res.value);
+            Cloud.dequeueTomb(id);   // 云端墓碑+删除成功才出队
+            try { await Cloud.delCloudPhotos(r.photoUrls); } catch (e) {}   // 照片孤儿治理：尽力而为，失败不影响删除
+          } catch (e) {
+            window.App.Views.app.setSyncStatus("云端删除失败（已存本地墓碑，下次同步自动补推）", true);
+          }
+        }
+        return;
+      }
+
+      /* 顺捷模式：立刻删除，理由默认记「快速删除」，10 秒内可撤销 */
+      var reason = "快速删除";
+      var snapshot = JSON.parse(JSON.stringify(r));   // 深拷贝，撤销时按原 id/_ts 还原
+      Cloud.enqueueTomb(id, reason);
       Records.remove(id);
       renderList();
       Util.toast(affects ? "已删除，库存已自动恢复" : "已删除");
-      if (Cloud.hasToken()) {
-        try {
-          await Cloud.delWithTombstone(r, res.value);
-          Cloud.dequeueTomb(id);   // 云端墓碑+删除成功才出队
-          try { await Cloud.delCloudPhotos(r.photoUrls); } catch (e) {}   // 照片孤儿治理：尽力而为，失败不影响删除
-        } catch (e) {
-          window.App.Views.app.setSyncStatus("云端删除失败（已存本地墓碑，下次同步自动补推）", true);
+      cloudDeleteWithUndo(id, snapshot, reason);
+      showUndoBar(id, snapshot, affects);
+    }
+
+    /* 云端删除。若删除落地前用户已点撤销（undoedIds 有标记），则改为补偿恢复：
+       必须先删墓碑、再推回记录 —— 顺序颠倒会被墓碑重新过滤掉（见 trash.js 的还原流程）。 */
+    async function cloudDeleteWithUndo(id, snapshot, reason) {
+      if (!Cloud.hasToken()) return;
+      try {
+        await Cloud.delWithTombstone(snapshot, reason);
+        if (undoedIds[id]) {
+          await Cloud.delTombstone(id);
+          await Cloud.push(snapshot);
+        } else {
+          Cloud.dequeueTomb(id);
         }
+      } catch (e) { /* 失败保留本地墓碑，后续同步自动补推，不打扰用户 */ }
+    }
+
+    function showUndoBar(id, snapshot, affects) {
+      undoState = { id: id, snapshot: snapshot, affects: affects };
+      Util.snackbar(affects ? "已删除，库存已恢复" : "已删除", {
+        actionText: "撤销",
+        duration: 10000,
+        onAction: function () { undoDelete(); },
+        onTimeout: function () { undoState = null; }
+      });
+    }
+
+    function undoDelete() {
+      if (!undoState) return;
+      var id = undoState.id;
+      var snapshot = undoState.snapshot;
+      undoedIds[id] = true;
+      Records.restore(snapshot);      // 按原 id/_ts 还原，不打乱库存时序
+      Cloud.dequeueTomb(id);          // 清本地墓碑，防止下一轮同步又把记录删掉
+      renderList();
+      Util.toast("已撤销删除");
+      if (Cloud.hasToken()) {
+        // 延迟 1.5 秒，让在途的 delWithTombstone 先 settle，避免 push 之后又被 del 覆盖
+        setTimeout(function () {
+          Cloud.delTombstone(id)
+            .then(function () { return Cloud.push(snapshot); })
+            .then(function () { Util.toast("已撤销，云端已恢复"); })
+            .catch(function () { Util.toast("撤销成功，云端稍后自动同步", true); });
+        }, 1500);
       }
+      undoState = null;
     }
 
     function doSync() {
