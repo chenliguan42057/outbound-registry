@@ -59,6 +59,26 @@
     } catch (e) { /* 隐私模式等 localStorage 不可用时，静默退回旧版 */ }
   })();
 
+  /* 顺捷感三件套总开关（2026-09-07）：默认全部开启。
+     ?smooth=0  一键关闭全部三项并记住（线上出问题时的 30 秒止血开关）
+     ?smooth=1  恢复开启
+     ?audit=1   删除恢复「必填理由」模式，满足审计留痕要求
+     与上方 v2 开关同模式：只设置一个标志位，不碰任何业务逻辑；
+     删掉这一段，所有 Util.feature() 一律返回 true（缺省即开启）。 */
+  (function () {
+    window.App = window.App || {};
+    window.App.FEATURES = { fastDelete: true, swipe: true, optimistic: true, requireReason: false };
+    try {
+      var q = location.search || "";
+      var v = localStorage.getItem("pilot-smooth");
+      var on = (v !== "0");
+      if (q.indexOf("smooth=0") !== -1) { on = false; localStorage.setItem("pilot-smooth", "0"); }
+      else if (q.indexOf("smooth=1") !== -1) { on = true; localStorage.setItem("pilot-smooth", "1"); }
+      if (q.indexOf("audit=1") !== -1) window.App.FEATURES.requireReason = true;
+      if (!on) window.App.FEATURES = { fastDelete: false, swipe: false, optimistic: false, requireReason: false };
+    } catch (e) { /* 隐私模式等 localStorage 不可用时，保持默认全开 */ }
+  })();
+
   /* 版本自检：GitHub Pages 无法下发 Cache-Control 头，页面长时间挂着可能跑旧版 JS。
      部署时把短 SHA 写入 <meta build-ver> 与 version.txt（见 deploy.yml），
      此处对比两者，不一致说明页面是旧版 → 强制 reload 拉到最新资源。
