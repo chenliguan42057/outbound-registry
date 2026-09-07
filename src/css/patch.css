@@ -516,3 +516,91 @@ html[data-theme="dark"] .landing #outReset.btn.ghost {
   border-color: rgba(156, 196, 175, .4);
 }
 html[data-theme="dark"] .landing #outReset.btn.ghost:hover { background: rgba(42, 58, 50, .9); }
+
+/* ============================================================
+   顺捷感三件套样式（2026-09-07）
+   ① 撤销条 .snackbar  ② 左滑浮层 .row-actions  ③ 待同步 tr.pending + .row-spinner
+   纯新增，不覆盖任何已有规则；出问题删掉本段即可完整回到原样
+   ============================================================ */
+
+/* ① 撤销条：深色底在浅色/深色主题下都可读，自带 pointer-events:auto（.toast 是 none，承载不了按钮） */
+.snackbar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(92vw, 460px);
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #2F3A34;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 14px 36px rgba(20, 40, 30, .28);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translate(-50%, 16px) scale(.98);
+  transition: opacity .2s ease, transform .2s cubic-bezier(.2, .9, .3, 1.2);
+}
+.snackbar.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.snackbar-action {
+  flex: none;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .16);
+  color: #BFE3D1;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.snackbar-action:hover { background: rgba(255, 255, 255, .28); }
+.snackbar-action:active { transform: scale(.96); }
+@media (max-width: 560px) {
+  .snackbar { left: 12px; right: 12px; bottom: 16px; max-width: none; transform: translateY(16px) scale(.98); }
+  .snackbar.show { transform: translateY(0) scale(1); }
+}
+
+/* ② 左滑浮层：fixed 定位，不受表格重排 / 横向滚动影响 */
+.row-actions {
+  position: fixed;
+  z-index: 9998;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--card-soft, #fff);
+  border: 1px solid var(--border, rgba(87, 130, 111, .2));
+  box-shadow: var(--shadow-float, 0 20px 50px rgba(87, 130, 111, .2));
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+.row-actions.show { opacity: 1; transform: translateY(0); }
+html[data-theme="dark"] .row-actions {
+  background: #243028;
+  border-color: rgba(156, 196, 175, .28);
+}
+
+/* ③ 待同步行：淡底 + 行尾转圈。本地数据已生效，这只是"还没上云"的提示，不影响使用 */
+.table tbody tr.pending > td { background: rgba(111, 160, 138, .07); }
+.row-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-left: 4px;
+  vertical-align: -1px;
+  border: 2px solid rgba(87, 130, 111, .28);
+  border-top-color: var(--mint-600, #57826F);
+  border-radius: 50%;
+  animation: row-spin .8s linear infinite;
+}
+@keyframes row-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .row-spinner { animation-duration: 2s; }
+  .snackbar, .row-actions { transition-duration: .01ms; }
+}
