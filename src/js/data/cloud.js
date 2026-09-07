@@ -1324,6 +1324,7 @@
     fetchCatalogAt: fetchCatalogAt,
     pushWithRetry: pushWithRetry,
     flushQueue: flushQueue,
+    enqueue: enqueue,
     loadQueue: loadQueue,
     getQueue: getQueue,
     onQueueChange: onQueueChange,
