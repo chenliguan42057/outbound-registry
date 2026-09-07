@@ -134,6 +134,13 @@ jobs:
             echo "::error::检测到推送信息视图缺失/未注册/或核心逻辑被回滚，已中止部署。"
             exit 1
           fi
+      - name: 语法防线：全部 JS 跑 node --check（防手滑语法错误 / 脚本整写导致的损坏）
+        run: |
+          set -e
+          for f in $(find src -name "*.js"); do
+            node --check "$f" >/dev/null 2>&1 || { echo "::error::JS 语法错误: $f"; exit 1; }
+          done
+          echo "全部 $(find src -name '*.js' | wc -l) 个 JS 语法检查通过"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
