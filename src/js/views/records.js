@@ -141,6 +141,8 @@
 
       // 列表操作事件委托
       listBox.addEventListener("click", function (e) {
+        // 顺捷感二：刚刚判定为左滑手势，把紧随的这次 click 吞掉，避免滑完手一松就弹详情
+        if (suppressClick) { suppressClick = false; return; }
         var btn = e.target.closest("[data-act]");
         if (!btn) return;
         if (e.target && e.target.classList && e.target.classList.contains("rec-check")) return;
@@ -260,7 +262,94 @@
       }
     }
 
+    /* ============================================================
+       顺捷感二：列表左滑手势
+       两个必须避开的冲突：
+       ① 表格设了 min-width，窄屏会出现横向滚动 —— 此时禁用左滑，
+          否则手势和横向滚动打架（用户改用详情弹窗里的编辑/删除，本来就存在）
+       ② 整行点击是「查看详情」—— 识别为滑动后设 suppressClick，
+          把紧随的那次 click 吞掉，避免滑完手一松就弹详情
+       ============================================================ */
+    var suppressClick = false;
+    var swipeBound = false;
+    var rowActionsEl = null;
+
+    function closeRowActions() {
+      if (rowActionsEl && rowActionsEl.parentNode) rowActionsEl.parentNode.removeChild(rowActionsEl);
+      rowActionsEl = null;
+    }
+
+    function outsideCloseRA(e) {
+      if (!e.target || !e.target.closest || !e.target.closest(".row-actions")) {
+        closeRowActions();
+        document.removeEventListener("pointerdown", outsideCloseRA);
+      }
+    }
+
+    function showRowActions(id, rect) {
+      closeRowActions();
+      if (!State.list.some(function (x) { return x.id === id; })) return;
+      var pop = document.createElement("div");
+      pop.className = "row-actions show";
+      pop.innerHTML = '<button type="button" class="btn ghost sm" data-ra="edit">编辑</button>' +
+                      '<button type="button" class="btn danger sm" data-ra="del">删除</button>';
+      // 浮层用 fixed 定位：不受表格重排/横向滚动影响，rect 已是视口坐标
+      pop.style.top = (rect.top + 6) + "px";
+      pop.style.left = Math.max(8, rect.right - 168) + "px";
+      document.body.appendChild(pop);
+      rowActionsEl = pop;
+      pop.addEventListener("click", function (e) {
+        var b = e.target.closest ? e.target.closest("[data-ra]") : null;
+        if (!b) return;
+        var act = b.getAttribute("data-ra");
+        closeRowActions();
+        if (act === "edit") doEdit(id);
+        else if (act === "del") doDel(id);
+      });
+      setTimeout(function () { document.addEventListener("pointerdown", outsideCloseRA); }, 0);
+    }
+
+    function bindSwipe() {
+      if (swipeBound || !listBox) return;
+      swipeBound = true;
+      var sx = 0, sy = 0, st = 0, swiping = false;
+
+      listBox.addEventListener("pointerdown", function (e) {
+        if (!Util.feature("swipe")) return;
+        if (e.target && e.target.closest && e.target.closest("input,button,img")) return;   // 起点在控件上不启动
+        sx = e.clientX; sy = e.clientY; st = Date.now(); swiping = true;
+      });
+
+      listBox.addEventListener("pointerup", function (e) {
+        if (!swiping) return;
+        swiping = false;
+        if (!Util.feature("swipe")) return;
+        var dx = e.clientX - sx, dy = e.clientY - sy, dt = Date.now() - st;
+        if (dx >= 0) return;                            // 只认左滑
+        if (Math.abs(dx) < 55) return;                  // 距离不够
+        if (Math.abs(dx) < Math.abs(dy) * 1.5) return;  // 更像竖向滚动，不是滑动
+        if (dt > 600) return;                           // 拖太久不算手势
+        var tr = e.target && e.target.closest ? e.target.closest("tr[data-id]") : null;
+        if (!tr) return;
+        var wrap = listBox.querySelector(".table-wrap");
+        // 窄屏表格横向可滚动时禁用左滑，避免与滚动冲突
+        if (wrap && wrap.scrollWidth > wrap.clientWidth + 2) return;
+        suppressClick = true;
+        setTimeout(function () { suppressClick = false; }, 300);
+        showRowActions(tr.getAttribute("data-id"), tr.getBoundingClientRect());
+      });
+
+      // 待同步队列变化时自动重渲染：入队→显示转圈，出队→转圈消失
+      if (Cloud.onQueueChange) {
+        Cloud.onQueueChange(function () {
+          if (listBox && listBox.offsetParent !== null) renderList();
+        });
+      }
+    }
+
     function renderList() {
+      var pendingIds = Cloud.loadQueue() || [];   // 顺捷感三：待同步 id，用于给行加 pending 态
+      closeRowActions();                          // 列表重建会销毁原 <tr>，浮层必须一并关掉
       var list = filter();
       Util.$("recCount").textContent = list.length + " 条";
       if (!list.length) {
