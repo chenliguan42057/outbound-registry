@@ -123,6 +123,57 @@
     toastTimer = setTimeout(function () { el.className = "toast"; }, 2200);
   }
 
+  /* 底部可操作提示条（snackbar）：独立于 .toast。
+     .toast 在 theme.css 里设了 pointer-events:none，承载不了「撤销」这类可点按钮，
+     所以这里自建元素挂到 body，并显式声明 pointer-events:auto。 */
+  function snackbar(msg, opts) {
+    opts = opts || {};
+    var old = document.querySelector(".snackbar");
+    if (old && old.parentNode) old.parentNode.removeChild(old);   // 同时只留一条，避免叠罗汉
+
+    var box = document.createElement("div");
+    box.className = "snackbar";
+    var span = document.createElement("span");
+    span.textContent = msg;
+    box.appendChild(span);
+
+    var btn = null;
+    if (opts.actionText) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "snackbar-action";
+      btn.textContent = opts.actionText;
+      box.appendChild(btn);
+    }
+    document.body.appendChild(box);
+    requestAnimationFrame(function () { box.classList.add("show"); });
+
+    function close() {
+      box.classList.remove("show");
+      setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 250);
+    }
+    var timer = setTimeout(function () {
+      close();
+      if (opts.onTimeout) opts.onTimeout();
+    }, opts.duration || 4000);
+
+    if (btn) {
+      btn.addEventListener("click", function () {
+        clearTimeout(timer);
+        close();
+        if (opts.onAction) opts.onAction();
+      });
+    }
+    return box;
+  }
+
+  /* 特性开关：读 window.App.FEATURES，缺省一律视为开启。
+     这样即使总开关脚本被删除或未执行，也不会让功能意外失效。 */
+  function feature(name) {
+    var f = (window.App && window.App.FEATURES) || {};
+    return f[name] !== false;
+  }
+
   /** 下载文件（Blob） */
   function download(filename, content, mime) {
     var blob = content instanceof Blob
@@ -150,6 +201,8 @@
     b64enc: b64enc,
     b64dec: b64dec,
     toast: toast,
+    snackbar: snackbar,
+    feature: feature,
     download: download,
     safeUrl: safeUrl,
     observeServerTime: observeServerTime,
