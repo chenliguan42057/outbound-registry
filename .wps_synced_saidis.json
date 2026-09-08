@@ -165,6 +165,11 @@
       "ok": 1,
       "at": "2026-09-08T04:51:15Z",
       "mode": "del_product_col"
+    },
+    "wpscol:1788871530654.json": {
+      "ok": 1,
+      "at": "2026-09-08T12:45:44Z",
+      "mode": "add_product_col"
     }
   },
   "mto0kt0o7u3al": {
