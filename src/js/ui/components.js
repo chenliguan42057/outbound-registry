@@ -313,7 +313,7 @@
       if (qb) {
         var i = Number(qb.getAttribute("data-i"));
         var cur = Number(self.selected[i].qty) || 0;
-        var next = qb.getAttribute("data-act") === "inc" ? cur + 1 : Math.max(0, cur - 1);
+        var next = qb.getAttribute("data-act") === "inc" ? cur + 1 : cur - 1;   // 2026-09-08 允许负数（冲正/库存可为负），不再钳 0
         self.selected[i].qty = next;
         self.render();
         self.emit();
@@ -416,7 +416,7 @@
         '<span class="name">' + Util.esc(it.name) + '</span>' +
         '<div class="qty-stepper">' +
           '<button type="button" class="qty-btn" data-act="dec" data-i="' + i + '" aria-label="减少">−</button>' +
-          '<input type="number" min="0" max="999999" step="1" inputmode="numeric" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 数量" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
+          '<input type="number" min="-999999" max="999999" step="1" inputmode="numeric" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 数量" value="' + Util.esc(it.qty) + '" class="qty" data-i="' + i + '" />' +
           '<button type="button" class="qty-btn" data-act="inc" data-i="' + i + '" aria-label="增加">+</button>' +
         '</div>' +
         '<span class="x" data-i="' + i + '">&times;</span>';
@@ -427,15 +427,17 @@
       : "尚未选择货品，请在上方搜索并选择。";
   };
 
-  /** 获取有效货品 [{name, qty}]（qty >= MIN_QTY 且 <= MAX_QTY，过滤掉 0.0001 这类误填） */
+  /** 获取有效货品 [{name, qty}]（2026-09-08 允许负数登记：|qty| 落在 [MIN_QTY, MAX_QTY] 且 ≠0；
+      0 视为未填被过滤；0.0001 这类误填仍按 |qty| < MIN_QTY 丢弃） */
   ProductPicker.MIN_QTY = 0.001;
   ProductPicker.MAX_QTY = 999999;
   ProductPicker.prototype.getItems = function () {
     return this.selected
       .map(function (s) { return { name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }; })
       .filter(function (s) {
-        return s.name && isFinite(s.qty)
-          && s.qty >= ProductPicker.MIN_QTY && s.qty <= ProductPicker.MAX_QTY;
+        var q = s.qty;
+        return s.name && isFinite(q) && q !== 0
+          && Math.abs(q) >= ProductPicker.MIN_QTY && Math.abs(q) <= ProductPicker.MAX_QTY;
       });
   };
 
@@ -444,10 +446,10 @@
     var problems = [];
     this.selected.forEach(function (s) {
       var n = s.qty === "" ? 0 : Number(s.qty);
-      if (!isFinite(n) || n <= 0) problems.push(s.name + " 未填数量");
+      if (!isFinite(n) || n === 0) problems.push(s.name + " 未填数量");
       else if (Math.floor(n) !== n) problems.push(s.name + " 数量需为整数（支/盒/袋按整件计）");
-      else if (n < ProductPicker.MIN_QTY) problems.push(s.name + " 数量过小");
-      else if (n > ProductPicker.MAX_QTY) problems.push(s.name + " 数量超上限");
+      else if (Math.abs(n) < ProductPicker.MIN_QTY) problems.push(s.name + " 数量过小");
+      else if (Math.abs(n) > ProductPicker.MAX_QTY) problems.push(s.name + " 数量超上限");
     });
     return problems;
   };

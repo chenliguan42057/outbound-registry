@@ -448,16 +448,8 @@
       return;
     }
 
-    // 库存下限校验：扣减后不得为负（B7）。属聚合信息，保留 toast，同时给货品区标红。
-    var short = items.filter(function (it) { return (Stock.getStock(it.name) - it.qty) < 0; });
-    if (short.length) {
-      var shortMsg = "库存不足：" + short.map(function (it) {
-        return it.name + "（剩 " + Stock.getStock(it.name) + "）";
-      }).join("、");
-      UI.reportFieldErrors([{ el: Util.$("outProductPicker"), msg: shortMsg }], els.submit.closest(".card") || document);
-      Util.toast(shortMsg, true);
-      return;
-    }
+    // 2026-09-08 允许库存为负：登记出库即使扣成负数也放行（实际超卖 / 库存基准未录全时先记负、
+    // 后续补入库拉回）。原「库存不足」下限拦截（B7）已按主理人要求移除。扣后库存由 stampStock 快照留痕。
 
     setSubmitting(true);
     var wasEditing = !!editingId;

@@ -185,13 +185,8 @@
     if (lock.locked) return;
     var items = picker.getItems();
     if (!items.length) { Util.toast("请先选择要调拨的货品并填写数量", true); lock.unlock(); return; }
-    // 调出方=当前系统：直接用它实时的库存校验，绝不允许调出超过现有库存
-    var shortage = [];
-    items.forEach(function (it) {
-      var avail = (Stock.getStock && Stock.getStock(it.name)) || 0;
-      if (it.qty > avail) shortage.push("「" + it.name + "」需调出 " + it.qty + "，当前库存仅 " + avail);
-    });
-    if (shortage.length) { Util.toast("库存不足：" + shortage.join("；"), true); lock.unlock(); return; }
+    // 2026-09-08 允许库存为负：调出侧不再强制校验“不得超过现有库存”（与出库登记口径一致，
+    // 允许先调出记负、后续补账；对方仓入库照记，两端台账留痕）。
 
     var transferNo = (Util.$("tfNo").value || "").trim();
     if (!transferNo) { Util.toast("请填写调拨单号（必填）", true); lock.unlock(); return; }
