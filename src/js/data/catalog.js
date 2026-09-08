@@ -380,7 +380,8 @@
        ① 优先 product-map.js 的 wpsMap（老货品列名保持旧规则，如 20支盒/洁面150ml）；
        ② 未命中则按系列词自动归属：洁面/精粹 → 2026鹿茸水乳系列；精华液/面膜/礼盒 → 2026时空鹿茸库存；
           列名 = 名称去空格（如 精华液 40支装 → 精华液40支装）。表头统一「发放<列名>/库存<列名>」。
-       ③ 袋类等（牛皮纸袋/手提袋/帆布袋/透明袋…）→ null，不进金山台账。
+       ③ 纯包装耗材（牛皮纸袋/手提袋/帆布袋/透明袋…）→ null，不进金山台账；
+          拎袋属礼盒配套，2026-09-08 起纳入台账（与礼盒同表「2026时空鹿茸库存」）。
      save() 保存目录时自动把新增货品的归属写入 catalog 的 wps 字段（前后端共用该字段）。
      增删 diff 会向 data(-saidis)/catalog/wps-events/{ts}.json 写事件，
      GitHub Actions wps_sync 把事件转发给金山 AirScript 真正执行加列/删列（幂等）。 */
@@ -397,8 +398,10 @@
       var plain = nm.replace(/\s+/g, "");
       if (!plain) return null;
       if (/洁面|精粹/.test(nm)) return { sheet: "2026鹿茸水乳系列", col: plain };
-      if (/精华液|面膜|礼盒/.test(nm)) return { sheet: "2026时空鹿茸库存", col: plain };
-      if (/袋/.test(nm)) return null; // 牛皮纸袋/手提袋/帆布袋/透明袋等包装物不进台账
+      // 2026-09-08 起：拎袋是礼盒配套货品，纳入台账自动同步（主理人要求）
+      if (/精华液|面膜|礼盒|拎袋/.test(nm)) return { sheet: "2026时空鹿茸库存", col: plain };
+      // 只有纯包装耗材不进台账（牛皮纸袋/帆布袋/透明袋/手提袋/包装袋/自封袋）
+      if (/牛皮纸袋|帆布袋|透明袋|手提袋|包装袋|自封袋/.test(nm)) return null;
     } catch (e) {}
     return null;
   }

@@ -484,6 +484,61 @@ function deleteColumnAt(sh, idx) {
   throw new Error("删除列失败(" + letter + "): " + errs.join(" | "));
 }
 
+// ===== 货品区末尾定位 + 格式刷（2026-09-08）=====
+// 需求：新增货品列必须 ①紧跟最后一个货品列后面（插到「用途/部门/记录ID」之前，货品区连成一片）
+//      ②格式与相邻货品列完全一致（列宽/字体/边框/底色/对齐/数字格式），不能是"裸列"。
+// 「货品区」= 第4列起连续出现的 [发放,库存] 产品列，撞上第一个非产品列（用途/部门/备注/记录ID）即为止。
+function findProductBlockEnd(sh) {
+  var pairs = scanProductPairs(sh);
+  var isProduct = {};
+  for (var pk in pairs) { isProduct[pairs[pk][0]] = 1; isProduct[pairs[pk][1]] = 1; }
+  var maxCol = 0;
+  for (var m = 1; m <= 100; m++) {
+    var mv = getCellValue(sh, m, 1);
+    if (mv !== null && mv !== undefined && mv !== "") maxCol = m;
+  }
+  var last = 0;
+  for (var c = 4; c <= maxCol; c++) {
+    if (isProduct[c]) { last = c; continue; }
+    break;   // 撞上基础列 → 货品区到此为止
+  }
+  if (!last) {   // 表头断档时退化：取所有产品列的最大列号
+    for (var pk2 in pairs) { if (pairs[pk2][1] > last) last = pairs[pk2][1]; }
+  }
+  return { last: last, maxCol: maxCol, pairs: pairs };
+}
+
+// 格式刷：把 src 列的样子原样刷到 dst 列（只刷格式，不动数据）
+function copyColFormat(sh, src, dst, fillTo) {
+  var sl = colLetter(src), dl = colLetter(dst);
+  var done = false;
+  try {   // ① 整列复制 + 只粘格式（xlPasteFormats = -4122）
+    sh.Columns(sl + ":" + sl).Copy();
+    sh.Range(dl + "1:" + dl + fillTo).PasteSpecial(-4122);
+    try { Application.CutCopyMode = false; } catch (e0) {}
+    done = true;
+  } catch (e) { done = false; }
+  try {   // ② 列宽单独补（Range 粘贴格式不一定带列宽）
+    sh.Columns(dl + ":" + dl).ColumnWidth = sh.Columns(sl + ":" + sl).ColumnWidth;
+  } catch (e1) {}
+  if (done) return;
+  try {   // ③ 兜底：逐属性复制（个别环境 PasteSpecial 不可用时）
+    var s = sh.Columns(sl + ":" + sl), d = sh.Columns(dl + ":" + dl);
+    d.ColumnWidth = s.ColumnWidth;
+    d.NumberFormatLocal = s.NumberFormatLocal;
+    d.HorizontalAlignment = s.HorizontalAlignment;
+    d.VerticalAlignment = s.VerticalAlignment;
+    d.WrapText = s.WrapText;
+    d.Interior.Color = s.Interior.Color;
+    try {
+      d.Font.Name = s.Font.Name; d.Font.Size = s.Font.Size;
+      d.Font.Bold = s.Font.Bold; d.Font.Color = s.Font.Color;
+    } catch (e2) {}
+  } catch (e3) {
+    console.log("格式刷退化（不影响建列）: " + ((e3 && e3.message) || e3));
+  }
+}
+
 function addProductCol(a) {
   var sheetName = a.sheet_name;
   var col = String(a.col || "").trim();
@@ -497,20 +552,35 @@ function addProductCol(a) {
     console.log("产品列已存在，跳过: " + col);
     return { ok: true, existed: true, sheet: sheetName, col: col };
   }
-  // 插入位置：记录ID 列所在处（Insert 会把原列右移，保持 ID 列在右缘）；无 ID 列则表尾追加
-  var idCol = findIdCol(sh);
-  var maxCol = 0;
-  for (var i = 1; i <= 100; i++) {
-    var hv = getCellValue(sh, i, 1);
-    if (hv !== null && hv !== undefined && hv !== "") maxCol = i;
+  // 插入位置：货品区末尾（最后一个 [发放,库存] 对之后）→ 新列紧跟最后一个货品，
+  // 「用途/部门/记录ID」被整体右移；找不到货品区则退回记录ID列前/表尾。
+  var blk = findProductBlockEnd(sh);
+  var last = blk.last, pairs = blk.pairs, maxCol = blk.maxCol;
+  var pos = 0, srcIssue = 0, srcStock = 0;
+  if (last >= 4) {
+    for (var k in pairs) {
+      if (pairs[k][1] === last) { srcIssue = pairs[k][0]; srcStock = pairs[k][1]; }
+    }
+    if (!srcStock) { srcStock = last; srcIssue = last - 1; }
+    pos = last + 1;
+  } else {
+    var idCol = findIdCol(sh);
+    pos = idCol || (maxCol + 1);
   }
-  var pos = idCol || (maxCol + 1);
   insertColumnAt(sh, pos);          // 发放列
   insertColumnAt(sh, pos + 1);      // 库存列
+  // 格式刷：新两列照抄相邻货品列（列宽/边框/底色/字体/对齐/数字格式全覆盖）
+  if (srcStock) {
+    var fillTo = findLastDataRow(sh) + 500;   // 与 styleColumns 的整列上色缓冲保持一致
+    copyColFormat(sh, srcIssue, pos, fillTo);
+    copyColFormat(sh, srcStock, pos + 1, fillTo);
+  }
   setCellValue(sh, pos, 1, "发放" + col);
   setCellValue(sh, pos + 1, 1, "库存" + col);
-  console.log("已新增产品列: " + col + " -> " + colLetter(pos) + "/" + colLetter(pos + 1));
-  return { ok: true, sheet: sheetName, col: col, issueCol: pos, stockCol: pos + 1 };
+  console.log("已新增产品列: " + col + " -> " + colLetter(pos) + "/" + colLetter(pos + 1) +
+              (srcStock ? ("（格式复制自 " + colLetter(srcIssue) + "/" + colLetter(srcStock) + "）") : "（无格式源）"));
+  return { ok: true, sheet: sheetName, col: col, issueCol: pos, stockCol: pos + 1,
+           formatFrom: srcStock ? [srcIssue, srcStock] : null };
 }
 
 function delProductCol(a) {
