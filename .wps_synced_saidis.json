@@ -105,6 +105,46 @@
       "ok": 1,
       "at": "2026-09-08T01:45:16Z",
       "mode": "add_product_col"
+    },
+    "wpscol:1788835000001.json": {
+      "ok": 1,
+      "at": "2026-09-08T03:16:38Z",
+      "mode": "del_product_col"
+    },
+    "wpscol:1788835000002.json": {
+      "ok": 1,
+      "at": "2026-09-08T03:16:39Z",
+      "mode": "del_product_col"
+    },
+    "wpscol:1788835000003.json": {
+      "ok": 1,
+      "at": "2026-09-08T03:16:41Z",
+      "mode": "del_product_col"
+    },
+    "wpscol:1788835000004.json": {
+      "ok": 1,
+      "at": "2026-09-08T03:16:42Z",
+      "mode": "del_product_col"
+    },
+    "wpscol:1788835000005.json": {
+      "ok": 1,
+      "at": "2026-09-08T03:16:43Z",
+      "mode": "add_product_col"
+    },
+    "wpscol:1788835000006.json": {
+      "ok": 1,
+      "at": "2026-09-08T03:16:46Z",
+      "mode": "add_product_col"
+    },
+    "wpscol:1788835000007.json": {
+      "ok": 1,
+      "at": "2026-09-08T03:16:47Z",
+      "mode": "add_product_col"
+    },
+    "wpscol:1788835000008.json": {
+      "ok": 1,
+      "at": "2026-09-08T03:16:48Z",
+      "mode": "add_product_col"
     }
   },
   "mto0kt0o7u3al": {
