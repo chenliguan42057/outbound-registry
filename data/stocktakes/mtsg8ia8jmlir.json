@@ -1,0 +1,1 @@
+{"id":"mtsg8ia8jmlir","_ts":1788858621584,"time":"2026-09-08T17:10","kind":"stocktake","warehouse":"shenzhen","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +10 / 盘亏 -0","_local":true,"items":[{"name":"中号礼盒","book":12,"actual":17,"diff":5},{"name":"中号拎袋","book":12,"actual":17,"diff":5}]}
