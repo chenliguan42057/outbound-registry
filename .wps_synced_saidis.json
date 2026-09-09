@@ -1,5 +1,13 @@
 {
-  "__fail__": {},
+  "__fail__": {
+    "mttmh10n5ylxg": {
+      "fail": 1,
+      "at": "2026-09-09T04:53:52Z",
+      "err": [
+        "2026时空鹿茸库存: <urlopen error timed out>"
+      ]
+    }
+  },
   "test-saidis-in-0905": {
     "ok": 2,
     "fail": 0,
