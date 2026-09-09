@@ -226,6 +226,17 @@ def classify(name):
     if norm and norm in WPS_MAP:
         v = WPS_MAP[norm]
         return ("mapped", list(v)) if isinstance(v, (list, tuple)) else ("excluded", None)
+    # 2026-09-09：目录里后加的货品（拎袋/礼盒等）常常还没写进 catalog 的 wps 字段，
+    # 以前一律判 unknown → 金山漏写（09-08「小号拎袋」3 笔就是这么丢的）。
+    # 这里按系列词自动归属，规则与前端 catalog.js guessWps 保持一致。
+    plain = "".join(nm.split())
+    if plain:
+        if any(k in nm for k in ("洁面", "精粹")):
+            return ("mapped", ["2026鹿茸水乳系列", plain])
+        if any(k in nm for k in ("精华液", "面膜", "礼盒", "拎袋")):
+            return ("mapped", ["2026时空鹿茸库存", plain])
+        if any(k in nm for k in ("牛皮纸袋", "帆布袋", "透明袋", "手提袋", "包装袋", "自封袋")):
+            return ("excluded", None)
     return ("unknown", None)
 
 
