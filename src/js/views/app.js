@@ -213,6 +213,9 @@
   function switchSystem(id) {
     if (!id || id === Config.Sys.current().id) return;
     Config.Sys.set(id);
+    // 2026-09-11：切仓即作废在途同步。上一仓的 syncPull 若仍在 await，
+    // 完成后必须丢弃结果，否则旧仓数据会写进新仓的列表和本地缓存（串仓幽灵）。
+    try { if (window.App.Cloud && window.App.Cloud.bumpSyncGeneration) window.App.Cloud.bumpSyncGeneration(); } catch (e) {}
     updateBrand();
     // 重读新系统的本地缓存（记录/待取货/备忘/盘点，键已按系统隔离）
     window.App.State.init();

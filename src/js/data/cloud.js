@@ -215,6 +215,15 @@
     return { recs: got, stillFail: left };
   }
 
+  /* 2026-09-11：跨仓切换的同步竞态防护。
+     切仓那一刻，上一仓库的 syncPull 可能还在 await 中；它跑完后会把旧仓的 merged
+     写进 State.list 并落进【新仓】的 localStorage key，而无 warehouse 字段的旧记录
+     还能通过 Store 的两仓过滤 → 串仓幽灵记录。
+     用自增世代号解决：切仓 bumpSyncGeneration()，syncPull 每次回到主线程要写状态前
+     都校验世代号，变了说明仓库已切走 —— 丢弃本次结果，一个字节都不写。 */
+  var SYNC_GEN = 0;
+  function bumpSyncGeneration() { SYNC_GEN++; return SYNC_GEN; }
+
   /** 统计云端某目录下 .json 文件数（同步后对账用：判断"云端应该有几条"） */
   function countCloudJson(tree, dir) {
     if (!tree) return 0;
@@ -1314,6 +1323,7 @@
    */
   async function syncPull(opts) {
     opts = opts || {};
+    var myGen = SYNC_GEN;   // 竞态防护：本次同步启动时的数据世代（见 SYNC_GEN 注释）
     var onStatus = opts.onStatus || function () {};
     onStatus("同步中…", false);
     try {
@@ -1386,6 +1396,10 @@
           } catch (e) {}
         }
       }
+      // 竞态防护：await 期间仓库被切走了 → 本次结果一律丢弃，绝不写进新仓的状态/缓存
+      if (myGen !== SYNC_GEN) {
+        return { ok: false, aborted: true, reason: "warehouse-switched" };
+      }
       window.App.State.list = merged;
       // 墓碑保留在内存态，供「回收站」列出可还原的已删记录（不落 localStorage：快照含照片 dataURL，易撑爆配额）
       window.App.State.tombstones = toms || [];
@@ -1456,6 +1470,7 @@
     waitWpsReceipt: waitWpsReceipt,
     describeWpsReceipt: describeWpsReceipt,
     syncPull: syncPull,
+    bumpSyncGeneration: bumpSyncGeneration,
     fetchTree: fetchTree,
     pullDir: pullDir,
     pushTombstone: pushTombstone,
