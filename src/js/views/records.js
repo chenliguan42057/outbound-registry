@@ -50,8 +50,9 @@
           '<div class="rec-filters">' +
             (isIn
               ? '<select id="recSource" class="search" title="按来源筛选"></select>'
-              : '<select id="recSource" class="search" title="按来源筛选"><option value="">全部（普通出库+调拨）</option><option value="' + Records.InSource.TRANSFER_OUT + '">⇄ 调拨出库</option></select>') +
-            '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "部门/对方仓" : "部门/客户") + '" autocomplete="off" />' +
+              : '<select id="recSource" class="search" title="按来源筛选"><option value="">全部（普通出库+调拨）</option><option value="' + Records.InSource.TRANSFER_OUT + '">⇄ 调拨出库</option><option value="' + SRC_NORMAL_OUT + '">↷ 普通出库（不含调拨）</option></select>') +
+            '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "部门/对方仓" : "部门/客户") + '" autocomplete="off" list="recDeptList" />' +
+            '<datalist id="recDeptList"></datalist>' +
             '<input type="text" id="recPicker" class="search" placeholder="' + (isIn ? "经办人" : "领取人") + '" autocomplete="off" />' +
             '<input type="date" id="recFrom" class="search" title="开始日期" />' +
             '<input type="date" id="recTo" class="search" title="结束日期" />' +
@@ -85,7 +86,7 @@
         searchState.from = fromEl.value;
         searchState.to = toEl.value;
         if (isIn) searchState.srcIn = srcEl.value;
-        else searchState.srcOut = (srcEl.value === Records.InSource.TRANSFER_OUT) ? Records.InSource.TRANSFER_OUT : "";
+        else searchState.srcOut = (srcEl.value === Records.InSource.TRANSFER_OUT || srcEl.value === SRC_NORMAL_OUT) ? srcEl.value : "";
         if (stEl) searchState.stOut = stEl.value;
         Store.saveSearch(searchState);
         renderList();
@@ -187,8 +188,11 @@
         // 来源筛选（入库=预设/自定义/调拨入库；出库=调拨出库）。旧调拨记录无 source 时按 transferRole 兜底匹配
         var srcSel = isIn
           ? (searchState.srcIn || "")
-          : (searchState.srcOut === Records.InSource.TRANSFER_OUT ? Records.InSource.TRANSFER_OUT : "");
-        if (srcSel && !Records.InSource.match(r, srcSel)) return false;
+          : ((searchState.srcOut === Records.InSource.TRANSFER_OUT || searchState.srcOut === SRC_NORMAL_OUT) ? searchState.srcOut : "");
+        // 「↷ 普通出库」= 排除调拨出库（旧记录无 source 时靠 transferRole==="out" 兜底识别，match 已兼容）
+        if (srcSel === SRC_NORMAL_OUT) {
+          if (Records.InSource.match(r, Records.InSource.TRANSFER_OUT)) return false;
+        } else if (srcSel && !Records.InSource.match(r, srcSel)) return false;
         // 提单状态筛选（仅出库列表，2026-09-11）：pending=未提单 / submitted=已提单。
         // getStatus：入库记录返回 null、出库旧记录无 status 默认 submitted，与徽章显示口径一致。
         if (!isIn && searchState.stOut && Records.getStatus(r) !== searchState.stOut) return false;
@@ -211,6 +215,21 @@
         if (pa === 1) return (Number(b.pinnedAt) || 0) - (Number(a.pinnedAt) || 0);
         return 0;
       });
+    }
+
+    /** 普通出库筛选项标记值（2026-09-11）：出库列表要能单独筛「排除调拨」的记录 */
+    var SRC_NORMAL_OUT = "__normal__";
+
+    /** 部门下拉提示选项：从现有记录提取去重部门值，配合 <datalist> —— 既能下拉选也能手动输入模糊搜。
+        历史数据里部门比较杂（49 种，还混了少量人名），做成提示列表而不是硬下拉，保留自由度。 */
+    function deptListOptions() {
+      var seen = {}, arr = [];
+      (State.list || []).forEach(function (r) {
+        var d = String(r.dept || "").trim();
+        if (d && !seen[d]) { seen[d] = 1; arr.push(d); }
+      });
+      arr.sort(function (a, b2) { return String(a).localeCompare(String(b2), "zh-Hans-CN"); });
+      return arr.map(function (d) { return '<option value="' + Util.esc(d) + '"></option>'; }).join("");
     }
 
     /** 入库列表「来源筛选」下拉选项：全部来源 + 预设 + ⇄ 调拨入库 + 本仓自定义（与入库登记 chips 同一数据源） */
@@ -369,6 +388,9 @@
     function renderList() {
       var pendingIds = Cloud.loadQueue() || [];   // 顺捷感三：待同步 id，用于给行加 pending 态
       closeRowActions();                          // 列表重建会销毁原 <tr>，浮层必须一并关掉
+      // 每次重绘刷新部门下拉候选：新登记/删除记录后选项跟着变
+      var dlEl = Util.$("recDeptList");
+      if (dlEl) dlEl.innerHTML = deptListOptions();
       var list = filter();
       Util.$("recCount").textContent = list.length + " 条";
       if (!list.length) {
