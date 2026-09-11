@@ -55,13 +55,18 @@
             '<input type="text" id="recPicker" class="search" placeholder="' + (isIn ? "经办人" : "领取人") + '" autocomplete="off" />' +
             '<input type="date" id="recFrom" class="search" title="开始日期" />' +
             '<input type="date" id="recTo" class="search" title="结束日期" />' +
+            '<button type="button" id="recDateClear" class="btn ghost sm" title="清空开始/结束日期筛选">✕ 清日期</button>' +
+            (!isIn
+              ? '<select id="recStatus" class="search" title="按提单状态筛选"><option value="">全部状态</option><option value="pending">● 未提单</option><option value="submitted">● 已提单</option></select>'
+              : '') +
           '</div>' +
           '<div id="recListBox"></div>' +
         '</div>';
 
       listBox = Util.$("recListBox");
       var deptEl = Util.$("recDept"), pickerEl = Util.$("recPicker"),
-          fromEl = Util.$("recFrom"), toEl = Util.$("recTo"), srcEl = Util.$("recSource");
+          fromEl = Util.$("recFrom"), toEl = Util.$("recTo"), srcEl = Util.$("recSource"),
+          stEl = Util.$("recStatus"), dcEl = Util.$("recDateClear");
       deptEl.value = searchState.dept;
       pickerEl.value = searchState.picker;
       fromEl.value = searchState.from;
@@ -72,6 +77,7 @@
         : (searchState.srcOut === Records.InSource.TRANSFER_OUT ? Records.InSource.TRANSFER_OUT : "");
       if (isIn) fillInSourceOptions(srcEl, savedSrc);
       srcEl.value = savedSrc;
+      if (stEl) stEl.value = searchState.stOut || "";
 
       function save() {
         searchState.dept = deptEl.value.trim();
@@ -80,6 +86,7 @@
         searchState.to = toEl.value;
         if (isIn) searchState.srcIn = srcEl.value;
         else searchState.srcOut = (srcEl.value === Records.InSource.TRANSFER_OUT) ? Records.InSource.TRANSFER_OUT : "";
+        if (stEl) searchState.stOut = stEl.value;
         Store.saveSearch(searchState);
         renderList();
       }
@@ -88,6 +95,14 @@
         input.addEventListener("change", save);
       });
       srcEl.addEventListener("change", save);
+      if (stEl) stEl.addEventListener("change", save);
+      // 日期筛选一键清空（2026-09-11）：原生 date 输入框没有清空按钮，只能手动删字符，加个 ✕
+      if (dcEl) dcEl.addEventListener("click", function () {
+        fromEl.value = "";
+        toEl.value = "";
+        save();
+        try { Util.toast("已清空日期筛选"); } catch (e) {}
+      });
 
       Util.$("recExport").addEventListener("click", function () {
         Records.exportCsv(filter());
@@ -174,6 +189,9 @@
           ? (searchState.srcIn || "")
           : (searchState.srcOut === Records.InSource.TRANSFER_OUT ? Records.InSource.TRANSFER_OUT : "");
         if (srcSel && !Records.InSource.match(r, srcSel)) return false;
+        // 提单状态筛选（仅出库列表，2026-09-11）：pending=未提单 / submitted=已提单。
+        // getStatus：入库记录返回 null、出库旧记录无 status 默认 submitted，与徽章显示口径一致。
+        if (!isIn && searchState.stOut && Records.getStatus(r) !== searchState.stOut) return false;
         if (from !== null) {
           var t1 = new Date(r.time || 0).getTime();
           if (isNaN(t1) || t1 < from) return false;
