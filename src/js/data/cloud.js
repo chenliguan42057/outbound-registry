@@ -1358,6 +1358,34 @@
       if (localTomb && Object.keys(localTomb).length) {
         merged = merged.filter(function (r) { return !localTomb[r.id]; });
       }
+      // —— 串仓幽灵记录清理（2026-09-11）——
+      // 现象：对方仓的旧出库单（如 09-05/09-06 几笔赛迪斯单，无 warehouse 字段，
+      // Store.loadRecords/saveRecords 的两仓过滤对旧记录放行）混进本仓列表；
+      // 云端本仓目录没有该文件，增量同步"只进不出"，永远清不掉。
+      // 判定（复用本次已拉取的全仓 tree，零额外请求）：本仓目录没有 id.json、
+      // 而对方仓目录有 → 串仓记录，从本仓列表剔除（对方仓数据不动）。
+      // 保护：本地待推送队列里的 id 不剔（新登记还没写上云端，不能误杀）。
+      if (tree) {
+        var myRecDir = Config.Sys.dir("records") + "/";
+        var otherRecDir = (Config.Sys.current().saidis ? "data/" : "data-saidis/") + "records/";
+        var sqArr = [];
+        try { sqArr = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || "[]") || []; } catch (e) {}
+        var inQueue = {};
+        (sqArr || []).forEach(function (x) { inQueue[(typeof x === "string") ? x : (x && x.id)] = 1; });
+        var ghostN = 0;
+        merged = merged.filter(function (r) {
+          if (!r || !r.id || inQueue[r.id]) return true;
+          if (tree[myRecDir + r.id + ".json"]) return true;
+          if (tree[otherRecDir + r.id + ".json"]) { ghostN++; return false; }
+          return true;   // 两边云端都没有的保守不动，先观察
+        });
+        if (ghostN > 0) {
+          try {
+            window.App.Util.toast("已从本仓列表移除 " + ghostN + " 条串仓记录（属" +
+              (Config.Sys.current().saidis ? "深圳细胞" : "赛迪斯") + "，对方仓数据未受影响）", true);
+          } catch (e) {}
+        }
+      }
       window.App.State.list = merged;
       // 墓碑保留在内存态，供「回收站」列出可还原的已删记录（不落 localStorage：快照含照片 dataURL，易撑爆配额）
       window.App.State.tombstones = toms || [];
