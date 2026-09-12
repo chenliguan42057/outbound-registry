@@ -1,0 +1,1 @@
+{"id":"mtxxz6m0uw68b","_ts":1789190750520,"time":"2026-09-12T13:25","type":"out","warehouse":"shenzhen","items":[{"name":"精华液 20支装","qty":10,"stock":0}],"purpose":"撤回调拨入库（DB202609120001）","picker":"赛迪斯（撤销）","dept":"赛迪斯","note":"撤回调拨：DB202609120001","affectsStock":true,"transferId":"mtxxyy4ngb16x","transferRole":"rollback-out","transferNo":"DB202609120001"}
