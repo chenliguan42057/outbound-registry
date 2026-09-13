@@ -414,16 +414,31 @@
     });
   }
 
-  /** 删除云端单条记录 */
+  /** 删除云端单条记录。返回 true=删除成功（或本就不存在，视为已删）；false=删除失败需重试。
+      2026-09-13 修复「删除不彻底」：原实现 catch 后静默 return，导致墓碑已写、记录文件却留在云端，
+      形成「墓碑 + 记录并存」的矛盾状态（记录会继续参与库存计算）。现改为显式返回结果，供上层补删。 */
   async function del(id) {
     var path = Config.Sys.dir("records") + "/" + id + ".json";
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
-    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }
-    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
-      method: "DELETE", headers: ghHeaders(),
-      body: JSON.stringify({ message: "del " + id, sha: sha, branch: Config.GH.branch })
-    });
+    try { var ej = await apiJson(getUrl); sha = ej.sha; }
+    catch (e) {
+      // 404 = 云端本就没有该文件（可能已被删除或从未上传），视为删除完成
+      if (String(e && e.message ? e.message : e).indexOf("404") === 0) return true;
+      console.warn("[cloud] del 读取 sha 失败:", id, e);
+      return false;   // 其余错误（网络/限速）→ 报告失败，交由上层补删
+    }
+    if (!sha) return true;   // 响应异常但无 sha：按已不存在处理
+    try {
+      await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+        method: "DELETE", headers: ghHeaders(),
+        body: JSON.stringify({ message: "del " + id, sha: sha, branch: Config.GH.branch })
+      });
+      return true;
+    } catch (e) {
+      console.warn("[cloud] del 删除失败:", id, e);
+      return false;
+    }
   }
 
   /* ================= 待取货云端同步（目录 data/pickups） ================= */
@@ -597,10 +612,26 @@
     });
   }
 
-  /** 删除并写墓碑（先墓碑后删原文件） */
+  /** 删除并写墓碑。
+      2026-09-13 修复「删除不彻底」：改为「先删记录文件、后写墓碑」并检查删除结果。
+      - 旧实现先写墓碑后删文件，若删文件失败则留下「墓碑 + 记录并存」的矛盾状态，
+        且删除结果无人校验，记录会继续留在云端参与库存计算。
+      - 现实现：① 先 del()，失败则最多补试 2 次；② 仍失败则抛出异常（由上层保留本地队列、
+        下轮 sync 用 flushTombQueue 补删），绝不写墓碑——宁可不删也不能留下矛盾态；
+      - ③ 删除成功后才写墓碑。返回 true=完成；抛异常=未完成（调用方 catch 后应保留队列项）。 */
   async function delWithTombstone(rec, reason) {
+    if (!rec || !rec.id) return false;
+    var okDel = false;
+    for (var attempt = 0; attempt < 3 && !okDel; attempt++) {
+      try { okDel = await del(rec.id); } catch (e) { okDel = false; }
+      if (!okDel && attempt < 2) await new Promise(function (res) { setTimeout(res, 400 * (attempt + 1)); });
+    }
+    if (!okDel) {
+      // 记录文件没能删掉 → 不写墓碑，抛给上层（保留本地队列，后续 sync 补删）
+      throw new Error("云端记录删除失败:" + rec.id);
+    }
     await pushTombstone(rec, reason);
-    await del(rec.id);
+    return true;
   }
 
   /** 移除云端墓碑（回收站还原用）。
@@ -1042,7 +1073,7 @@
         time: now,
         type: "in",
         items: items,
-        purpose: "撤回调拨出库（" + transferNo + "）",
+        purpose: "撤回调拨入库（" + transferNo + "）",
         picker: (dstName || "对方仓库") + "（撤销）",
         dept: dstName || "",
         entity: window.App.Config && window.App.Config.Sys ? window.App.Config.Sys.entity() : "",
@@ -1072,7 +1103,7 @@
       type: "out",
       warehouse: dstDef.id,   // 跨仓直写守卫：标记归属对方仓，pushRecordTo 据此放行
       items: items,
-      purpose: "撤回调拨入库（" + transferNo + "）",
+      purpose: "撤回调拨出库（" + transferNo + "）",
       picker: (srcName || "本系统") + "（撤销）",
       dept: srcName || "",
       note: "撤回调拨：" + transferNo,
@@ -1114,7 +1145,10 @@
     loadTombQueue().forEach(function (x) { if (x && x.id) s[x.id] = true; });
     return s;
   }
-  /** 冲刷本地墓碑队列：逐条补推 tombstone + 删除文件，成功出队。返回 {ok, remain} */
+  /** 冲刷本地墓碑队列：逐条补推 tombstone + 删除文件，成功出队。返回 {ok, remain}
+      2026-09-13 修复「删除不彻底」：本地已删（State.list 找不到）的队列项，原先只补推墓碑、
+      漏删了云端记录文件，导致云端出现「墓碑 + 记录并存」的矛盾态（记录继续参与库存计算）。
+      现改为：无论本地是否还留着记录，都先确保云端记录文件被删除，再写墓碑。 */
   async function flushTombQueue() {
     var q = loadTombQueue();
     if (!q.length) return { ok: 0, remain: 0 };
@@ -1124,8 +1158,14 @@
       var item = q[i];
       var rec = (window.App.State.list || []).find(function (r) { return r.id === item.id; });
       try {
-        if (rec) { await delWithTombstone(rec, item.reason); }
-        else { await pushTombstone({ id: item.id }, item.reason); }   // 本地已删仅剩队列项：补推墓碑即可
+        // 先确保云端记录文件已删除（带补试）；本地无记录时用最小 rec（仅 id）走同一条补删路径
+        var okDel = false;
+        for (var a = 0; a < 3 && !okDel; a++) {
+          try { okDel = await del(item.id); } catch (e) { okDel = false; }
+          if (!okDel && a < 2) await new Promise(function (res) { setTimeout(res, 400 * (a + 1)); });
+        }
+        if (!okDel) { remain++; continue; }   // 删不掉 → 保留队列项，下轮再补，不写墓碑（避免矛盾态）
+        await pushTombstone(rec || { id: item.id }, item.reason);
         dequeueTomb(item.id);
         ok++;
       } catch (e) { remain++; }
