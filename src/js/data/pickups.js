@@ -1,8 +1,10 @@
 /**
  * pickups.js — 待取货 CRUD + 云端合并排序
- * 待取货 schema（新增，不影响既有记录 schema）：{id, time, picker, dept, purpose,
- *   items:[{name,qty}], note?, confirmed:false, shipped:false, _ts}
+ * 待取货 schema：{id, picker, dept, purpose, items:[{name,qty}], note?,
+ *   confirmed:false, confirmedAt?, shipped:false, createdAt, _ts, warehouse}
  *   confirmed = 已确认提单（默认 false）；shipped = 已出库（默认 false）。
+ *   createdAt = 登记时间（2026-09-13 新增，列表「登记时间」列与超时判定用；_ts 是最后修改时间，会变）。
+ *   旧记录遗留的 time 字段（原「预计取货时间」，已从表单移除）= 兼容读取，不再写入。
  * 注意：待取货记录绝不影响库存计算（stock.js 只遍历 State.list，天然隔离）。
  */
 (function () {
@@ -17,6 +19,7 @@
     var pk = Object.assign({
       id: Util.genId(),
       _ts: Date.now(),
+      createdAt: Date.now(),
       confirmed: false,
       shipped: false,
       items: [],
@@ -67,8 +70,21 @@
       map.set(p.id, p);
     });
     return Array.from(map.values()).sort(function (a, b) {
-      return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
+      // 2026-09-13：原按 time 字符串降序（time 已从表单移除，新记录没有该字段，
+      // 字符串比较会把新记录排到老记录下面）。改为按「登记时间戳」降序，口径与列表一致。
+      return regTs(b) - regTs(a);
     });
+  }
+
+  /** 登记时间戳（毫秒）：createdAt → 老记录的 time → 最后修改 _ts */
+  function regTs(p) {
+    if (!p) return 0;
+    if (p.createdAt) return Number(p.createdAt) || 0;
+    if (p.time) {
+      var d = new Date(String(p.time).replace(" ", "T"));
+      if (!isNaN(d.getTime())) return d.getTime();
+    }
+    return Number(p._ts) || 0;
   }
 
   /** 转为出库记录 payload（确认出库时调用；不含 confirmed/shipped）。
