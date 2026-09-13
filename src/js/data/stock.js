@@ -1,7 +1,12 @@
 /**
  * stock.js — 库存计算与报表数据
- * getStock(name) = INVENTORY[name] + Σ(affectsStock===true && type==='in' ? +qty : -qty)
+ * getStock(name) = INVENTORY[name]
+ *                + Σ(affectsStock===true && type==='in' ? +qty : -qty)   ← 真实出入库流水
+ *                + Σ(盘点校准 diff)                                       ← 盘点事件（2026-09-13 起）
  * 旧记录（无 affectsStock=true）不参与计算，已包含在 INVENTORY 快照中。
+ *
+ * 2026-09-13 盘点事件化：盘点不再改写 INVENTORY 基准，而是作为一条带 _ts 的增量事件并入时间轴。
+ * 这样「当时库存」在盘点时刻正确落位，历史流水的快照不会被后续盘点整体平移。
  */
 (function () {
   'use strict';
@@ -23,6 +28,32 @@
   var _stockIndex = null;
   var _stockIndexDirty = true;
   function markDirty() { _stockIndexDirty = true; }
+
+  /** 盘点校准事件（State.stocktakes）→ 增量列表 [{name, delta}]。
+      记录格式：{kind:"stocktake", _ts, items:[{name, book, actual, diff}]}，
+      diff = 实存 - 账面，正为盘盈、负为盘亏；diff 为 0 的项不产生事件。
+      2026-09-13 起盘点走事件化：只加一条增量，不动 catalog.inventory 基准。 */
+  function stocktakeEvents(r) {
+    if (!r || r.kind !== "stocktake") return null;
+    var out = [];
+    (r.items || []).forEach(function (it) {
+      var d = Number(it.diff) || 0;
+      if (d) out.push({ name: norm(it.name), delta: d });
+    });
+    return out.length ? out : null;
+  }
+
+  /** 全货品盘点校准净增量：{name: 累计 diff}。供 summarize 的 stock 兜底口径使用。 */
+  function stocktakeAdjMap() {
+    var m = {};
+    (State.stocktakes || []).forEach(function (r) {
+      var evs = stocktakeEvents(r);
+      if (!evs) return;
+      evs.forEach(function (e) { m[e.name] = (m[e.name] || 0) + e.delta; });
+    });
+    return m;
+  }
+
   function buildStockIndex() {
     var idx = {};
     (Config.PRODUCTS || []).forEach(function (name) {
@@ -35,6 +66,16 @@
         if (!idx[name]) idx[name] = { inv: Config.INVENTORY[name] || 0, events: [] };
         var q = Number(it.qty) || 0;
         idx[name].events.push({ ts: Number(r._ts) || 0, delta: r.type === "in" ? q : -q });
+      });
+    });
+    // 盘点校准事件并入同一时间轴（按 _ts 参与排序），使「当时库存」在盘点点正确落位
+    (State.stocktakes || []).forEach(function (r) {
+      var evs = stocktakeEvents(r);
+      if (!evs) return;
+      var ts = Number(r._ts) || 0;
+      evs.forEach(function (e) {
+        if (!idx[e.name]) idx[e.name] = { inv: Config.INVENTORY[e.name] || 0, events: [] };
+        idx[e.name].events.push({ ts: ts, delta: e.delta });
       });
     });
     Object.keys(idx).forEach(function (name) {
@@ -51,7 +92,7 @@
       否则走预计算索引 O(1)。 */
   function getStock(name, list) {
     name = norm(name);
-    if (list) { // 即时计算（显式 list）
+    if (list) { // 即时计算（显式 list：真实出入库记录 + 盘点校准事件）
       var init = Config.INVENTORY[name] || 0, inQty = 0, outQty = 0;
       list.forEach(function (r) {
         if (r.affectsStock !== true) return;
@@ -61,7 +102,13 @@
           if (r.type === "in") inQty += q; else outQty += q;
         });
       });
-      return init + inQty - outQty;
+      var adj = 0;
+      (State.stocktakes || []).forEach(function (r) {
+        var evs = stocktakeEvents(r);
+        if (!evs) return;
+        evs.forEach(function (e) { if (e.name === name) adj += e.delta; });
+      });
+      return init + inQty - outQty + adj;
     }
     if (_stockIndexDirty || !_stockIndex) buildStockIndex();
     var entry = _stockIndex[name];
@@ -95,8 +142,10 @@
     return entry.inv + sum;
   }
 
-  /** 全部货品汇总：{name, stock, inQty, outQty} */
+  /** 全部货品汇总：{name, stock, inQty, outQty, adjQty}
+      stock = 基准 + 出入库净额 + 盘点净增量；inQty/outQty 只统计真实出入库，不含盘点。 */
   function summarize(list) {
+    var adjMap = stocktakeAdjMap();
     return Config.PRODUCTS.map(function (name) {
       var inQty = 0, outQty = 0;
       (list || State.list).forEach(function (r) {
@@ -107,11 +156,13 @@
           if (r.type === "in") inQty += q; else outQty += q;
         });
       });
+      var adj = adjMap[name] || 0;
       return {
         name: name,
-        stock: Config.INVENTORY[name] + inQty - outQty,
+        stock: Config.INVENTORY[name] + inQty - outQty + adj,
         inQty: inQty,
-        outQty: outQty
+        outQty: outQty,
+        adjQty: adj
       };
     });
   }

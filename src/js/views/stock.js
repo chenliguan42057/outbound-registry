@@ -455,7 +455,7 @@
       '</div>';
     }).join("");
     var body =
-      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量，保存后校准库存基准到实存数，并记入系统库存流水、推送差异到钉钉群（不进金山台账）。</div>' +
+      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量。保存后<b>只记一条盘点差额</b>（盘盈 +N / 盘亏 -N）并入库存流水，<b>不改动库存基准，也不回溯修改已有出入库流水的「当时库存」</b>；差异同时推送钉钉群（不进金山台账）。</div>' +
       '<div style="max-height:46vh;overflow:auto">' + rows + '</div>' +
       '<div class="modal-actions" style="margin-top:14px">' +
       '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
@@ -476,38 +476,31 @@
           var inp = mBody.querySelector('.st-in[data-i="' + i + '"]');
           var actual = Math.round(inp ? (Number(inp.value) || 0) : s.stock);
           var diff = actual - s.stock;
-          if (diff !== 0) diffs.push({ name: s.name, diff: diff });
+          if (diff !== 0) diffs.push({ name: s.name, diff: diff, stock: s.stock });
         });
         if (!diffs.length) { Util.toast("盘点数与当前库存一致，无需调整"); UI.Modal.hide(); return; }
         var inSum = 0, outSum = 0;
         diffs.forEach(function (d) { if (d.diff > 0) inSum += d.diff; else outSum -= d.diff; });
-        // P1 改进：盘点改为「校准库存基准」，不再生成出入库记录。
-        // 旧逻辑生成 affectsStock=true 的调整记录：系统多一笔流水、金山又没有 → 每次盘点后系统就偏离金山一笔。
-        // 直接改 catalog.inventory 基准则：1) 不产生流水记录，流水干净；2) 不进金山，金山不变，两边长期一致；
-        // 3) 系统库存 = 用户输入的实存数。
+        // 2026-09-13（主理人要求）盘点改为「事件化」：只写一条带 _ts 的盘点差额事件（data/stocktakes/），
+        // 由 Stock 并入库存时间轴参与计算；不再改写 catalog.inventory 基准。
+        // 原因：旧实现改基准 → 该货品全部历史流水的「当时库存」被整体平移（"一盘点全部库存都变了"）。
+        // 现在：真实出入库流水的快照保持原样，盘点只在盘点那一刻加/减差额，库存随订单增删正常变化。
         var ok = await UI.confirmDialog(
-          "差异汇总：实存比账面多 +" + inSum + "、少 -" + outSum + "。\n将校准库存基准到实存数并记入系统库存流水（不进金山台账），同时推送钉钉群。确认执行？", "盘点校准确认");
+          "差异汇总：实存比账面多 +" + inSum + "、少 -" + outSum + "。\n将记录一条盘点差额进库存流水（不改库存基准、不动已有流水的当时库存），同时推送钉钉群（不进金山台账）。确认执行？", "盘点确认");
         if (!ok) { UI.Modal.hide(); return; }
         // 2026-09-05：确认后立即收起盘点弹窗——云端保存在后台进行（15s 超时 + 3 次重试），
         // 弱网/移动端下用户不再看到“弹窗卡住 / 保存按钮点了没反应”，结果统一用 toast 呈现。
         UI.Modal.hide();
-        var Catalog = window.App.Catalog;
-        var cat = Catalog && Catalog.get();
-        if (!cat || !cat.inventory) { Util.toast("目录未就绪，无法校准", true); return; }
-        // 记录校准前后数值（book=账面/校准前，actual=实存/校准后），供保存成功后推送钉钉
-        var affected = [];
-        diffs.forEach(function (d) {
-          var base = Number(cat.inventory[d.name]) || 0;
-          affected.push({ name: d.name, book: base, actual: base + d.diff, diff: d.diff });
-          cat.inventory[d.name] = base + d.diff;
+        // 盘点差额事件：book=盘点前的实时库存（账面）、actual=实存、diff=差额。
+        // 不再取 catalog.inventory 基准，也不再写回 —— 库存基准保持不动。
+        var affected = diffs.map(function (d) {
+          return { name: d.name, book: d.stock, actual: d.stock + d.diff, diff: d.diff };
         });
         if (window.App.Stock) window.App.Stock.markDirty();
-        Catalog.save(cat, function (okSave, msg) {
-          if (okSave) {
-          Util.toast("盘点校准完成：库存基准已更新为实存数");
+          Util.toast("盘点已记录：库存按实存数调整");
           var stkTime = Util.nowLocal ? Util.nowLocal() : new Date().toISOString();
-          // 生成盘点校准记录 → 系统库存流水可见（State.stocktakes + data/stocktakes/<id>.json，
-          // 独立目录：不进金山台账、不触发登记推送、不参与库存计算，仅库存流水弹窗展示）
+          // 生成盘点差额事件 → 库存流水可见 + Stock 按 _ts 并入库存计算
+          // （State.stocktakes + data/stocktakes/<id>.json，独立目录：不进金山台账、不触发登记推送）
           try {
             var stk = {
               id: Util.genId ? Util.genId() : ("stk" + Date.now()),
@@ -544,10 +537,6 @@
           refresh();
           try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
           try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
-        } else {
-          Util.toast("目录保存失败：" + (msg || ""), true);
-        }
-      });
       } finally {
         stBtn.dataset.busy = "0";
         stBtn.disabled = false;
