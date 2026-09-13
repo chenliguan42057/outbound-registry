@@ -1,0 +1,1 @@
+{"id":"mtzhso0j6z858","_ts":1789284504979,"time":"2026-09-13T15:28","kind":"stocktake","warehouse":"saidis","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +18 / 盘亏 -8","_local":true,"items":[{"name":"精华液 5支装","book":593,"actual":611,"diff":18},{"name":"精粹水 120ml","book":155,"actual":147,"diff":-8}]}
