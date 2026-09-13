@@ -14,7 +14,13 @@ wps_sync.py — 把「鹿茸登记」记录推送到金山轻维表（照台账�
      ——主程序 out/in 页提交的记录没有 lurong 字段，靠这里识别
 出库/入库：rec.type=="in" 视为入库，其余（含 out.js 不设 type）视为出库
 
-幂等：已处理过的记录 ID 写入 .wps_synced.json 标记，下次跳过，避免重复写行与死循环。
+幂等（2026-09-13 升级为「内容指纹」）：
+  已处理过的记录 ID 写入 .wps_synced.json 标记，并记下当时的「内容指纹」。
+  下次遇到同一 rid 时比对指纹：
+    - 指纹一致 → 内容确实没变，跳过（保持原来的幂等语义，不重复写行）
+    - 指纹变化 → 记录被二次编辑过，改用金山 update_order 把那一行「原地刷新」
+      （数量变了会连带重算该行往下的库存链），而不是留着旧值永远追不上
+  特例：若编辑后这单已无鹿茸商品（或变成差额单/盘点单）→ 撤掉金山那一行。
 """
 
 import os
@@ -22,6 +28,7 @@ import json
 import sys
 import time
 import base64
+import hashlib
 import urllib.request
 DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据前缀：默认 data（深圳）；赛迪斯 workflow 注入 data-saidis
 
@@ -355,13 +362,133 @@ def collect_jobs(rec):
     return by_sheet, skipped
 
 
+def norm_purpose(rec):
+    """把记录的「用途」归一化成最终写进金山的文字。
+
+    赛迪斯记录自动补「赛迪斯·」前缀（幂等：已带前缀的不重复加）。
+    抽成独立函数是为了让「写金山的文字」和「算指纹的文字」取自同一处，
+    否则改了一边忘另一边会导致指纹永远对不上、每小时无限重写。
+    """
+    purpose = rec.get("purpose", "") or ""
+    entity = rec.get("entity", "") or ""
+    if entity and "赛迪斯" in entity and purpose and not purpose.startswith("赛迪斯·"):
+        p = purpose
+        if p.startswith("赛迪斯"):
+            p = p[len("赛迪斯"):]
+        p = p.lstrip("·").strip()
+        if p:
+            return "赛迪斯·" + p
+    return purpose
+
+
+def _num(v):
+    """宽松转数：数量可能是 int/float/字符串，转不动就当 0（不抛异常）。"""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return round(f, 4)
+
+
+def rec_fingerprint(rec):
+    """记录内容指纹 —— 「这条记录写进金山会长什么样」的摘要。
+
+    只取真正会落到金山台账那一行上的字段：子表归属、类型、日期、领取人、
+    放发人、用途（归一化后）、部门、各货品的数量。
+    刻意不含 id/_ts/status 等与台账无关的字段，避免「只改了个状态」就触发重写。
+
+    用途：升级幂等判据。老逻辑是「记录ID处理过就永远跳过」，
+    导致二次编辑后金山保留旧值且永远追不上。改成比对指纹：
+      指纹一致 → 确实没改，跳过（保持原幂等）
+      指纹变化 → 记录被编辑过，去金山把那一行原地刷新
+    """
+    by_sheet, _ = collect_jobs(rec)
+    sig = {
+        "t": "in" if rec.get("type") == "in" else "out",
+        "d": fmt_date(rec.get("time", "")),
+        "picker": str(rec.get("picker", "") or ""),
+        "sender": "陈利冠",
+        "purpose": norm_purpose(rec),
+        "dept": str(rec.get("dept", "") or ""),
+        "items": {},
+    }
+    for sheet in sorted(by_sheet.keys()):
+        rows = []
+        for (p, q) in by_sheet[sheet]:
+            n = _num(q)
+            if p and n > 0:
+                rows.append([str(p), n])
+        sig["items"][sheet] = sorted(rows)
+    raw = json.dumps(sig, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def push_delete_order(rid, sheets):
+    """向金山发 delete_order：删掉该 rid 的行 + 重算下游库存。
+
+    幂等：金山侧找不到就返回 notFound（视为已删，不算失败）。
+    返回 (ok, fail, detail)。删行同步与「编辑后需撤单」两条路径共用。
+    """
+    ok = 0
+    fail = 0
+    detail = {}
+    for sheet in sheets:
+        payload = {"Context": {"argv": {
+            "mode": "delete_order", "sheet_name": sheet, "rid": rid}}}
+        try:
+            body = post_to_wps(payload)
+            res = wps_result(body)
+            if res.get("ok") is False:
+                raise RuntimeError(res.get("error") or "金山脚本返回 ok:false")
+            if res.get("notFound"):
+                log("· %s 未找到 rid=%s 的行（可能已删）" % (sheet, rid))
+                detail[sheet] = "notFound"
+            else:
+                log("🗑️ 已删 %s 第%s行 (rid=%s)，重算下游库存 %s 格"
+                    % (sheet, res.get("deletedRows"), rid, res.get("recalced", 0)))
+                detail[sheet] = {"rows": res.get("deletedRows"),
+                                 "recalced": res.get("recalced", 0)}
+            ok += 1
+        except Exception as e:
+            log("❌ 删除失败 %s rid=%s：%s" % (sheet, rid, e))
+            detail[sheet] = "error: %s" % e
+            fail += 1
+    return ok, fail, detail
+
+
+def push_update_order(rid, sheet, argv):
+    """向金山发 update_order：把 rid 那一行「原地」刷新成新内容 + 重算下游库存。
+
+    为什么不做「先删后追加」：台账库存列是滚动余额、行序就是时间序，
+    删掉再追加会把这条记录挪到表尾，余额曲线就不再按日期排了。
+    原地更新则保留原行位置，只把这行往下的库存链重算一遍。
+
+    返回 (status, res)：status = 'ok' 更新成功；'notFound' 金山没有这一行
+    （例如被人手工删了）——调用方应改走 append_order 补写。
+    """
+    a = dict(argv)
+    a["mode"] = "update_order"
+    body = post_to_wps({"Context": {"argv": a}})
+    res = wps_result(body)
+    if res.get("ok") is False:
+        raise RuntimeError(res.get("error") or "金山脚本返回 ok:false")
+    if res.get("notFound"):
+        return "notFound", res
+    log("✏️ 已更新 %s 第%s行 (rid=%s)，重算下游库存 %s 格"
+        % (sheet, res.get("row"), rid, res.get("recalced", 0)))
+    return "ok", res
+
+
 def process_record(rec, synced):
     rid = rec.get("id")
     if not rid:
         return 0, 0
+    fp = rec_fingerprint(rec)
+
     prev = synced.get(rid)
     prev_rows = {}
     partial = False
+    edited = False          # 内容变了、且这单曾成功写进金山 → 需要原地更新那一行
     if prev is not None:
         # 断点续传：跨子表订单上次「部分成功」（有成功子表行号、但仍带 fail/err）时，
         # 本次只补 rows 缺失的子表；已在 rows 里的子表绝不重写（避免重复加行/加库存）。
@@ -371,35 +498,81 @@ def process_record(rec, synced):
             prev_rows = dict(prev.get("rows") or {})
             log("🔄 断点续传 %s：上次部分成功（已有子表 %s），本次只补缺失子表"
                 % (rid, ",".join(prev_rows.keys())))
-        else:
-            # 完全成功 / skip 类型（borrow_diff/stocktake/无货品）—— 幂等跳过
+        elif isinstance(prev, dict) and prev.get("fp") == fp:
+            # 指纹一致 —— 内容确实没变，幂等跳过（与原行为一致，且不再重复写金山）
             return 0, 0
+        elif not isinstance(prev, dict) or not prev.get("fp"):
+            # 老标记：本功能上线前同步的记录，没有指纹可比 → 补登记指纹后按「未变更」处理。
+            # 这里必须 return，不能往下走 —— 往下走会当成本次新记录再 append 一行，
+            # 而金山里那一行已经存在，结果就是重复行（且每小时兜底扫描都会再写一遍）。
+            # 历史漂移由「全量台账校准」一次性抹平；补上指纹后，往后的编辑就都能被识别了。
+            synced[rid] = dict(prev) if isinstance(prev, dict) else {}
+            synced[rid]["fp"] = fp
+            log("· %s 老标记无指纹，补登记 %s（本次不改金山行）" % (rid, fp))
+            return 0, 0
+        elif prev.get("skip"):
+            # 上次判「不入台账」（差额单/盘点/无货品）。内容变了 → 作废旧判定、重走全流程：
+            # 增减货品可能让一条原本不入账的单子变得该入账（反之亦然）。
+            log("ℹ️ %s 内容已变更（原判定 skip=%s），重新判定" % (rid, prev.get("reason", "")))
+            prev = None
+        else:
+            # 内容变了 + 曾成功写进金山 → 原地更新那一行
+            # 必须同时取出上次写过的子表行号（prev_rows）：既要据此判断「该子表用更新还是追加」，
+            # 也要在「编辑后已无鹿茸商品」时知道该去哪些子表撤行。
+            edited = True
+            prev_rows = dict(prev.get("rows") or {})
+            log("✏️ %s 内容已变更 → 金山原地更新（旧指纹 %s → 新指纹 %s）"
+                % (rid, prev.get("fp") or "无", fp))
 
     # 先借后还「差额单」不进金山台账（归还入库单 type=in 不受影响，照常记）。
     # 账务口径说明：借出时原单已记一笔出库（全量），归还时已记一笔入库（归还量），
     # 差额 = 借出 − 归还，系统库存已由前两笔自然体现（差额单 affectsStock=false，不参与库存计算）。
     # 若差额单再往金山记一笔出库，金山台账会比系统库存整整多扣一倍差额，两边账对不上。
     # 同理，差额单后续被标为「已提单」也只是改状态，不产生新的货物流动，无需再记。
-    if rec.get("fromBorrowId") and str(rec.get("type", "out")).lower() != "in":
-        synced[rid] = {"skip": 1, "reason": "borrow_diff", "at": now_iso()}
-        log("⏭ 跳过先借后还差额单 %s（不进金山台账，避免重复扣减）" % rid)
+    def _mark_skip(reason, note):
+        """登记「不入台账」标记（带内容指纹，避免下次因无指纹被误判为「内容变了」）。
+
+        特例：这单以前是入过账的（内容被改成了差额单/盘点单），必须先把金山那一行撤掉，
+        否则台账会永久留下一笔不该存在的货物流。
+        撤行失败则不写正式标记 —— 下次还会重试，不留「以为撤了其实没撤」的矛盾态。
+        """
+        if edited and prev_rows:
+            d_ok, d_fail, _ = push_delete_order(rid, list(prev_rows.keys()))
+            if d_fail:
+                fails = synced.setdefault("__fail__", {})
+                fails[rid] = {"fail": d_fail, "at": now_iso(),
+                              "err": ["改判为 %s 后撤行失败" % reason]}
+                return 0, 0
+        synced[rid] = {"skip": 1, "reason": reason, "fp": fp, "at": now_iso()}
+        log(note)
         return 0, 0
+
+    if rec.get("fromBorrowId") and str(rec.get("type", "out")).lower() != "in":
+        return _mark_skip("borrow_diff",
+                          "⏭ 跳过先借后还差额单 %s（不进金山台账，避免重复扣减）" % rid)
 
     # 库存盘点平账产生的调整记录不进金山台账（盘盈→入库、盘亏→出库，两种都跳过）。
     # 盘点只是把账面库存校准到实际清点值，并非真实的采购入库或领用出库；
     # 记进金山会让台账凭空多出一笔货物流动，与真实业务流水对不上。
     # 识别特征：purpose 固定为「盘点调整」（stock.js openStocktake 生成，picker/dept 同为「盘点」）。
     if (rec.get("purpose") or "").strip() == "盘点调整":
-        synced[rid] = {"skip": 1, "reason": "stocktake", "at": now_iso()}
-        log("⏭ 跳过盘点调整记录 %s（盘盈/盘亏不进金山台账）" % rid)
-        return 0, 0
+        return _mark_skip("stocktake",
+                          "⏭ 跳过盘点调整记录 %s（盘盈/盘亏不进金山台账）" % rid)
 
     by_sheet, skipped = collect_jobs(rec)
     if not by_sheet:
         # 没有可同步的鹿茸商品（例如只领了手提袋），也要标记，
         # 一来避免每小时兜底扫描反复重算，二来前端据此显示「本单不入台账」而不是一直转圈。
         # 但若鹿茸目录商品缺映射（skipped 非空），则记下来让前端告警「未同步台账」。
-        st = {"skip": 1, "at": now_iso()}
+        # 若这单原本有鹿茸商品、编辑后被删光 → 金山那一行同样要撤掉（否则台账多留一笔流动）。
+        if edited and prev_rows:
+            d_ok, d_fail, _ = push_delete_order(rid, list(prev_rows.keys()))
+            if d_fail:
+                fails = synced.setdefault("__fail__", {})
+                fails[rid] = {"fail": d_fail, "at": now_iso(),
+                              "err": ["货品被清空后撤行失败"]}
+                return 0, 0
+        st = {"skip": 1, "fp": fp, "at": now_iso()}
         if skipped:
             st["skipped"] = skipped
         synced[rid] = st
@@ -408,16 +581,10 @@ def process_record(rec, synced):
     rtype = "in" if rec.get("type") == "in" else "out"
     date = fmt_date(rec.get("time", ""))
     picker = rec.get("picker", "")
-    purpose = rec.get("purpose", "") or ""
     dept = rec.get("dept", "") or ""
-    entity = rec.get("entity", "") or ""
-    if entity and "赛迪斯" in entity and purpose and not purpose.startswith("赛迪斯·"):
-        # 用途本身已含「赛迪斯」开头时先归一化，避免变成「赛迪斯·赛迪斯项目」重复前缀
-        p = purpose
-        if p.startswith("赛迪斯"):
-            p = p[len("赛迪斯"):]
-        p = p.lstrip("·").strip()
-        purpose = ("赛迪斯·" + p) if p else purpose
+    # 用途归一化（赛迪斯加前缀）统一走 norm_purpose —— 与 rec_fingerprint 取自同一处，
+    # 否则「写金山的文字」和「算指纹的文字」会分叉，指纹永远对不上 → 每小时反复重写。
+    purpose = norm_purpose(rec)
 
     ok = 0
     fail = 0
@@ -433,32 +600,37 @@ def process_record(rec, synced):
         valid = [(p, q) for (p, q) in itemlist if p and q and q > 0]
         if not valid:
             continue
-        payload = {
-            "Context": {
-                "argv": {
-                    "mode": "append_order",   # 金山脚本：多商品合并追加一行
-                    "sheet_name": sheet,
-                    "type": rtype,
-                    "date": date,
-                    "picker": picker,
-                    "sender": "陈利冠",
-                    "purpose": purpose,
-                    "dept": dept,
-                    "rid": rid,               # 写进金山「记录ID」列，供将来删除时精确定位
-                    "items": [{"product": p, "qty": q} for (p, q) in valid],
-                }
-            }
+        argv = {
+            "sheet_name": sheet,
+            "type": rtype,
+            "date": date,
+            "picker": picker,
+            "sender": "陈利冠",
+            "purpose": purpose,
+            "dept": dept,
+            "rid": rid,               # 写进金山「记录ID」列，供删除/更新时精确定位
+            "items": [{"product": p, "qty": q} for (p, q) in valid],
         }
+        # 模式选择：
+        #   edited 且该子表上次写过 → update_order：原地刷新那一行，保住时间顺序
+        #   其余（首次同步 / 本单新出现的子表）→ append_order：追加一行
+        mode = "update_order" if (edited and sheet in prev_rows) else "append_order"
         try:
-            body = post_to_wps(payload)
-            res = wps_result(body)
-            if res.get("ok") is False:
-                # webhook 通了但脚本内部报错（例如找不到商品列）——必须算失败，否则会漏行
-                raise RuntimeError(res.get("error") or "金山脚本返回 ok:false")
+            if mode == "update_order":
+                status, res = push_update_order(rid, sheet, argv)
+                if status == "notFound":
+                    # 金山里没有这一行（可能被人手工删了）→ 退回追加，保证不丢记录
+                    log("↩️ %s 未找到 rid=%s 的原行 → 改走追加" % (sheet, rid))
+                    mode = "append_order"
+            if mode == "append_order":
+                body = post_to_wps({"Context": {"argv": dict(argv, mode="append_order")}})
+                res = wps_result(body)
+                if res.get("ok") is False:
+                    raise RuntimeError(res.get("error") or "金山脚本返回 ok:false")
+                log("✅ 同步成功 %s/订单一行 ×%d 商品 -> 第%s行：%s"
+                    % (sheet, len(valid), res.get("row", "?"), body[:120]))
             if res.get("row"):
                 rows[sheet] = res["row"]
-            log("✅ 同步成功 %s/订单一行 ×%d 商品 -> 第%s行：%s"
-                % (sheet, len(valid), res.get("row", "?"), body[:120]))
             ok += 1
         except Exception as e:
             log("❌ 同步失败 %s/订单(共%d商品)：%s" % (sheet, len(valid), e))
@@ -476,7 +648,7 @@ def process_record(rec, synced):
     if ok > 0:
         all_rows = dict(prev_rows)   # 部分续传时保留上次已成功子表行号
         all_rows.update(rows)
-        st = {"ok": len(all_rows), "fail": fail, "at": now_iso()}
+        st = {"ok": len(all_rows), "fail": fail, "fp": fp, "at": now_iso()}
         if all_rows:
             st["rows"] = all_rows
         if errs:
@@ -530,29 +702,7 @@ def process_tombstone(tomb, synced):
         sheets = ["2026鹿茸水乳系列", "2026时空鹿茸库存"]
         log("⚠️ %s 墓碑无记录快照，改为两张子表各试一次（按记录ID精确定位，安全）" % rid)
 
-    ok = 0
-    fail = 0
-    detail = {}
-    for sheet in sheets:
-        payload = {"Context": {"argv": {
-            "mode": "delete_order", "sheet_name": sheet, "rid": rid}}}
-        try:
-            body = post_to_wps(payload)
-            res = wps_result(body)
-            if res.get("ok") is False:
-                raise RuntimeError(res.get("error") or "金山脚本返回 ok:false")
-            if res.get("notFound"):
-                log("· %s 未找到 rid=%s 的行（可能已删）" % (sheet, rid))
-                detail[sheet] = "notFound"
-            else:
-                log("🗑️ 已删 %s 第%s行 (rid=%s)，重算下游库存 %s 格"
-                    % (sheet, res.get("deletedRows"), rid, res.get("recalced", 0)))
-                detail[sheet] = {"rows": res.get("deletedRows"), "recalced": res.get("recalced", 0)}
-            ok += 1
-        except Exception as e:
-            log("❌ 删除失败 %s rid=%s：%s" % (sheet, rid, e))
-            detail[sheet] = "error: %s" % e
-            fail += 1
+    ok, fail, detail = push_delete_order(rid, sheets)
 
     if fail == 0:
         dels[rid] = {"ok": ok, "at": now_iso(), "detail": detail}

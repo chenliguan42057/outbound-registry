@@ -706,6 +706,160 @@ function deleteOrder(a) {
            deletedRows: sorted, preview: preview, recalced: recalced, detail: detail };
 }
 
+// ===== 订单原地更新模式（2026-09-13）：网页端把已同步的记录「二次编辑」→ 金山同一行原地刷新 =====
+// 入参：a.sheet_name, a.rid(必填), a.type(in/out), a.date, a.picker, a.sender,
+//       a.purpose, a.dept, a.items:[{product, qty}]
+//
+// 为什么用「原地更新」而不是「删除+重新追加」：
+//   台账的库存列是「滚动余额」，行序 = 时间序。删掉再追加会把这条记录挪到表尾，
+//   导致余额曲线不再按日期排列。所以这里定位到原行、只改这一行的内容，
+//   再把这行往下的库存链重算一遍（数量变了 → 下游每行的余额跟着平移）。
+//
+// 四步走：
+//   1) 在「记录ID」列按 rid 定位那一行（保持原有时间顺序）
+//   2) 原地重写 日期/领取人/放发人/用途/部门 + 各货品「发放」格
+//      （不再属于本单的货品 → 清空其发放格与库存格）
+//   3) 从该行往下重算库存链：本行库存 = 上一有值行库存 ± 本行发放
+//      发放格为空的行跳过 —— 与台账「稀疏库存」的既有写法保持一致
+//   4) 底色：入库行整行标黄；若由入库改回出库，按各列首行颜色恢复底色
+//
+// 返回 {notFound:true} 时说明这行压根没进过金山（例如被人手工删了），
+// 调用方应改走 append_order 补写。
+function updateOrder(a) {
+  var sheetName = a.sheet_name;
+  var rid = a.rid;
+  if (!sheetName) throw new Error("update_order 缺少 sheet_name");
+  if (!rid) throw new Error("update_order 缺少 rid");
+
+  var sh = Application.Sheets(sheetName);
+  if (!sh) throw new Error("找不到子表: " + sheetName);
+  ensureHeaders(sh, sheetName);
+
+  var idCol = findIdCol(sh);
+  if (!idCol) {
+    return { ok: true, notFound: true, sheet: sheetName, rid: rid, reason: "no_id_col" };
+  }
+
+  var lastRow = findLastDataRow(sh);
+  var target = 0;
+  for (var r = 2; r <= lastRow; r++) {
+    var v = getCellValue(sh, idCol, r);
+    if (v === null || v === undefined || v === "") continue;
+    if (String(v).trim() === String(rid)) { target = r; break; }
+  }
+  if (!target) {
+    return { ok: true, notFound: true, sheet: sheetName, rid: rid, lastRow: lastRow };
+  }
+
+  var type = (a.type === "in") ? "in" : "out";
+  var date = a.date || "";
+  var picker = a.picker || "";
+  var sender = a.sender || "陈利冠";
+  var purpose = a.purpose || "";
+  var dept = a.dept || "";
+  var items = a.items || [];
+  if (!items.length) throw new Error("update_order 缺少 items");
+
+  var headerMap = buildHeaderMap(sh);
+  var pairs = scanProductPairs(sh);
+  var purposeCol = headerMap["用途"];
+  var deptCol = headerMap["部门"];
+
+  // 本次该单包含的货品数量表
+  var want = {};
+  for (var i = 0; i < items.length; i++) {
+    var nm = items[i].product;
+    var q = toNum(items[i].qty);
+    if (!nm || !(q > 0)) continue;
+    if (!pairs[nm]) throw new Error("找不到商品列: " + nm);
+    want[nm] = q;
+  }
+
+  // 基础列原地重写（记录ID 列不动）
+  setCellValue(sh, 1, target, date);
+  setCellValue(sh, 2, target, (type === "in") ? "入库" : picker);
+  setCellValue(sh, 3, target, sender);
+  if (purposeCol) setCellValue(sh, purposeCol, target, purpose);
+  if (deptCol) setCellValue(sh, deptCol, target, dept);
+
+  // 货品列：本行原先动过的列 + 本次要动的列，都要处理
+  var touched = {};      // 库存列号 -> 发放列号
+  var changed = [];
+  for (var pn in pairs) {
+    var ic = pairs[pn][0];
+    var sc = pairs[pn][1];
+    var oldV = getCellValue(sh, ic, target);
+    var hadOld = (oldV !== null && oldV !== undefined && oldV !== "");
+    var nq = want[pn];
+    if (nq) {
+      setCellValue(sh, ic, target, (type === "in") ? ("\u2795" + nq) : nq);
+      touched[sc] = ic;
+      changed.push({ product: pn, qty: nq });
+    } else if (hadOld) {
+      setCellValue(sh, ic, target, "");   // 该货品不再属于本单 → 清空发放格
+      setCellValue(sh, sc, target, "");   // 库存格交给下面的稀疏重算决定
+      touched[sc] = ic;
+      changed.push({ product: pn, qty: 0 });
+    }
+  }
+
+  // 从 target 行往下重算库存链
+  var recalced = 0;
+  var detail = [];
+  for (var scKey in touched) {
+    var stockCol = Number(scKey);
+    var issueCol = Number(touched[scKey]);
+    // 起点：target 之上最近一个「有库存数」的行
+    var prev = 0;
+    for (var up = target - 1; up >= 2; up--) {
+      var uv = getCellValue(sh, stockCol, up);
+      if (uv !== null && uv !== undefined && uv !== "") { prev = toNum(uv); break; }
+    }
+    var n = 0;
+    var after = null;
+    for (var rr = target; rr <= lastRow; rr++) {
+      var ivv = getCellValue(sh, issueCol, rr);
+      if (ivv === null || ivv === undefined || ivv === "") continue;
+      var s = String(ivv);
+      var isIn = s.indexOf("\u2795") === 0;                 // "➕" 开头 = 入库
+      var qq = toNum(isIn ? s.replace("\u2795", "") : s);
+      prev = isIn ? (prev + qq) : (prev - qq);
+      setCellValue(sh, stockCol, rr, prev);
+      after = prev;
+      n++;
+      recalced++;
+    }
+    detail.push({ stockCol: stockCol, rows: n, lastNew: after });
+  }
+
+  // 底色：入库标黄；由入库改回出库 → 按各列首行颜色恢复
+  try {
+    var maxCol = 0;
+    for (var mc = 1; mc <= 100; mc++) {
+      var hv = getCellValue(sh, mc, 1);
+      if (hv !== null && hv !== undefined && hv !== "") maxCol = mc;
+    }
+    if (idCol && maxCol >= idCol) maxCol = idCol - 2;   // 不涂到右侧记录ID锚点列
+    if (maxCol < 1) maxCol = 1;
+    if (type === "in") {
+      sh.Range("A" + target + ":" + colLetter(maxCol) + target).Interior.Color = 65535;
+      console.log("已标黄入库行 " + target);
+    } else {
+      for (var c = 1; c <= maxCol; c++) {
+        try {
+          var hc = sh.Range(colLetter(c) + "1").Interior.Color;
+          sh.Range(colLetter(c) + target).Interior.Color = hc;
+        } catch (e2) { /* 单列底色恢复失败不影响主流程 */ }
+      }
+    }
+  } catch (e) { console.log("底色处理失败（不影响数据）: " + e.message); }
+
+  var result = { ok: true, row: target, sheet: sheetName, type: type,
+                 changed: changed, recalced: recalced, detail: detail };
+  console.log("===== 订单原地更新成功: " + JSON.stringify(result));
+  return result;
+}
+
 function main() {
   console.log("===== 脚本开始 =====");
   try {
@@ -739,6 +893,16 @@ function main() {
       console.log("===== 订单删除完成: " + JSON.stringify({
         notFound: dor.notFound, deletedRows: dor.deletedRows, recalced: dor.recalced }));
       return dor;
+    }
+
+    // ---- 订单更新分支（网页端二次编辑记录 → 金山同一行原地刷新 + 重算下游库存）----
+    // 判据：wps_sync.py 用「内容指纹」识别记录被编辑过，指纹变了就走这里。
+    // notFound（这行没进过金山）时返回给调用方，由调用方改走 append_order 补写。
+    if (a.mode === "update_order") {
+      var uor = updateOrder(a);
+      console.log("===== 订单更新完成: " + JSON.stringify({
+        notFound: uor.notFound, row: uor.row, recalced: uor.recalced }));
+      return uor;
     }
 
     // ---- 整段清理分支（整理尾部垃圾，需 confirm:true）----
