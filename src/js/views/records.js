@@ -33,11 +33,8 @@
           '<h2>' + title + ' <span class="badge" id="recCount">0 条</span></h2>' +
           '<div class="actions rec-actions">' +
             '<button type="button" class="btn ghost sm" id="recExport">&#11015; 导出 CSV</button>' +
-            '<button type="button" class="btn ghost sm" id="recExportAcc">&#128202; 对账 CSV</button>' +
-            '<button type="button" class="btn ghost sm" id="recPrintAll">&#128424; 批量打印</button>' +
             '<button type="button" class="btn ghost sm" id="recSync">&#128260; 立即同步</button>' +
             '<button type="button" class="btn ghost sm" id="recRemind">&#128276; 提醒推送</button>' +
-            '<button type="button" class="btn danger sm" id="recClearAll">清空全部记录</button>' +
           '</div>' +
           // 批量操作条：默认隐藏，勾选任意一行后出现。只确认一次，避免 20 单逐条点确认
           '<div class="bulk-bar" id="recBulkBar" style="display:none;">' +
@@ -54,12 +51,25 @@
             '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "部门/对方仓" : "部门/客户") + '" autocomplete="off" list="recDeptList" />' +
             '<datalist id="recDeptList"></datalist>' +
             '<input type="text" id="recPicker" class="search" placeholder="' + (isIn ? "经办人" : "领取人") + '" autocomplete="off" />' +
-            '<input type="date" id="recFrom" class="search" title="开始日期" />' +
-            '<input type="date" id="recTo" class="search" title="结束日期" />' +
-            '<button type="button" id="recDateClear" class="btn ghost sm" title="清空开始/结束日期筛选">✕ 清日期</button>' +
             (!isIn
               ? '<select id="recStatus" class="search" title="按提单状态筛选"><option value="">全部状态</option><option value="pending">● 未提单</option><option value="submitted">● 已提单</option></select>'
               : '') +
+            // 货品搜索（2026-09-13）：按货品名称模糊筛记录，命中该记录任意一个货品即保留
+            '<div class="rec-goods">' +
+              '<span class="rec-goods-ico">🔍</span>' +
+              '<input type="text" id="recGoods" class="search" placeholder="搜索货品名称（如：精粹水）" autocomplete="off" list="recGoodsList" />' +
+              '<datalist id="recGoodsList"></datalist>' +
+              '<button type="button" id="recGoodsClear" class="rec-goods-x" title="清空货品搜索" style="display:none;">✕</button>' +
+            '</div>' +
+            // 日期区间：原生 date 控件旁边紧贴「今天 / ✕ 清空」两个快捷键
+            // （原生日期弹窗是浏览器自己画的，无法在里面塞按钮，所以放在控件旁边）
+            '<div class="rec-daterange">' +
+              '<input type="date" id="recFrom" class="search" title="开始日期" />' +
+              '<span class="rec-dash">~</span>' +
+              '<input type="date" id="recTo" class="search" title="结束日期" />' +
+              '<button type="button" id="recToday" class="btn ghost sm" title="把日期筛选设为今天">今天</button>' +
+              '<button type="button" id="recDateClear" class="btn ghost sm" title="清空开始/结束日期筛选">✕ 清空</button>' +
+            '</div>' +
           '</div>' +
           '<div id="recListBox"></div>' +
         '</div>';
@@ -67,11 +77,20 @@
       listBox = Util.$("recListBox");
       var deptEl = Util.$("recDept"), pickerEl = Util.$("recPicker"),
           fromEl = Util.$("recFrom"), toEl = Util.$("recTo"), srcEl = Util.$("recSource"),
-          stEl = Util.$("recStatus"), dcEl = Util.$("recDateClear");
+          stEl = Util.$("recStatus"), dcEl = Util.$("recDateClear"),
+          goodsEl = Util.$("recGoods"), goodsClearEl = Util.$("recGoodsClear"),
+          todayEl = Util.$("recToday");
       deptEl.value = searchState.dept;
       pickerEl.value = searchState.picker;
       fromEl.value = searchState.from;
       toEl.value = searchState.to;
+      if (goodsEl) goodsEl.value = searchState.goods || "";
+      // 货品搜索框右侧的 ✕：有关键字才显示（2026-09-13）
+      function syncGoodsClear() {
+        if (!goodsClearEl) return;
+        goodsClearEl.style.display = (goodsEl && goodsEl.value.trim()) ? "" : "none";
+      }
+      syncGoodsClear();
       // 来源下拉：状态键按列表类型分存（srcIn / srcOut），避免入库、出库两个列表共用搜索状态时互相串值
       var savedSrc = isIn
         ? (searchState.srcIn || "")
@@ -85,6 +104,7 @@
         searchState.picker = pickerEl.value.trim();
         searchState.from = fromEl.value;
         searchState.to = toEl.value;
+        searchState.goods = goodsEl ? goodsEl.value.trim() : "";
         if (isIn) searchState.srcIn = srcEl.value;
         else searchState.srcOut = (srcEl.value === Records.InSource.TRANSFER_OUT || srcEl.value === SRC_NORMAL_OUT) ? srcEl.value : "";
         if (stEl) searchState.stOut = stEl.value;
@@ -95,6 +115,16 @@
         input.addEventListener("input", save);
         input.addEventListener("change", save);
       });
+      if (goodsEl) {
+        goodsEl.addEventListener("input", function () { syncGoodsClear(); save(); });
+        goodsEl.addEventListener("change", save);
+      }
+      if (goodsClearEl) goodsClearEl.addEventListener("click", function () {
+        goodsEl.value = "";
+        syncGoodsClear();
+        save();
+        goodsEl.focus();
+      });
       srcEl.addEventListener("change", save);
       if (stEl) stEl.addEventListener("change", save);
       // 日期筛选一键清空（2026-09-11）：原生 date 输入框没有清空按钮，只能手动删字符，加个 ✕
@@ -104,26 +134,21 @@
         save();
         try { Util.toast("已清空日期筛选"); } catch (e) {}
       });
+      // 「今天」快捷键（2026-09-13）：与「✕ 清空」一起紧贴两个日期框，省去打开日历点当天
+      if (todayEl) todayEl.addEventListener("click", function () {
+        var t = todayStr();
+        fromEl.value = t;
+        toEl.value = t;
+        save();
+        try { Util.toast("日期筛选：今天"); } catch (e) {}
+      });
 
       Util.$("recExport").addEventListener("click", function () {
         Records.exportCsv(filter());
       });
-      Util.$("recExportAcc").addEventListener("click", function () {
-        Records.exportReconCsv(filter());
-      });
-      Util.$("recPrintAll").addEventListener("click", doPrintAll);
       Util.$("recSync").addEventListener("click", function () { doSync(); });
       Util.$("recRemind").addEventListener("click", function () {
         Router.navigate("/app/" + (isIn ? "in-remind" : "out-remind"));
-      });
-      Util.$("recClearAll").addEventListener("click", async function () {
-        var r = await UI.promptDialog("将清空全部记录（含云端），且不可恢复。请填写清空原因：", "例如：年度归档 / 数据迁移…", "清空全部记录", "确认清空");
-        if (!r.ok) return;
-        try { await Cloud.clearAllWithReason(r.value); } catch (e) {}
-        Records.clear();
-        renderList();
-        window.App.Views.app.setSyncStatus("已清空全部记录", false);
-        Util.toast("已清空全部记录");
       });
 
       // 批量操作按钮
@@ -175,6 +200,13 @@
       renderList();
     }
 
+    /** 本地「今天」的 YYYY-MM-DD（供日期快捷筛选用；不能用 toISOString——那是 UTC，东八区凌晨会差一天） */
+    function todayStr() {
+      var d = new Date();
+      var m = d.getMonth() + 1, day = d.getDate();
+      return d.getFullYear() + "-" + (m < 10 ? "0" + m : m) + "-" + (day < 10 ? "0" + day : day);
+    }
+
     /** 按搜索条件过滤记录（类型已由模块固定） */
     function filter() {
       var from = searchState.from ? new Date(searchState.from + "T00:00:00").getTime() : null;
@@ -185,6 +217,14 @@
         if (r.borrowed === true) return false;   // 已转入先借后还的出库单，不在普通出库记录列表显示
         if (searchState.dept && !(r.dept || "").toLowerCase().includes(searchState.dept.toLowerCase())) return false;
         if (searchState.picker && !(r.picker || "").toLowerCase().includes(searchState.picker.toLowerCase())) return false;
+        // 货品搜索（2026-09-13）：命中该记录任意一个货品名称即保留（模糊、大小写不敏感）
+        if (searchState.goods) {
+          var gkw = searchState.goods.toLowerCase();
+          var hit = (r.items || []).some(function (it) {
+            return (String(it && it.name || "")).toLowerCase().indexOf(gkw) !== -1;
+          });
+          if (!hit) return false;
+        }
         // 来源筛选（入库=预设/自定义/调拨入库；出库=调拨出库）。旧调拨记录无 source 时按 transferRole 兜底匹配
         var srcSel = isIn
           ? (searchState.srcIn || "")
@@ -230,6 +270,22 @@
       });
       arr.sort(function (a, b2) { return String(a).localeCompare(String(b2), "zh-Hans-CN"); });
       return arr.map(function (d) { return '<option value="' + Util.esc(d) + '"></option>'; }).join("");
+    }
+
+    /** 货品名称提示选项（2026-09-13）：从现有记录提取去重货品名，配合 <datalist> —— 能下拉选也能手输模糊搜。
+        只收当前列表对应类型（入库/出库）的货品，避免两个列表互相污染候选。 */
+    function goodsListOptions() {
+      var seen = {}, arr = [];
+      (State.list || []).forEach(function (r) {
+        var recType = r.type || "out";
+        if (isIn ? recType !== "in" : recType === "in") return;
+        (r.items || []).forEach(function (it) {
+          var n = String(it && it.name || "").trim();
+          if (n && !seen[n]) { seen[n] = 1; arr.push(n); }
+        });
+      });
+      arr.sort(function (a, b2) { return String(a).localeCompare(String(b2), "zh-Hans-CN"); });
+      return arr.map(function (n) { return '<option value="' + Util.esc(n) + '"></option>'; }).join("");
     }
 
     /** 入库列表「来源筛选」下拉选项：全部来源 + 预设 + ⇄ 调拨入库 + 本仓自定义（与入库登记 chips 同一数据源） */
@@ -391,6 +447,8 @@
       // 每次重绘刷新部门下拉候选：新登记/删除记录后选项跟着变
       var dlEl = Util.$("recDeptList");
       if (dlEl) dlEl.innerHTML = deptListOptions();
+      var glEl = Util.$("recGoodsList");
+      if (glEl) glEl.innerHTML = goodsListOptions();
       var list = filter();
       Util.$("recCount").textContent = list.length + " 条";
       if (!list.length) {
