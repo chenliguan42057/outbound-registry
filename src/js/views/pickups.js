@@ -25,6 +25,30 @@
   var activeTab = "todo";   // "todo"（待取货）| "shipped"（已出库）
   var submitting = false;   // 提交互斥锁：防止连点造成重复登记
 
+  /** 登记时间戳（毫秒）。
+      2026-09-13 去掉「预计取货时间」字段后新增：
+        新记录用 createdAt；老记录（只有 time=预计取货时间）回退用它；再回退 _ts（最后修改时间）。 */
+  function regTs(p) {
+    if (!p) return 0;
+    if (p.createdAt) return Number(p.createdAt) || 0;
+    if (p.time) {
+      var d = new Date(String(p.time).replace(" ", "T"));
+      if (!isNaN(d.getTime())) return d.getTime();
+    }
+    return Number(p._ts) || 0;
+  }
+
+  /** 毫秒 → "YYYY-MM-DD HH:mm"（本地时区），用于列表「登记时间」列 */
+  function fmtTs(ms) {
+    var n = Number(ms) || 0;
+    if (!n) return "-";
+    var d = new Date(n);
+    if (isNaN(d.getTime())) return "-";
+    function p2(x) { return ("0" + x).slice(-2); }
+    return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) +
+           " " + p2(d.getHours()) + ":" + p2(d.getMinutes());
+  }
+
   function render(el) {
     container = el;
     el.innerHTML =
@@ -46,23 +70,16 @@
             '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="grid2">' +
-          '<div class="field">' +
-            '<label for="pkTime">预计取货时间<span class="req">*</span></label>' +
-            '<input type="datetime-local" id="pkTime" step="60" />' +
-            '<div class="hint"><span class="auto" id="pkFillNow">📎 自动填入当前时间</span></div>' +
-          '</div>' +
-          '<div class="field">' +
-            '<label>用途 / 项目<span class="req">*</span></label>' +
-            '<div id="pkPurposeChips" class="chip-group"></div>' +
-            '<div class="purpose-add-row">' +
-              '<button type="button" class="chip-add" id="pkPurposeAdd">+ 添加</button>' +
-              '<span class="purpose-add-inline" id="pkPurposeAddInline" style="display:none;">' +
-                '<input type="text" id="pkPurposeInput" class="purpose-add-input" placeholder="输入自定义用途" maxlength="30" autocomplete="off" />' +
-                '<button type="button" class="btn mini" id="pkPurposeOk">确定</button>' +
-                '<button type="button" class="btn ghost mini" id="pkPurposeCancel">取消</button>' +
-              '</span>' +
-            '</div>' +
+        '<div class="field">' +
+          '<label>用途 / 项目<span class="req">*</span></label>' +
+          '<div id="pkPurposeChips" class="chip-group"></div>' +
+          '<div class="purpose-add-row">' +
+            '<button type="button" class="chip-add" id="pkPurposeAdd">+ 添加</button>' +
+            '<span class="purpose-add-inline" id="pkPurposeAddInline" style="display:none;">' +
+              '<input type="text" id="pkPurposeInput" class="purpose-add-input" placeholder="输入自定义用途" maxlength="30" autocomplete="off" />' +
+              '<button type="button" class="btn mini" id="pkPurposeOk">确定</button>' +
+              '<button type="button" class="btn ghost mini" id="pkPurposeCancel">取消</button>' +
+            '</span>' +
           '</div>' +
         '</div>' +
         '<div class="field">' +
@@ -93,7 +110,6 @@
     els = {
       dept: Util.$("pkDept"),
       picker: Util.$("pkPicker"),
-      time: Util.$("pkTime"),
       note: Util.$("pkNote"),
       purposeChips: Util.$("pkPurposeChips"),
       purposeAdd: Util.$("pkPurposeAdd"),
@@ -109,8 +125,6 @@
     picker = new UI.ProductPicker({ showStock: true });
     picker.attach(Util.$("pkProductPicker"));
 
-    Util.$("pkFillNow").addEventListener("click", function () { els.time.value = Util.nowLocal(); saveDraft(); });
-    els.time.value = Util.nowLocal();
     Util.$("pkReset").addEventListener("click", resetForm);
     Util.$("pkSubmit").addEventListener("click", submit);
     Util.$("pkSync").addEventListener("click", doSync);
@@ -135,7 +149,7 @@
     renderPurposeChips();
 
     // 自动保存草稿（用途 chip 选中/新增时在对应逻辑里单独触发）
-    ["pkDept", "pkPicker", "pkTime", "pkNote"].forEach(function (id) {
+    ["pkDept", "pkPicker", "pkNote"].forEach(function (id) {
       Util.$(id).addEventListener("input", saveDraft);
     });
     picker.onChange = saveDraft;
@@ -241,7 +255,6 @@
 
   function saveDraft() {
     Store.savePickupsDraft({
-      time: els.time.value,
       picker: els.picker.value,
       dept: els.dept.value,
       purpose: selectedPurpose,
@@ -253,7 +266,6 @@
   function restoreDraft() {
     var d = Store.loadPickupsDraft();
     if (!d) return;
-    els.time.value = d.time || Util.nowLocal();
     els.picker.value = d.picker || "";
     els.dept.value = d.dept || "";
     if (d.purpose) { selectedPurpose = d.purpose; renderPurposeChips(); }
@@ -277,7 +289,6 @@
   function submit() {
     if (submitting) return;   // 连点二次直接吞掉
 
-    var time = els.time.value;
     var pickerVal = els.picker.value.trim();
     var dept = els.dept.value.trim();
     var purpose = selectedPurpose;
@@ -286,7 +297,6 @@
     var errs = [];
     if (!dept) errs.push({ el: els.dept, msg: "请填写部门 / 客户" });
     if (!pickerVal) errs.push({ el: els.picker, msg: "请填写取货人" });
-    if (!time) errs.push({ el: els.time, msg: "请填写预计取货时间" });
     if (!purpose) errs.push({ el: els.purposeChips, msg: "请选择用途 / 项目" });
 
     var items = picker.getItems();
@@ -304,7 +314,6 @@
 
     setSubmitting(true);
     var pk = Pickups.create({
-      time: time,
       picker: pickerVal,
       dept: dept,
       purpose: purpose,
@@ -337,7 +346,6 @@
     renderPurposeChips();
     closePurposeAdd();
     els.dept.value = "";
-    els.time.value = Util.nowLocal();
     picker.setSelected([]);
     els.note.value = "";
     clearDraft();
@@ -348,13 +356,17 @@
   function renderList() {
     if (!listBox) return;
     var list = State.pickups;
-    // 与 p.time（datetime-local "YYYY-MM-DDTHH:mm"）同格式，直接字符串比较判超时
-    var nowStr = Util.nowLocal();
+    var nowMs = Date.now();
     var todo = list.filter(function (p) { return p.shipped !== true; });
-    // A8 超时置顶：预计取货时间已过且未出库 → 置顶标红
-    todo.forEach(function (p) { p.__overdue = !!(p.time && p.time <= nowStr); });
+    // A8 超时置顶（2026-09-13 调整）：原按「预计取货时间已过」判定，该字段已移除，
+    // 现改为「登记后超过 24 小时仍未出库」→ 标红并置顶。阈值改这里一处即可。
+    var OVERDUE_MS = 24 * 60 * 60 * 1000;
+    todo.forEach(function (p) {
+      var t = regTs(p);
+      p.__overdue = !!(t && (nowMs - t) > OVERDUE_MS);
+    });
     todo.sort(function (a, b) {
-      return ((b.__overdue ? 1 : 0) - (a.__overdue ? 1 : 0)) || (a.time || "").localeCompare(b.time || "");
+      return ((b.__overdue ? 1 : 0) - (a.__overdue ? 1 : 0)) || (regTs(a) - regTs(b));
     });
     var overCount = todo.filter(function (p) { return p.__overdue; }).length;
     var shipped = list.filter(function (p) { return p.shipped === true; });
@@ -367,7 +379,7 @@
       return;
     }
     var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
-      '<th>序号</th><th>登记时间</th><th>取货人</th><th>部门/客户</th><th>货品名称</th><th>数量</th><th>提单状态</th><th>出库状态</th><th>操作</th>' +
+      '<th>序号</th><th>登记时间</th><th>取货人</th><th>部门/客户</th><th>货品名称</th><th>数量</th><th>出库状态</th><th>操作</th>' +
       '</tr></thead><tbody>';
     shown.forEach(function (p, i) {
       var items = (p.items || []).map(function (it, idx, arr) {
@@ -378,41 +390,22 @@
       }).join("");
       html += '<tr' + (p.__overdue ? ' style="background:rgba(201,135,127,.09)"' : '') + '>' +
         '<td><div>' + (shown.length - i) + '</div></td>' +
-        '<td>' + Util.esc(p.time || "-") + (p.__overdue ? ' <span class="tag danger-tag">⏰ 超时</span>' : '') + '</td>' +
+        '<td>' + Util.esc(fmtTs(regTs(p))) + (p.__overdue ? ' <span class="tag danger-tag">⏰ 超时</span>' : '') + '</td>' +
         '<td>' + Util.esc(p.picker || "-") + '</td>' +
         '<td>' + Util.esc(p.dept || "-") + '</td>' +
         '<td class="items-cell">' + items + '</td>' +
         '<td>' + qtys + '</td>' +
-        '<td>' + confirmedPill(p) + '</td>' +
         '<td>' + shippedPill(p) + '</td>' +
-        '<td><button type="button" class="btn danger sm" data-act="del" data-id="' + p.id + '">删除</button></td>' +
+        '<td>' +
+          ((p.shipped !== true && p.confirmed !== true)
+            ? '<button type="button" class="btn ghost sm" data-act="confirm" data-id="' + p.id + '">确认提单</button> '
+            : '') +
+          '<button type="button" class="btn danger sm" data-act="del" data-id="' + p.id + '">删除</button>' +
+        '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
     listBox.innerHTML = html;
-  }
-
-  /** 提单状态徽章：未确认=红（可点击确认）；已确认=绿（带提单时间）；已出库后静态不可点 */
-  function confirmedPill(p) {
-    var ok = p.confirmed === true;
-    var label = ok ? "已确认提单" : "未确认提单";
-    var cls = "status-pill " + (ok ? "submitted" : "pending");
-    if (ok) {
-      // 显示提单时间（confirmedAt，本地 ISO → 北京时间 HH:MM）
-      var t = p.confirmedAt || "";
-      if (t) {
-        var d = new Date(t);
-        if (!isNaN(d.getTime())) {
-          var hh = ("0" + d.getHours()).slice(-2);
-          var mm = ("0" + d.getMinutes()).slice(-2);
-          label += " " + hh + ":" + mm;
-        }
-      }
-    }
-    if (p.shipped === true) {
-      return '<span class="' + cls + ' static"><span class="dot"></span>' + label + '</span>';
-    }
-    return '<button type="button" class="' + cls + '" data-act="confirm" data-id="' + p.id + '"><span class="dot"></span>' + label + '</button>';
   }
 
   /** 出库状态徽章：未出库=红（可点击确认出库）；已出库=绿静态 */
