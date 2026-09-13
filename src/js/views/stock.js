@@ -400,20 +400,31 @@
   function showHistory(name) {
     var rows = rowsForProduct(name);
     if (!rows.length) { Util.toast("该货品暂无出入记录", true); return; }
+    // 未提单笔数（2026-09-13）：只统计出库记录，盘点/入库不计入
+    var pendingCnt = rows.filter(function (r) {
+      return r.kind !== "stocktake" && (r.type || "out") !== "in" && Records.getStatus(r) === "pending";
+    }).length;
     var html = '<div class="table-wrap" style="max-height:50vh;overflow:auto">' +
       '<table class="table" style="min-width:0;width:100%"><thead><tr>' +
-      '<th>时间</th><th>类型</th><th>部门/领取人</th><th>数量</th><th>当时库存</th>' +
+      '<th>时间</th><th>类型</th><th>提单</th><th>部门/领取人</th><th>数量</th><th>当时库存</th>' +
       '</tr></thead><tbody>' +
       rows.map(function (r) {
         var info = findItemFor([r], name);
         var it = info.item;
         var isIn = (r.type || "out") === "in";
+        // 提单状态单元格：出库才有意义；未提单标红，一眼看出哪些单据还没完成
+        var stCell = isIn
+          ? '—'
+          : (Records.getStatus(r) === "pending"
+              ? '<span class="tag" style="background:#FFF0F0;color:#C0392B">未提单</span>'
+              : '<span class="tag ok-tag">已提单</span>');
         // 盘点校准行：不进库存推算（affectsStock 无关），直接展示 账面→实存 与差异
         if (r.kind === "stocktake") {
           var d0 = it ? (Number(it.diff) || 0) : 0;
           return '<tr>' +
             '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
             '<td><span class="tag" style="background:#F0E7D2;color:#8a6d3b">盘点</span></td>' +
+            '<td>—</td>' +
             '<td>盘点校准</td>' +
             '<td>' + (d0 > 0 ? "+" : "") + d0 + '</td>' +
             '<td>' + (it ? (it.book + " → " + it.actual) : "") + '</td>' +
@@ -426,13 +437,16 @@
         return '<tr>' +
           '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
           '<td>' + (isIn ? '<span class="tag ok-tag">入库</span>' : '<span class="tag danger-tag">出库</span>') + '</td>' +
+          '<td>' + stCell + '</td>' +
           '<td>' + Util.esc((r.dept || "") + (r.picker ? "（" + r.picker + "）" : "")) + '</td>' +
           '<td>' + (isIn ? "+" : "-") + (it ? it.qty : "") + '</td>' +
           '<td>' + stock + '</td>' +
         '</tr>';
       }).join("") +
       '</tbody></table></div>' +
-      '<div class="hint">「当时库存」为该笔完成后的快照；当前库存 ' + Util.esc(String(window.App.Stock.getStock(name))) + '</div>';
+      '<div class="hint">「当时库存」为该笔完成后的快照；当前库存 ' + Util.esc(String(window.App.Stock.getStock(name))) +
+        (pendingCnt ? '　|　<span style="color:#C0392B">本货品有 ' + pendingCnt + ' 笔出库未完成提单</span>' : '') +
+      '</div>';
     UI.Modal.show("📦 库存流水 · " + Util.esc(name),
       '<div class="modal-actions" style="margin:-6px 0 12px;justify-content:flex-end">' +
         '<button type="button" class="btn ghost sm" data-act="export">📥 导出 CSV</button>' +
