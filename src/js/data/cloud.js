@@ -1039,10 +1039,15 @@
     if (!q.length) return { ok: 0, remain: 0 };
     if (!hasToken()) return { ok: 0, remain: q.length };
     var ok = 0, remain = 0, errors = [];
+    // 2026-09-14 防护：本地列表为空 = 本次会话还没同步完（启动时 flushQueue 与 syncPull 并发，
+    // 不等待），此时「找不到记录」并不代表用户删过它。若无脑 dequeue 会把待补推的记录
+    // 直接丢掉 → 永久丢失。列表为空时一律保留队列，等下一轮同步完成后再冲刷。
+    var list = (window.App.State && window.App.State.list) || [];
+    if (!list.length) return { ok: 0, remain: q.length };
     for (var i = 0; i < q.length; i++) {
       var id = q[i];
-      var rec = (window.App.State.list || []).find(function (r) { return r.id === id; });
-      if (!rec) { dequeue(id); continue; }            // 本地已删，出队
+      var rec = list.find(function (r) { return r.id === id; });
+      if (!rec) { dequeue(id); continue; }            // 本地确实已删，出队
       if (await pushWithRetry(rec, 2)) { dequeue(id); ok++; }
       else { remain++; errors.push(id); }
     }
