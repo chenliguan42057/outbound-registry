@@ -10,7 +10,7 @@
   var UI = window.App.UI;
 
   var KEY = "outbound_ux_v1";
-  var SETTINGS = { theme: "auto", font: "md", contrast: false, accent: "mint", sound: false };
+  var SETTINGS = { theme: "auto", font: "md", contrast: false, accent: "mint", sound: false, autoClear: true };
 
   function load() {
     try {
@@ -120,7 +120,14 @@
       '<div class="ux-settings-row"><span class="k">🔔 操作音效</span><span class="v">' +
         chip("off", "关闭", SETTINGS.sound ? "on" : "off", "sound") +
         chip("on", "开启", SETTINGS.sound ? "on" : "off", "sound") + '</span></div>' +
-      '<div class="hint" style="margin-top:12px">深色模式适合夜间/弱光环境；字号放大与高对比可减轻长时间用眼负担。设置仅保存在本机。</div>';
+      // 退出时自动清理本地数据（2026-09-14）：防止同步缓存与实际状态不一致导致
+      // 「云端有单子、列表看不到」。默认开启；待推送记录/照片/令牌永不清理。
+      '<div class="ux-settings-row"><span class="k">🧹 退出时清理本地数据</span><span class="v">' +
+        chip("off", "关闭", SETTINGS.autoClear === false ? "off" : "on", "autoClear") +
+        chip("on", "开启", SETTINGS.autoClear === false ? "off" : "on", "autoClear") + '</span></div>' +
+      '<div class="hint" style="margin-top:12px">深色模式适合夜间/弱光环境；字号放大与高对比可减轻长时间用眼负担。设置仅保存在本机。</div>' +
+      '<div class="hint" style="margin-top:6px">「退出时清理本地数据」开启后：关闭页面即清掉同步缓存与本地副本，下次打开自动拉取云端最新数据（更不易出错，代价是首次打开稍慢）。' +
+      '<b>尚未推送到云端的记录、待上传照片与登录令牌不会被清理。</b></div>';
     UI.Modal.show("⚙️ 显示与体验", body, { width: "440px" });
     var mBody = UI.Modal.body();
     mBody.addEventListener("click", function (e) {
@@ -133,6 +140,20 @@
       else if (g === "accent") SETTINGS.accent = v;
       else if (g === "contrast") SETTINGS.contrast = (v === "on");
       else if (g === "sound") SETTINGS.sound = (v === "on");
+      else if (g === "autoClear") {
+        // 默认开启：数据结构里存 autoClear=false 表示关闭，缺省/true 均视为开启
+        SETTINGS.autoClear = (v === "on");
+        var ac = window.App.AutoClear;
+        if (v === "off" && ac) {
+          try { Util.toast("已关闭自动清理：本地会保留缓存副本"); } catch (e) {}
+        } else if (ac && ac.blockedReason) {
+          // 开启时顺带报一下「有没有尚未推上去的数据」——这些永远不清，先讲清楚
+          var why = ac.blockedReason();
+          try {
+            Util.toast(why ? ("已开启（" + why + "，这部分会保留）") : "已开启：关闭页面即清理本地缓存");
+          } catch (e) {}
+        }
+      }
       save(); apply();
       // 更新当前面板内高亮
       var chips = mBody.querySelectorAll(".ux-settings-chip[data-group='" + g + "']");
