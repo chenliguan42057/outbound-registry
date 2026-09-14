@@ -1,0 +1,1 @@
+{"id":"mu15ss20kk9xn","_ts":1789385287176,"time":"2026-09-14T19:28","kind":"stocktake","warehouse":"shenzhen","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +0 / 盘亏 -20","_local":true,"items":[{"name":"员工帆布袋","book":20,"actual":0,"diff":-20}]}
