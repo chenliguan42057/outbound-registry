@@ -126,8 +126,8 @@
         chip("off", "关闭", SETTINGS.autoClear === false ? "off" : "on", "autoClear") +
         chip("on", "开启", SETTINGS.autoClear === false ? "off" : "on", "autoClear") + '</span></div>' +
       '<div class="hint" style="margin-top:12px">深色模式适合夜间/弱光环境；字号放大与高对比可减轻长时间用眼负担。设置仅保存在本机。</div>' +
-      '<div class="hint" style="margin-top:6px">「退出时清理本地数据」开启后：关闭页面即清掉同步缓存与本地副本，下次打开自动拉取云端最新数据（更不易出错，代价是首次打开稍慢）。' +
-      '<b>尚未推送到云端的记录、待上传照片与登录令牌不会被清理。</b></div>';
+      '<div class="hint" style="margin-top:6px">「退出时清理本地数据」开启后：关闭页面即清掉<b>同步哈希缓存</b>，下次打开会自动全量拉取云端最新数据（更不易出错）。' +
+      '<b>本地记录副本、尚未推送的记录、待上传照片、登录令牌与货品基准一律保留</b>，因此同步偶发失败时库存与列表依然正确。</div>';
     UI.Modal.show("⚙️ 显示与体验", body, { width: "440px" });
     var mBody = UI.Modal.body();
     mBody.addEventListener("click", function (e) {
