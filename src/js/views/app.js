@@ -350,6 +350,8 @@
   var autoSyncOn = false;       // 自动同步是否开启
   var syncing = false;          // 并发锁：同步进行中跳过本轮，防止请求重叠
   var nextSyncAt = 0;           // 下次自动同步时间戳（毫秒），供同步面板倒计时
+  var healing = false;          // 补断点并发锁（2026-09-14）：防止全量重建重入
+  var healTriedAt = 0;          // 上次补断点时间戳：5 分钟内不重复补，避免对账失败时反复全量拉
 
   /** 配额告急时的退避间隔：10 分钟看一次，等额度自然恢复 */
   var RATE_BACKOFF_MS = 10 * 60 * 1000;
@@ -385,6 +387,11 @@
         setSyncStatus("就绪", false);
         var added = State.list.length - before;
         if (added > 0) Util.toast("已同步 " + added + " 条新记录");
+        // 补断点（2026-09-14）：增量同步靠「云端文件 sha 是否变过」判断要不要拉，
+        // 一旦本地 tree 缓存与真实状态不一致（缓存记了 sha 但内容没落库），
+        // 那条记录就会被永久跳过 —— 表现为"云端明明有单子，列表里就是看不到"。
+        // 这里做一次对账：云端文件数 > 本地记录数 = 有断点 → 自动全量重建一次补齐。
+        checkAndHealGap();
       } else {
         setSyncStatus("同步失败", true);
       }
@@ -401,6 +408,51 @@
       refreshActiveView();
       scheduleNextSync();
     });
+  }
+
+  /** 补断点（2026-09-14）：对账「云端应有 vs 本地实有」，少了就自动全量重建一次。
+      背景：增量同步以 tree 里文件的 sha 作判据，本地缓存一旦与实际状态不一致
+      （sha 入了缓存但内容没落库），那条记录就会被永久跳过 —— 用户看到的现象是
+      「云端/钉钉明明推送了，系统列表里就是没有这一单」，且刷新、重进都不会自愈。
+      这里在每次同步收尾做一次轻量对账（复用已拉取的 tree，不额外发请求），
+      发现缺口就自动跑 fullResync（等价于用户手点「全量重建同步」）。
+      保护：① healing 并发锁防重入；② 5 分钟节流，对账本身异常时不会疯狂全量拉；
+            ③ 额度告急直接跳过，把配额留给写入。 */
+  function checkAndHealGap() {
+    if (healing) return;
+    if (Date.now() - healTriedAt < 5 * 60 * 1000) return;
+    var r = Cloud.getRate ? Cloud.getRate() : null;
+    if (r && r.low) return;
+    if (!Cloud.diagSyncStatus) return;
+    Cloud.diagSyncStatus().then(function (d) {
+      if (!d || !d.ok) return;
+      var cloudN = Number(d.cloudCount) || 0;
+      var localN = Number(d.localCount) || 0;
+      // 本地可能含云端已删但尚未清理的记录，所以只认「云端明显多于本地」这一种缺口
+      if (cloudN <= localN) return;
+      var gap = cloudN - localN;
+      healTriedAt = Date.now();
+      healing = true;
+      setSyncStatus("发现 " + gap + " 条记录未拉取，正在补齐…", false);
+      Util.toast("检测到 " + gap + " 条记录未同步下来，正在自动补齐…");
+      Cloud.fullResync({ onStatus: function () {} }).then(function (res) {
+        var after = State.list.length;
+        var healed = after - localN;
+        if (res && res.ok && healed > 0) {
+          setSyncStatus("就绪", false);
+          Util.toast("已自动补齐 " + healed + " 条记录");
+          refreshActiveView();
+        } else if (res && res.ok) {
+          // 全量拉完仍没涨：说明缺口是「云端有文件但本地不该有」（如串仓过滤/墓碑）
+          // 属正常情况，静默复位，不打扰用户
+          setSyncStatus("就绪", false);
+        } else {
+          setSyncStatus("自动补齐失败，可在云同步页手动「全量重建同步」", true);
+        }
+      })["catch"](function () {
+        setSyncStatus("自动补齐失败，可在云同步页手动「全量重建同步」", true);
+      })["finally"](function () { healing = false; });
+    })["catch"](function () { /* 对账失败静默跳过，不影响主同步流程 */ });
   }
 
   /** 刷新当前模块视图 + 底部状态栏（同步完成后调用） */
