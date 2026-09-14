@@ -25,27 +25,19 @@
   var CLEARED_FLAG = "outbound_autoclear_done";   // 标记：本轮已清过，避免同一次会话重复清
 
   /* ---------- 该清的：云端有全量、随时可重建的只读副本 ---------- */
+  /* ---------- 该清的：只有「同步哈希缓存」这一类纯索引 ----------
+     ⚠️ 2026-09-14 事故教训（务必别再扩大清理范围）：
+     初版这里把 records/pickups/memos/stocktakes/catalog 的数据副本也清了，
+     结果库存当场全乱 —— 因为 库存 = 期初基准 + 全部流水累加，期初只有几十、
+     累加才是大头（单货品可达 +627/-220）。副本被清后，每次打开页面流水都从 0 算起，
+     在云同步跑完之前（甚至同步失败时永久）库存显示的是「期初值」→ 用户看到"全乱"。
+     同步一旦因网络/额度失败，错误状态还无法自愈（以前本地留着副本就不会乱）。
+     ⇒ 结论：只清索引缓存，数据副本一律留给本地兜底。清 tree 缓存已足以
+        强制下次全量拉取云端最新数据，同时本地永远有一份可用数据。
+       真正的兜底是 app.js 的 checkAndHealGap()（发现云端多于本地自动补齐）。 */
   function dynamicKeys() {
-    var p = function (n) { return Config.Sys.key(n); };
     return [
-      "outbound_tree_cache_v2",   // ⚠️ 增量同步哈希缓存 —— 本次故障的病根
-      Config.STORE_KEY,           // outbound_records_v2（仅深圳；赛迪斯有前缀版本）
-      p("records_v2"),            // 本仓记录副本
-      p("pickups_v2"),            // 待取货副本
-      p("memos_v2"),              // 备忘录副本
-      p("stocktakes_v1"),         // 盘点副本
-      p("catalog_v1")             // 货品目录缓存
-    ];
-  }
-  /* 两仓的 records 键都要清：STORE_KEY 是深圳固定名，赛迪斯的带前缀，切仓后各清各的 */
-  function allRecordKeys() {
-    return [
-      Config.STORE_KEY,
-      "outbound_saidis_records_v2",
-      "outbound_saidis_pickups_v2",
-      "outbound_saidis_memos_v2",
-      "outbound_saidis_stocktakes_v1",
-      "outbound_saidis_catalog_v1"
+      "outbound_tree_cache_v2"    // 增量同步哈希缓存（清它即触发下次全量拉取）
     ];
   }
 
@@ -93,7 +85,7 @@
   function clearLocal() {
     var blocked = blockedReason();
     if (blocked) return { ok: false, cleared: 0, reason: blocked };
-    var keys = dynamicKeys().concat(allRecordKeys());
+    var keys = dynamicKeys();
     var seen = {}, n = 0;
     keys.forEach(function (k) {
       if (!k || seen[k]) return;
