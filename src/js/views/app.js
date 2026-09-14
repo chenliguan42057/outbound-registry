@@ -494,6 +494,10 @@
     window.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("focus", onWindowFocus);
     wireOnlineOffline();       // PWA 离线状态横幅 + 恢复自动同步（优化 3）
+    // 退出时自动清理本地数据（2026-09-14）：关页面即清掉同步缓存与只读副本，
+    // 下次打开是干净状态 + 全量拉云端，从结构上消灭「增量缓存不一致 →
+    // 云端有单子却看不到」这类问题。待推送数据/令牌/草稿一律保留（见 autoClear.js）。
+    if (window.App.AutoClear) window.App.AutoClear.wire();
     startMemoReminder();       // 备忘录提醒前端兜底（每分钟轮询本地，不依赖后台）
     scheduleNextSync();
     triggerSync("start");
