@@ -1,1 +1,1 @@
-{"id":"mu2bg3zuvykgf","_ts":1789455239994,"createdAt":1789455239994,"confirmed":false,"shipped":false,"items":[{"name":"精华液 5支装","qty":6},{"name":"精华液 20支装","qty":6}],"note":"","warehouse":"shenzhen","picker":"JY202609150006","dept":"华大智造","purpose":"客户销售","__overdue":false}
+{"id":"mu2bg3zuvykgf","_ts":1789467154752,"createdAt":1789455239994,"confirmed":true,"shipped":true,"items":[{"name":"精华液 5支装","qty":6},{"name":"精华液 20支装","qty":6}],"note":"","warehouse":"shenzhen","picker":"JY202609150006","dept":"华大智造","purpose":"客户销售","__overdue":false}
