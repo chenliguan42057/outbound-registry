@@ -1,0 +1,1 @@
+{"id":"mu2c7p5m3zzph","_ts":1789456527130,"time":"2026-09-15T15:15","type":"in","warehouse":"shenzhen","items":[{"name":"中号拎袋","qty":10},{"name":"面膜5片装（未入库版）","qty":15}],"purpose":"调拨入库来自赛迪斯","picker":"赛迪斯（调拨）","dept":"赛迪斯","note":"两仓调拨：赛迪斯 → 深圳细胞","affectsStock":true,"source":"调拨入库","transferId":"mu2c7ojvkdse4","transferRole":"in","transferNo":"DB202609150004"}
