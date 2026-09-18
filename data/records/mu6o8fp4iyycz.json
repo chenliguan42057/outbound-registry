@@ -1,0 +1,1 @@
+{"id":"mu6o8fp4iyycz","_ts":1789718581624,"time":"2026-09-18T16:03","type":"in","warehouse":"shenzhen","items":[{"name":"中号拎袋","qty":1},{"name":"中号礼盒","qty":1}],"purpose":"调拨入库来自赛迪斯","picker":"赛迪斯（调拨）","dept":"赛迪斯","note":"两仓调拨：赛迪斯 → 深圳细胞","affectsStock":true,"source":"调拨入库","transferId":"mu6o8epkhhq08","transferRole":"in","transferNo":"DB202609180003"}
