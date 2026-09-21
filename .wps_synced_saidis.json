@@ -1648,5 +1648,11 @@
     "rows": {
       "2026时空鹿茸库存": 136
     }
+  },
+  "muaxr7dpd01hm": {
+    "skip": 1,
+    "reason": "borrow_diff",
+    "fp": "1eb735c1f6f0e4c9",
+    "at": "2026-09-21T14:20:09Z"
   }
 }
