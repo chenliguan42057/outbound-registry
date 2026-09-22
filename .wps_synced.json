@@ -176,7 +176,15 @@
   "test-verify-20260807": true,
   "msj634plrf8ms": true,
   "__bad__": {},
-  "__fail__": {},
+  "__fail__": {
+    "muc9sl4wh0rvs": {
+      "fail": 1,
+      "at": "2026-09-22T06:06:07Z",
+      "err": [
+        "2026时空鹿茸库存: <urlopen error timed out>"
+      ]
+    }
+  },
   "pilot-1786158041698-fyebf": {
     "ok": 1,
     "fail": 0,
