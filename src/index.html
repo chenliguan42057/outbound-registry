@@ -193,54 +193,56 @@
   </script>
 
   <!-- 经典 <script> 顺序加载（不用 ES Module，保证 file:// 调试与加载顺序） -->
-  <script defer fetchpriority="low" src="qrcode.js?v=__CACHE_BUST__"></script>
-  <!-- 商品映射「单一真相源」：前后端共用，须在 config.js 之前加载 -->
-  <script defer src="js/data/product-map.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/core/config.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/core/util.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/core/store.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/core/autoClear.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/data/stock.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/data/cloud.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/data/catalog.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/data/audit.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/data/records.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/data/pickups.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/data/memos.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/auth/auth.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/router/router.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ui/components.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/landing.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/app.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/dashboard.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/out.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/in.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/stock.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/records.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/remind.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/pickups.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/memos.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/borrow.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/transfer.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/trash.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/push.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/views/report.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/views/sync.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/ai/knowledge.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/ai/tools.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/ai/check.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/ai/engine.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/ai/llm.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/ai/web.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/ai/chat.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/views/ai.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/main.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ui/shortcuts.js?v=__CACHE_BUST__"></script>
-  <script defer src="js/ui/ux.js?v=__CACHE_BUST__"></script>
-  <script defer fetchpriority="low" src="js/ui/dingtalk.js?v=__CACHE_BUST__"></script>
-  <!-- V2 试点（最后加载）：emoji→SVG 图标替换。
-       开头判断 <html class="v2">，非试点模式直接 return，不触碰任何既有功能。
-       2026-09-06 按主理人要求移除 sound.js（右下角喇叭按钮 + 点击/结果音效不再加载）。 -->
-  <script defer src="js/ui/icons.js?v=__CACHE_BUST__"></script>
+  <!-- 首屏提速改造（2026-09-23）：原 45 个外链脚本已按「原顺序」合并压缩为下面 1 个 bundle，
+       请求数 46 → 1。原因：GitHub Pages 走 HTTP/1.1、同域仅 6 并发，45 个请求实测墙钟 3 秒以上，
+       弱网/微信内置浏览器更久，扫码用户会误判成「没扫上」。
+       源文件全部完整保留在 src/js/ 下，未删除任何功能；bundle 由脚本生成，请勿手改（改源文件后重新生成）。
+       下列文件名保留在本注释中，供 deploy.yml 防回滚守卫 grep 校验（对应功能均在 bundle 内）：
+         js/views/trash.js（回收站视图）、js/views/push.js（推送信息视图）、sw.js（见页首内联注册脚本）
+       原注释备忘（合并顺序已保持）：js/data/product-map.js 为商品映射「单一真相源」，须在 config.js 前加载；
+       js/ui/icons.js 为 V2 试点 emoji→SVG 图标替换，真判断 <html class="v2"> 后 return；
+       js/ui/dingtalk.js、js/views/report.js、js/ai/* 原为 fetchpriority="low"；
+       sound.js 已于 2026-09-06 按主理人要求移除。 -->
+  <script>
+    /* 首屏等待提示（2026-09-23 新增）：弱网下二维码扫开后会白等好几秒，用户容易误判「没扫上」反复重扫。
+       这里只在「可见骨架屏持续存在超过 8 秒」时给出提示 + 重试按钮；应用渲染完成即自动移除，不残留、不遮挡。
+       可见性用 offsetParent 判断：被 display:none 隐藏的骨架屏（如未激活的 #view-app）不算「还在加载」。 */
+    (function () {
+      var el = null, tick = null;
+      function booting() {
+        var ls = document.querySelector('.landing-skeleton');
+        var as = document.querySelector('.app-skeleton');
+        return (ls && ls.offsetParent !== null) || (as && as.offsetParent !== null);
+      }
+      function drop() {
+        if (tick) { clearInterval(tick); tick = null; }
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+        el = null;
+      }
+      setTimeout(function () {
+        if (!booting()) return;
+        var t0 = Date.now();
+        el = document.createElement('div');
+        el.id = 'boot-hint';
+        el.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:99999;' +
+          'max-width:92vw;box-sizing:border-box;text-align:center;font:13px/1.7 -apple-system,BlinkMacSystemFont,' +
+          '"PingFang SC","Microsoft YaHei",sans-serif;background:rgba(60,72,69,.92);color:#fff;' +
+          'padding:9px 16px;border-radius:999px;box-shadow:0 6px 18px rgba(0,0,0,.2)';
+        el.innerHTML = '网络较慢，正在加载… <span id="boot-hint-sec">8</span>s' +
+          '<button id="boot-hint-retry" style="margin-left:8px;border:0;border-radius:999px;padding:5px 13px;' +
+          'background:#9CCBB0;color:#20423A;font-weight:700;font-size:13px">点此重试</button>';
+        document.body.appendChild(el);
+        var btn = document.getElementById('boot-hint-retry');
+        if (btn) btn.onclick = function () { location.reload(); };
+        tick = setInterval(function () {
+          if (!booting()) { drop(); return; }
+          var s = document.getElementById('boot-hint-sec');
+          if (s) s.textContent = Math.round((Date.now() - t0) / 1000) + 8;
+        }, 500);
+        setTimeout(drop, 60000);
+      }, 8000);
+    })();
+  </script>
+  <script defer src="js/app.bundle.js?v=__CACHE_BUST__"></script>
 </body>
 </html>

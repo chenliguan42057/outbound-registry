@@ -3,9 +3,11 @@
  *
  * 策略：
  *  - 页面（navigation 请求）：network-first，失败回退缓存 → 断网也能打开应用
- *  - 静态资源（CSS/JS/ico/svg/manifest）：network-first（2026-09-05 起由
- *    cache-first 改为 network-first，杜绝发版后用户仍拿到旧版样式的缓存残留；
- *    在线永远最新，离线回退缓存）
+ *  - 静态资源（CSS/JS/ico/svg/manifest）：按 URL 是否带指纹分流（2026-09-23 修复）
+ *    · 带 ?v=<短SHA> 的：cache-first —— 指纹随每次发版变化，不会吃到旧资源，命中缓存即返回，二次访问秒开
+ *    · 不带指纹的：network-first + cache:"reload"（2026-09-05 的防旧样式策略保持不变）
+ *    修复原因：此前静态资源一律 network-first 且强制 cache:"reload"，等于每次打开都把
+ *    40+ 个文件全量重下，SW 形同虚设（甚至比不装更慢），是「扫码后半天不出来」的主因之一。
  *  - GitHub API（api.github.com）与 jsdelivr CDN（cdn.jsdelivr.net）：
  *    一律透传不缓存（数据走 localStorage，绝不缓存 API 响应）
  *
@@ -45,11 +47,28 @@ async function handleNavigation(req) {
   }
 }
 
-/** 静态资源 → network-first（在线永远最新，离线回退缓存）
- *  fetch 加 cache: "reload" 强制绕过浏览器 HTTP 磁盘缓存，避免旧文件残留
- *  （2026-09-05：补强 — 不加 cache:reload 时 disk cache 仍会拦截旧 CSS） */
+/** 静态资源 → 按 URL 是否带指纹分流（2026-09-23 修复「每次访问都全量重下」）：
+ *  - 带 ?v=<短SHA> 的（CSS/JS/图标）：cache-first。指纹随每次发版变化 → 天然不会吃到旧资源，
+ *    命中缓存直接返回 → 二次访问秒开。
+ *  - 不带指纹的（manifest/ico 等）：保持 network-first + cache:"reload"（2026-09-05 的防旧样式策略不变）。
+ *  背景：此前静态资源一律 network-first 且强制 cache:"reload"，等于每次打开都把 40+ 个文件全量重下，
+ *  Service Worker 形同虚设（甚至比不装更慢），是「扫码后半天不出来」的主因之一。 */
 async function handleStatic(req) {
   var cache = await caches.open(CACHE);
+  var versioned = /[?&]v=/.test(new URL(req.url).search);
+  if (versioned) {
+    var hit = await cache.match(req);
+    if (hit) return hit;
+    try {
+      var first = await fetch(req);
+      if (first && first.ok) {
+        try { await cache.put(req, first.clone()); } catch (e) {}
+      }
+      return first;
+    } catch (e) {
+      return new Response("", { status: 504, statusText: "Offline" });
+    }
+  }
   try {
     var fresh = await fetch(req, { cache: "reload" });
     if (fresh && fresh.ok) {
