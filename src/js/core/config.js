@@ -117,6 +117,7 @@
     GH_TOKEN_KEY: "gh_token",
     DEPT_HISTORY_KEY: "outbound_dept_history",
     PICKER_HISTORY_KEY: "outbound_picker_history",
+    APPLICANT_HISTORY_KEY: "outbound_applicant_history",
     PURPOSE_HISTORY_KEY: "outbound_purpose_history",
 
     /* 内部状态键（经 store.js 统一管理） */

@@ -48,6 +48,13 @@
             '<div class="suggest" id="outDeptSuggest"></div>' +
           '</div>' +
         '</div>' +
+        '<div class="field">' +
+          '<label for="outApplicant">申请人<span class="req">*</span></label>' +
+          '<div class="search-wrap">' +
+            '<input type="text" id="outApplicant" placeholder="请输入申请人姓名" autocomplete="off" inputmode="text" enterkeyhint="next" />' +
+            '<div class="suggest" id="outApplicantSuggest"></div>' +
+          '</div>' +
+        '</div>' +
         '<div class="grid2">' +
           '<div class="field">' +
             '<label for="outTime">领取时间<span class="req">*</span></label>' +
@@ -55,9 +62,9 @@
             '<div class="hint"><span class="auto" id="outFillNow">📎 自动填入当前时间</span></div>' +
           '</div>' +
           '<div class="field">' +
-            '<label for="outPicker">领取人+工号/电话<span class="req">*</span></label>' +
+            '<label for="outPicker">领取人<span class="req">*</span></label>' +
             '<div class="search-wrap">' +
-              '<input type="text" id="outPicker" placeholder="请输入领取人姓名+工号或手机" autocomplete="name" inputmode="text" enterkeyhint="next" />' +
+              '<input type="text" id="outPicker" placeholder="请输入领取人姓名" autocomplete="name" inputmode="text" enterkeyhint="next" />' +
               '<div class="suggest" id="outPickerSuggest"></div>' +
             '</div>' +
           '</div>' +
@@ -98,6 +105,7 @@
       dept: Util.$("outDept"),
       time: Util.$("outTime"),
       picker: Util.$("outPicker"),
+      applicant: Util.$("outApplicant"),
       note: Util.$("outNote"),
       purposeChips: Util.$("outPurposeChips"),
       purposeAdd: Util.$("outPurposeAdd"),
@@ -157,6 +165,7 @@
 
     setupHistorySuggest("outDept", "outDeptSuggest", Config.DEPT_HISTORY_KEY);
     setupHistorySuggest("outPicker", "outPickerSuggest", Config.PICKER_HISTORY_KEY);
+    setupHistorySuggest("outApplicant", "outApplicantSuggest", Config.APPLICANT_HISTORY_KEY);
 
     // 用途 chip 单选：事件委托（互斥高亮）
     els.purposeChips.addEventListener("click", function (ev) {
@@ -328,7 +337,8 @@
    *  全用户共享，新设备/清缓存后 也能看到全公司以往填过的 dept/picker。去重、本地优先。*/
   function setupHistorySuggest(inputId, suggestId, historyKey) {
     var inp = Util.$(inputId), sug = Util.$(suggestId);
-    var field = historyKey === Config.PICKER_HISTORY_KEY ? "picker" : "dept";
+    var field = historyKey === Config.PICKER_HISTORY_KEY ? "picker"
+      : (historyKey === Config.APPLICANT_HISTORY_KEY ? "applicant" : "dept");
     function getEffectiveHistory() {
       var local = Store.getHistory(historyKey) || [];
       var global = (State.list || [])
@@ -373,6 +383,7 @@
     Store.saveDraft("out", {
       time: els.time.value,
       picker: els.picker.value,
+      applicant: els.applicant.value,
       dept: els.dept.value,
       note: els.note.value,
       purpose: getPurposeSelected(),
@@ -387,6 +398,7 @@
     if (!d) return;
     els.time.value = d.time || Util.nowLocal();
     els.picker.value = d.picker || "";
+    els.applicant.value = d.applicant || "";
     els.dept.value = d.dept || "";
     els.note.value = d.note || "";
     if (d.purpose) { selectedPurpose = d.purpose; renderPurposeChips(); }  // 旧草稿为字符串，直接匹配高亮对应 chip
@@ -421,6 +433,7 @@
 
     var time = els.time.value;
     var pickerVal = els.picker.value.trim();
+    var applicantVal = els.applicant.value.trim();
     var purpose = getPurposeSelected();
     var entity = getEntitySelected();
     var dept = els.dept.value.trim();
@@ -430,6 +443,7 @@
     if (!entity) errs.push({ el: els.entityChips, msg: "请选择出货仓库单位" });
     if (!dept) errs.push({ el: els.dept, msg: "请填写部门 / 领取单位" });
     if (!time) errs.push({ el: els.time, msg: "请填写领取时间" });
+    if (!applicantVal) errs.push({ el: els.applicant, msg: "请填写申请人" });
     if (!pickerVal) errs.push({ el: els.picker, msg: "请填写领取人" });
     if (!purpose) errs.push({ el: els.purposeChips, msg: "请选择用途 / 项目" });
 
@@ -462,6 +476,7 @@
     var payload = {
       time: time,
       picker: pickerVal,
+      applicant: applicantVal,
       dept: dept,
       note: (els.note && els.note.value || "").trim(),  // 备注非必填，纯追加字段
       purpose: purpose,
@@ -483,6 +498,7 @@
     }
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
+    Store.addHistory(Config.APPLICANT_HISTORY_KEY, applicantVal);
     resetForm();
     // 顺捷感一（乐观 UI）：本地已落库 = 这件事已经成了，不必等云端回话。
     // 立刻解锁按钮、给提示、把记录放进同步队列（列表行会显示转圈），云端推送转后台慢慢跑。
@@ -624,6 +640,7 @@
 
   function resetForm() {
     els.picker.value = "";
+    els.applicant.value = "";
     selectedPurpose = "";
     renderPurposeChips();
     closePurposeAdd();
@@ -650,6 +667,7 @@
     editingOriginalPhotos = (r.photos || []).slice();   // 记录编辑前的照片快照（编辑时复用 photoUrls 的依据）
     els.time.value = r.time || Util.nowLocal();
     els.picker.value = r.picker || "";
+    els.applicant.value = r.applicant || "";
     els.dept.value = r.dept || "";
     els.note.value = r.note || "";
     // 编辑初始化选中态：有值则选中，无值（旧记录/导入记录）必须清空，避免先前选中态残留带出

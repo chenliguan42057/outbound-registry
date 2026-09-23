@@ -631,6 +631,7 @@
       }
       if (!isRecIn) {
         rows += '<div class="detail-row"><span class="k">状态</span><span class="v">' + statusBadge(r) + '</span></div>';
+        rows += '<div class="detail-row"><span class="k">申请人</span><span class="v">' + Util.esc(r.applicant || "-") + '</span></div>';
         rows += '<div class="detail-row"><span class="k">领取人</span><span class="v">' + Util.esc(r.picker || "-") + '</span></div>';
         rows += '<div class="detail-row"><span class="k">部门</span><span class="v">' + Util.esc(r.dept || "-") + '</span></div>';
         if (r.entity) {
@@ -734,6 +735,7 @@
         '<h1>出入库登记 · ' + kindLabel + '</h1>' +
         '<div class="sub">单号：' + Util.esc(r.orderNo || r.id) + '　|　时间：' + Util.esc(String(r.time || "").replace("T", " ")) + '</div>' +
         '<div class="field">' +
+          (isRecIn ? '' : '<b>申请人：</b>' + Util.esc(r.applicant || "-") + '<br>') +
           '<b>' + (isRecIn ? "经办人" : "领取人") + '：</b>' + Util.esc(r.picker || "-") + '<br>' +
           (isRecIn ? '' : '<b>部门/客户：</b>' + Util.esc(r.dept || "-") + '<br>') +
           (isRecIn ? '' : (r.entity ? '<b>出货仓库单位：</b>' + Util.esc(r.entity) + '<br>' : '')) +

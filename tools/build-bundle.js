@@ -21,11 +21,12 @@
  *   已安装：qrcode、terser
  *
  * 用法：
- *   node tools/build-bundle.js [二维码输出目录，默认 <仓库上级>/qr-out]
+ *   node tools/build-bundle.js [二维码输出目录，默认 <仓库上级>/qr-out] [--no-qr]
  *
- * ⚠️ 重跑前提：index.html 的脚本清单已被合并成 1 个 bundle，
- *    再次构建前需先 `git checkout HEAD~ -- src/index.html` 或从 git 历史取回原清单，
- *    否则会把 bundle 自己再包一遍（脚本内已加硬中止保护）。
+ * 脚本清单从哪来（2026-09-23 补强）：
+ *   ① 若 index.html 仍是「多外链脚本」原貌 → 直接按原顺序解析；
+ *   ② 若 index.html 已是合并态 → 回退读 tools/bundle-manifest.json 的有序清单。
+ *   两者都拿不到才报错中止（防止把 bundle 自己再包一遍）。所以合并后无需再动 index.html 即可重复构建。
  */
 const fs = require('fs');
 const path = require('path');
@@ -39,11 +40,14 @@ const TARGET_URL = 'https://chenliguan42057.github.io/outbound-registry/';
 (async () => {
   /* ---------------- 1) 二维码 ---------------- */
   console.log('===== 1. 二维码（网址与原码一致，可并存） =====');
+  const SKIP_QR = process.argv.indexOf('--no-qr') !== -1;
   let QR;
   try { QR = require('qrcode'); } catch (e) {
     console.log('  ⚠️ 未安装 qrcode，跳过二维码生成（export NODE_PATH=... 后重试）');
   }
-  if (QR) {
+  if (SKIP_QR) {
+    console.log('  ⏭️  已指定 --no-qr：跳过二维码生成（仅重建 bundle）');
+  } else if (QR) {
     fs.mkdirSync(QR_OUT, { recursive: true });
     const variants = [
       { ecc: 'Q', note: '37x37 模块更大，推荐打印张贴' },
@@ -67,13 +71,21 @@ const TARGET_URL = 'https://chenliguan42057.github.io/outbound-registry/';
   console.log('\n===== 2. 首屏 bundle =====');
   const htmlPath = path.join(SRC, 'index.html');
   const html = fs.readFileSync(htmlPath, 'utf8');
-  const files = [...html.matchAll(/<script[^>]*\ssrc="([^"?]+)(?:\?[^"]*)?"[^>]*>\s*<\/script>/g)].map(m => m[1]);
+  let files = [...html.matchAll(/<script[^>]*\ssrc="([^"?]+)(?:\?[^"]*)?"[^>]*>\s*<\/script>/g)].map(m => m[1]);
 
   if (files.length < 5) {
-    console.error('  ✋ 中止：index.html 只解析到 ' + files.length + ' 个外链脚本。');
-    console.error('     脚本清单大概率已被合并（只剩 app.bundle.js），继续构建会把 bundle 自己再包一遍。');
-    console.error('     请先从 git 历史取回原 index.html：git checkout HEAD~1 -- src/index.html');
-    process.exit(1);
+    /* index.html 已是「合并态」（只剩 app.bundle.js）时，回退读清单文件。
+       清单是重建的唯一真相源，避免每次都要从 git 历史捞原 index.html。 */
+    const mfPath = path.join(__dirname, 'bundle-manifest.json');
+    if (fs.existsSync(mfPath)) {
+      files = JSON.parse(fs.readFileSync(mfPath, 'utf8')).files;
+      console.log('  ℹ️ index.html 已是合并态 → 改用清单 tools/bundle-manifest.json（' + files.length + ' 个模块）');
+    } else {
+      console.error('  ✋ 中止：index.html 只解析到 ' + files.length + ' 个外链脚本，且无 tools/bundle-manifest.json 清单。');
+      console.error('     继续构建会把 bundle 自己再包一遍（会静默出错）。');
+      console.error('     请先从 git 历史取回原 index.html：git checkout HEAD~1 -- src/index.html 并重跑本脚本。');
+      process.exit(1);
+    }
   }
 
   const parts = [], missing = [];
