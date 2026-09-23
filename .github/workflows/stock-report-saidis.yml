@@ -1,8 +1,9 @@
 name: Stock Weekly Report (赛迪斯)
 on:
-  schedule:
+  # ⛔ 2026-09-23 按主理人要求停用定时推送（恢复：删掉本行，并把下方 "# schedule:" 与 "# - cron:" 行行首的 "# " 去掉即可）
+  # schedule:
     # 每周五 17:55（北京时间 = UTC 09:55）；GitHub cron 使用 UTC 时区
-    - cron: '55 9 * * 5'
+    # - cron: '55 9 * * 5'
   workflow_dispatch:   # 支持手动触发测试
 
 jobs:
