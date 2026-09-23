@@ -203,6 +203,7 @@ def build_new_markdown(data):
     # 出库
     title = "### 📦 出入库登记 · 新出库登记"
     fields = [
+        ("申请人", data.get("applicant", "") or "-"),
         ("领取人", data.get("picker", "") or "-"),
         ("部门/客户", data.get("dept", "") or "-")
     ]
@@ -221,6 +222,7 @@ def _build_borrow_new_markdown(data):
     """借出动作：borrowed false→true → 新借出登记通知（复用出库布局，标题/状态更明确）。"""
     title = "### 🔄 出入库登记 · 新借出登记"
     fields = [
+        ("申请人", data.get("applicant", "") or "-"),
         ("领取人", data.get("picker", "") or "-"),
         ("部门/客户", data.get("dept", "") or "-")
     ]
@@ -239,6 +241,7 @@ def _build_borrow_unborrow_markdown(data):
     """退回动作：borrowed true→false → 已退回出库记录通知。"""
     title = "### 🔙 出入库登记 · 已退回出库记录"
     fields = [
+        ("申请人", data.get("applicant", "") or "-"),
         ("领取人", data.get("picker", "") or "-"),
         ("部门/客户", data.get("dept", "") or "-")
     ]
@@ -274,6 +277,7 @@ def build_update_markdown(data, old):
     # 提单动作：出库记录状态从非已提单变为已提单
     if new_st == "submitted" and old_st != "submitted":
         fields = [
+            ("申请人", data.get("applicant", "") or "-"),
             ("领取人", data.get("picker", "") or "-"),
             ("部门/客户", data.get("dept", "") or "-")
         ]
@@ -289,6 +293,7 @@ def build_update_markdown(data, old):
     # 取消提单（已提单→未提单）
     if old_st == "submitted" and new_st == "pending":
         fields = [
+            ("申请人", data.get("applicant", "") or "-"),
             ("领取人", data.get("picker", "") or "-"),
             ("部门/客户", data.get("dept", "") or "-")
         ]
@@ -299,6 +304,7 @@ def build_update_markdown(data, old):
         return _layout_record("### ↩️ 出入库登记 · 已撤回未提单", fields, data, tail_fields=tail)
     # 其他修改（编辑用途/货品等）
     fields = [
+        ("申请人", data.get("applicant", "") or "-"),
         ("领取人", data.get("picker", "") or "-"),
         ("部门/客户", data.get("dept", "") or "-")
     ]
@@ -322,8 +328,9 @@ def build_tombstone_markdown(data):
         )
     rec = data.get("rec") or {}
     goods_lines = goods_lines_of(rec)
-    md = "### 🗑 出入库登记 · 记录已删除\n- **删除理由**：{}\n- **领取人**：{}\n- **部门/客户**：{}\n".format(
+    md = "### 🗑 出入库登记 · 记录已删除\n- **删除理由**：{}\n- **申请人**：{}\n- **领取人**：{}\n- **部门/客户**：{}\n".format(
         data.get("reason", "") or "-",
+        rec.get("applicant", "") or "-",
         rec.get("picker", "") or "-",
         rec.get("dept", "") or "-",
     )

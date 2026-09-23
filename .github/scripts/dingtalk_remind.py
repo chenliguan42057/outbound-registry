@@ -359,6 +359,19 @@ def main():
             print("提单确认发送失败: {}".format(err), file=sys.stderr)
             return 1
 
+    # 3) 库存盘点差异（2026-09-23 补：此前 stocktakes 只被收集、main() 里没有发送分支，
+    #    导致前端 toast「盘点差异已推送钉钉群」但群里根本收不到 —— 属静默丢失。）
+    for st in stocktakes:
+        text = build_stocktake_markdown(st)
+        if not text:
+            continue
+        ok, err = send(text, title="出入库登记 · 库存盘点")
+        if ok:
+            print("库存盘点差异已发送")
+        else:
+            print("库存盘点差异发送失败: {}".format(err), file=sys.stderr)
+            return 1
+
     return 0
 
 
