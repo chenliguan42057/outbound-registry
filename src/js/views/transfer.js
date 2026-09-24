@@ -65,6 +65,7 @@
       '</div>' +
       '<div class="card" style="margin-top:14px">' +
         '<h2>调拨历史 <span class="tag">本仓</span></h2>' +
+        '<div class="stat-cards" id="tfStats"></div>' +
         '<div class="hint" style="margin:-6px 0 10px;line-height:1.7">双仓调拨在本仓的记录：调出 = 本仓出库单，调入 = 对方调来的入库单。对方仓的对应记录请切换到对方系统查看。</div>' +
         '<div id="tfHistoryList"></div>' +
       '</div>';
@@ -94,6 +95,42 @@
     var recs = all.filter(function (r) { return r.transferRole; }).sort(function (a, b) {
       return (b.time || "").localeCompare(a.time || "") || (b._ts || 0) - (a._ts || 0);
     });
+    // 统计数字卡（第 13 轮）：本仓调拨历史里，同一笔调拨会同时有「调出」「调入」两条记录，
+    // 所以单据数必须按 transferId 去重，件数只统计调出方向，避免重复计数。
+    var tfStatsEl = Util.$("tfStats");
+    if (tfStatsEl) {
+      var tfIds = {};
+      recs.forEach(function (r) { if (r.transferId) tfIds[r.transferId] = 1; });
+      var tfCount = Object.keys(tfIds).length || recs.length;
+      var ndTf = new Date();
+      var tfMonth = recs.filter(function (r) {
+        var d = new Date(String(r.time || "").replace(" ", "T"));
+        return !isNaN(d.getTime()) &&
+          d.getFullYear() === ndTf.getFullYear() && d.getMonth() === ndTf.getMonth();
+      });
+      var tfMonthIds = {};
+      tfMonth.forEach(function (r) { if (r.transferId) tfMonthIds[r.transferId] = 1; });
+      var tfQty = recs.filter(function (r) { return r.transferRole === "out"; })
+        .reduce(function (a, r) {
+          return a + (r.items || []).reduce(function (b, it) { return b + Math.abs(Number(it.qty) || 0); }, 0);
+        }, 0);
+      tfStatsEl.innerHTML =
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + tfCount + '</span>' +
+          '<span class="stat-label">累计调拨单</span>' +
+          '<span class="stat-hint">本仓经手的调拨单数（已去重）</span>' +
+        '</div>' +
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + (Object.keys(tfMonthIds).length || tfMonth.length) + '</span>' +
+          '<span class="stat-label">本月调拨单</span>' +
+          '<span class="stat-hint">本月新发起的调拨</span>' +
+        '</div>' +
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + tfQty + '</span>' +
+          '<span class="stat-label">累计调出件数</span>' +
+          '<span class="stat-hint">从本仓调出的货品数量合计</span>' +
+        '</div>';
+    }
     if (!recs.length) {
       box.innerHTML = '<div class="empty">本仓暂无调拨记录。执行调拨后，对应的出库/入库记录会自动显示在这里。</div>';
       return;

@@ -678,9 +678,9 @@
       }
     }
 
-    function showDetail(id) {
-      var r = State.list.find(function (x) { return x.id === id; });
-      if (!r) return;
+    /** 详情内容 HTML。withActions=true 带底部操作按钮（详情弹窗用，需绑定事件）；
+        false 只返回数据行（库存流水行内展开用，无需绑定）。2026-09-24 第 13 轮抽出。 */
+    function buildDetailRows(r, withActions) {
       var isRecIn = r.type === "in";
       var itemsHtml = (r.items || []).map(function (it) {
         return '<div class="detail-item"><span>' + Util.esc(it.name) + ' × ' + it.qty + '</span>' +
@@ -724,21 +724,35 @@
       rows += '<div class="detail-row"><span class="k">货品明细</span><span class="v detail-items">' + (itemsHtml || "-") + '</span></div>';
       rows += '<div class="detail-row"><span class="k">照片</span><span class="v">' + photosHtml + '</span></div>';
       // 2026-09-06：调拨记录详情显示「↶ 撤回调拨」入口（一键在双方各写一笔反向记录）
-      var transferOps = "";
-      if (r.transferId && r.transferRole === "out") {
-        transferOps = '<button type="button" class="btn ghost sm" data-detail-act="rollback" style="margin-left:6px;color:#8a6d3b">↶ 撤回调拨</button>';
-      }
       // 2026-08-08：操作按钮（打印/编辑/删除）从列表行移入详情弹窗，列表行只展示数据
-      rows += '<div class="detail-row" style="display:block;border-bottom:none;padding-top:16px">' +
-        '<div class="modal-actions">' +
-          '<button type="button" class="btn ' + (r.pinned === true ? "" : "ghost") + ' sm" data-detail-act="pin">' +
-            (r.pinned === true ? '📌 取消置顶' : '📌 置顶') + '</button> ' +
-          '<button type="button" class="btn ghost sm" data-detail-act="print">🖨 打印</button> ' +
-          '<button type="button" class="btn sm" data-detail-act="edit">编辑</button> ' +
-          '<button type="button" class="btn danger sm" data-detail-act="del">删除</button>' +
-          transferOps +
-        '</div></div>';
-      UI.Modal.show(isRecIn ? "入库详情" : "出库详情", rows, { width: "560px" });
+      if (withActions) {
+        var transferOps = "";
+        if (r.transferId && r.transferRole === "out") {
+          transferOps = '<button type="button" class="btn ghost sm" data-detail-act="rollback" style="margin-left:6px;color:#8a6d3b">↶ 撤回调拨</button>';
+        }
+        rows += '<div class="detail-row" style="display:block;border-bottom:none;padding-top:16px">' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn ' + (r.pinned === true ? "" : "ghost") + ' sm" data-detail-act="pin">' +
+              (r.pinned === true ? '📌 取消置顶' : '📌 置顶') + '</button> ' +
+            '<button type="button" class="btn ghost sm" data-detail-act="print">🖨 打印</button> ' +
+            '<button type="button" class="btn sm" data-detail-act="edit">编辑</button> ' +
+            '<button type="button" class="btn danger sm" data-detail-act="del">删除</button>' +
+            transferOps +
+          '</div></div>';
+      }
+      return rows;
+    }
+
+    /** 库存流水行内展开用：只返回该笔的数据行 HTML（2026-09-24 第 13 轮） */
+    function detailHtml(id) {
+      var r = State.list.find(function (x) { return x.id === id; });
+      return r ? buildDetailRows(r, false) : "";
+    }
+
+    function showDetail(id) {
+      var r = State.list.find(function (x) { return x.id === id; });
+      if (!r) return;
+      UI.Modal.show(r.type === "in" ? "入库详情" : "出库详情", buildDetailRows(r, true), { width: "560px" });
       // 绑定详情弹窗内的操作按钮（Modal 内事件不会冒泡到 listBox）
       var actions = UI.Modal.body();
       if (actions) {
@@ -1008,7 +1022,11 @@
       render: render,
       refresh: refresh,
       filter: filter,
-      doSync: doSync
+      doSync: doSync,
+      // 2026-09-24 第 13 轮：导出详情，供「库存流水」双击某一行时复用
+      // （两个函数都只按 id 在 State.list 里查，与模块类型无关，任一实例都可用）
+      showDetail: showDetail,
+      detailHtml: detailHtml
     };
   }
 

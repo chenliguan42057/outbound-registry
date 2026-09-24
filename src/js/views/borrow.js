@@ -54,6 +54,7 @@
           '<button type="button" class="btn sm" id="borrowAdd">&#43; 添加借出</button>' +
           '<button type="button" class="btn ghost sm" id="borrowSync">&#128260; 立即同步</button>' +
         '</div>' +
+        '<div class="stat-cards" id="borrowStats"></div>' +
         '<div class="pickups-tabs">' +
           '<button type="button" class="pickups-tab active" data-tab="ongoing">借出中</button>' +
           '<button type="button" class="pickups-tab" data-tab="done">已完成</button>' +
@@ -138,6 +139,29 @@
     var done = all.filter(function (r) { return isDone(r); });
     var shown = activeTab === "done" ? done : ongoing;
     Util.$("borrowCount").textContent = ongoing.length + " 单";
+    // 统计数字卡（第 12/13 轮）：借出中 / 未还件数 / 已结清
+    var brwStatsEl = Util.$("borrowStats");
+    if (brwStatsEl) {
+      var unpaidQty = ongoing.reduce(function (a, r) {
+        return a + remainingItems(r).reduce(function (b, x) { return b + (Number(x.qty) || 0); }, 0);
+      }, 0);
+      brwStatsEl.innerHTML =
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + ongoing.length + '</span>' +
+          '<span class="stat-label">借出中</span>' +
+          '<span class="stat-hint">还没归还完的单</span>' +
+        '</div>' +
+        '<div class="stat-card ' + (unpaidQty ? "warn" : "ok") + '">' +
+          '<span class="stat-num">' + unpaidQty + '</span>' +
+          '<span class="stat-label">未还件数</span>' +
+          '<span class="stat-hint">' + (unpaidQty ? "还差这么多件没还回来" : "全部都还清了") + '</span>' +
+        '</div>' +
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + done.length + '</span>' +
+          '<span class="stat-label">已结清</span>' +
+          '<span class="stat-hint">归还完成并归档的单</span>' +
+        '</div>';
+    }
     if (!shown.length) {
       listBox.innerHTML = '<div class="empty">' +
         (activeTab === "done" ? "<b>还没有已结清的借出</b><i>归还完成后会归档到这里</i>" : "<b>当前没有借出中的记录</b><i>点上方「添加借出」，从出库记录转入</i>") + '</div>';

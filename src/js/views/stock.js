@@ -444,7 +444,7 @@
         // 盘点校准行：不进库存推算（affectsStock 无关），直接展示 账面→实存 与差异
         if (r.kind === "stocktake") {
           var d0 = it ? (Number(it.diff) || 0) : 0;
-          return '<tr>' +
+          return '<tr class="flow-row" data-kind="stocktake" title="盘点校准记录，没有登记详情页">' +
             '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
             '<td><span class="tag" style="background:#F0E7D2;color:#8a6d3b">盘点</span></td>' +
             '<td>—</td>' +
@@ -457,7 +457,7 @@
         // 死快照与 INVENTORY 基准、事件归一化、affectsStock 修正后的口径都不一致，
         // 会显示 134+14≠165 这种"对不上"的怪现象。
         var stock = Stock.getRecordStock(name, r, it);
-        return '<tr>' +
+        return '<tr class="flow-row" data-id="' + Util.esc(r.id || "") + '" title="双击查看这笔的详细信息">' +
           '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
           '<td>' + (isIn ? '<span class="tag ok-tag">入库</span>' : '<span class="tag danger-tag">出库</span>') + '</td>' +
           '<td>' + stCell + '</td>' +
@@ -469,6 +469,7 @@
       '</tbody></table></div>' +
       '<div class="hint">「当时库存」为该笔完成后的快照；当前库存 ' + Util.esc(String(window.App.Stock.getStock(name))) +
         (pendingCnt ? '　|　<span style="color:#C0392B">本货品有 ' + pendingCnt + ' 笔出库未完成提单</span>' : '') +
+        '<br>💡 <b>双击任意一行</b>可就地展开这笔的详细信息（申请人、用途、货品明细、照片等）。' +
       '</div>';
     UI.Modal.show("📦 库存流水 · " + Util.esc(name),
       '<div class="modal-actions" style="margin:-6px 0 12px;justify-content:flex-end">' +
@@ -476,8 +477,54 @@
       '</div>' + html,
       { width: "640px" });
     var mBody = UI.Modal.body();
-    var exp = mBody.querySelector('[data-act="export"]');
-    if (exp) exp.addEventListener("click", function () { exportProductCSV(name); });
+    // 事件统一用委托挂在 .modal-body 上（这个元素本身不会被 innerHTML 替换，比绑子元素稳）
+    mBody.addEventListener("click", function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-act="export"]') : null;
+      if (b) exportProductCSV(name);
+    });
+    // 2026-09-24 第 13 轮：双击流水行 → 就地展开该笔的登记详情
+    // （不用 UI.Modal.show 再开一层：Modal 是单例，会把流水列表整个换掉，体验割裂）
+    mBody.addEventListener("dblclick", function (e) {
+      var tr = e.target && e.target.closest ? e.target.closest("tr.flow-row") : null;
+      if (!tr) return;
+      if (!tr.parentNode) return;
+      // 再次双击同一行 → 收起
+      var next = tr.nextElementSibling;
+      if (next && next.classList.contains("flow-detail")) {
+        next.parentNode.removeChild(next);
+        tr.classList.remove("flow-open");
+        return;
+      }
+      // 收起其它已展开的行，保持一次只看一笔
+      mBody.querySelectorAll("tr.flow-detail").forEach(function (n) { n.parentNode.removeChild(n); });
+      mBody.querySelectorAll("tr.flow-row.flow-open").forEach(function (n) { n.classList.remove("flow-open"); });
+      if (tr.getAttribute("data-kind") === "stocktake") {
+        Util.toast("盘点校准记录没有登记详情页");
+        return;
+      }
+      var id = tr.getAttribute("data-id");
+      if (!id) return;
+      var V = window.App.Views || {};
+      var v = (V.outRecords && V.outRecords.detailHtml) ? V.outRecords
+            : (V.inRecords && V.inRecords.detailHtml) ? V.inRecords : null;
+      if (!v) { Util.toast("详情模块未加载", true); return; }
+      var inner = v.detailHtml(id);
+      if (!inner) { Util.toast("没找到这笔详情，可能已被删除", true); return; }
+      var trDet = document.createElement("tr");
+      trDet.className = "flow-detail";
+      var td = document.createElement("td");
+      td.colSpan = tr.children.length || 6;
+      td.innerHTML = '<div class="flow-detail-box">' +
+        '<div class="flow-detail-title">这笔的详细信息<span class="flow-detail-tip">再次双击本行可收起</span></div>' +
+        inner +
+      '</div>';
+      trDet.appendChild(td);
+      tr.parentNode.insertBefore(trDet, tr.nextSibling);
+      tr.classList.add("flow-open");
+      setTimeout(function () {
+        try { trDet.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e2) {}
+      }, 30);
+    });
   }
 
   /* ================= B2 库存盘点平账 ================= */

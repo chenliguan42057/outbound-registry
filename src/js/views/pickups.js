@@ -102,6 +102,7 @@
         '<div class="actions rec-actions">' +
           '<button type="button" class="btn ghost sm" id="pkSync">&#128260; 立即同步</button>' +
         '</div>' +
+        '<div class="stat-cards" id="pkStats"></div>' +
         '<div class="pickups-tabs">' +
           '<button type="button" class="pickups-tab active" data-tab="todo">待取货</button>' +
           '<button type="button" class="pickups-tab" data-tab="shipped">已出库</button>' +
@@ -397,6 +398,26 @@
     var shipped = list.filter(function (p) { return p.shipped === true; });
     var shown = activeTab === "shipped" ? shipped : todo;
     Util.$("pkCount").textContent = shown.length + " 条" + (activeTab === "todo" && overCount ? "（超时 " + overCount + "）" : "");
+    // 统计数字卡（第 12/13 轮）
+    var pkStatsEl = Util.$("pkStats");
+    if (pkStatsEl) {
+      pkStatsEl.innerHTML =
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + todo.length + '</span>' +
+          '<span class="stat-label">待取货</span>' +
+          '<span class="stat-hint">已提单但还没出库</span>' +
+        '</div>' +
+        '<div class="stat-card ' + (overCount ? "warn" : "ok") + '">' +
+          '<span class="stat-num">' + overCount + '</span>' +
+          '<span class="stat-label">已超时</span>' +
+          '<span class="stat-hint">' + (overCount ? "超过约定时间还没被取走，催一下" : "没有超时的待取货") + '</span>' +
+        '</div>' +
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + shipped.length + '</span>' +
+          '<span class="stat-label">已出库</span>' +
+          '<span class="stat-hint">已经完成出库的待取货</span>' +
+        '</div>';
+    }
     if (!shown.length) {
       listBox.innerHTML = '<div class="empty">' +
         (activeTab === "shipped" ? "<b>还没有已出库的待取货</b><i>出库后会出现在这里</i>" : "<b>还没有待取货登记</b><i>在上方表单登记一单即可</i>") +

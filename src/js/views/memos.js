@@ -54,6 +54,7 @@
         '<div class="actions rec-actions">' +
           '<button type="button" class="btn ghost sm" id="memoSync">&#128260; 立即同步</button>' +
         '</div>' +
+        '<div class="stat-cards" id="memoStats"></div>' +
         '<div class="pickups-tabs">' +
           '<button type="button" class="pickups-tab active" data-tab="todo">未完成</button>' +
           '<button type="button" class="pickups-tab" data-tab="done">已完成</button>' +
@@ -208,6 +209,43 @@
     var done = list.filter(function (m) { return m.done === true; });
     var shown = activeTab === "done" ? done : todo;
     Util.$("memoCount").textContent = "未完成 " + todo.length + " 项";
+    // 统计数字卡（第 12/13 轮）：待做 / 今日到期 / 已逾期 / 已完成
+    var memoStatsEl = Util.$("memoStats");
+    if (memoStatsEl) {
+      var nd = new Date();
+      var isSameDay = function (t) {
+        var d = new Date(t);
+        return !isNaN(d.getTime()) &&
+          d.getFullYear() === nd.getFullYear() && d.getMonth() === nd.getMonth() && d.getDate() === nd.getDate();
+      };
+      var dueToday = todo.filter(function (m) { return m.remindAt && isSameDay(m.remindAt); }).length;
+      var overdue = todo.filter(function (m) {
+        if (!m.remindAt) return false;
+        var d = new Date(m.remindAt);
+        return !isNaN(d.getTime()) && d.getTime() < nd.getTime() && !isSameDay(m.remindAt);
+      }).length;
+      memoStatsEl.innerHTML =
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + todo.length + '</span>' +
+          '<span class="stat-label">待做</span>' +
+          '<span class="stat-hint">还没打勾的事项</span>' +
+        '</div>' +
+        '<div class="stat-card ' + (dueToday ? "warn" : "") + '">' +
+          '<span class="stat-num">' + dueToday + '</span>' +
+          '<span class="stat-label">今日到期</span>' +
+          '<span class="stat-hint">' + (dueToday ? "今天到点，别忘了" : "今天没有到点的事项") + '</span>' +
+        '</div>' +
+        '<div class="stat-card ' + (overdue ? "warn" : "ok") + '">' +
+          '<span class="stat-num">' + overdue + '</span>' +
+          '<span class="stat-label">已逾期</span>' +
+          '<span class="stat-hint">' + (overdue ? "过了提醒时间还没完成" : "没有逾期事项") + '</span>' +
+        '</div>' +
+        '<div class="stat-card">' +
+          '<span class="stat-num">' + done.length + '</span>' +
+          '<span class="stat-label">已完成</span>' +
+          '<span class="stat-hint">打过勾并归档的事项</span>' +
+        '</div>';
+    }
     if (!shown.length) {
       listBox.innerHTML = '<div class="empty">' +
         (activeTab === "done" ? "<b>还没有已完成的事项</b><i>完成并归档后会出现在这里</i>" : "<b>还没有待做事项</b><i>在上方「添加待做事项」里写一条</i>") +

@@ -397,3 +397,40 @@ html[data-theme="dark"] .tool-row { background: rgba(255,255,255,.04); border-co
 html[data-theme="dark"] .tool-row-lead { color: #A9B7B2; }
 html[data-theme="dark"] .filter-panel { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.09); }
 html[data-theme="dark"] .filter-item > label { color: #A9B7B2; }
+
+/* ============================================================
+   6.6 库存流水：行可双击 + 行内展开详情（2026-09-24 第 13 轮）
+   ⚠️ 流水弹窗在 Modal 里，不在 .module-view 内，故这几个类不能作用域限定。
+   ============================================================ */
+.flow-row { cursor: pointer; }
+.flow-row:hover > td { background: #F7FAF8; }
+.flow-row.flow-open > td { background: #F1F8F4; }
+.flow-detail > td {
+  padding: 0 !important;
+  border-top: none;
+  background: #FBFCFB;
+}
+.flow-detail-box {
+  padding: 14px 16px 16px;
+  border-left: 3px solid var(--primary, #6FA08A);
+  background: #FBFCFB;
+}
+.flow-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #4A5A55;
+}
+.flow-detail-tip { font-size: 11.5px; font-weight: 400; color: #9AA8A3; }
+.flow-detail .detail-row { font-size: 13px; }
+.flow-detail .detail-row:last-child { border-bottom: none; }
+
+html[data-theme="dark"] .flow-row:hover > td { background: rgba(255,255,255,.06); }
+html[data-theme="dark"] .flow-row.flow-open > td { background: rgba(255,255,255,.07); }
+html[data-theme="dark"] .flow-detail > td,
+html[data-theme="dark"] .flow-detail-box { background: rgba(255,255,255,.04); }
+html[data-theme="dark"] .flow-detail-title { color: #DCE5E1; }
