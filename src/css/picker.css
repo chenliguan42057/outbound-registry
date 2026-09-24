@@ -209,3 +209,33 @@ body.bp-lock { overflow: hidden; }
   .bp-panel { height: auto; max-height: 88vh; border-radius: 18px; box-shadow: 0 24px 60px rgba(35, 42, 40, 0.28); }
   .bp-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 }
+
+/* ============================================================
+   提交前「核对清单」弹窗（2026-09-24 C 方案）
+   ------------------------------------------------------------
+   与选品面板同属出库登记交互链路，故并入本文件；类名统一 cf- 前缀。
+   .modal-actions / .btn 复用主题既有样式，这里只补个别间距。
+   ============================================================ */
+.cf-wrap { font-size: 14px; color: #3C4845; }
+.cf-meta {
+  padding: 10px 12px; margin-bottom: 12px;
+  background: #F6FAF8; border: 1px solid #E3EDE8; border-radius: 12px;
+}
+.cf-meta-row { display: flex; gap: 10px; line-height: 1.9; }
+.cf-k { flex: 0 0 auto; width: 104px; font-size: 13px; color: #7A8983; }
+.cf-v { flex: 1 1 auto; font-weight: 600; word-break: break-all; }
+.cf-items-title { margin-bottom: 8px; font-size: 13px; font-weight: 700; color: #4F8D7F; }
+.cf-list {
+  max-height: 32vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 4px 12px; background: #FFFFFF;
+  border: 1px solid #E3E9E6; border-radius: 12px;
+}
+.cf-line {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px dashed #EDF1EE;
+}
+.cf-line:last-child { border-bottom: 0; }
+.cf-line-name { flex: 1 1 auto; line-height: 1.35; }
+.cf-line-qty { flex: 0 0 auto; font-weight: 700; color: #4F8D7F; }
+.cf-photo { margin-top: 10px; font-size: 13px; color: #6B7A75; }
+.cf-wrap .modal-actions { margin-top: 14px; }

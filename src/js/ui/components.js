@@ -539,9 +539,11 @@
               '</div>' +
             '</div>';
         }).join("");
+      var totalQty = 0;
+      this.draft.forEach(function (d) { totalQty += Math.abs(Number(d.qty) || 0); });
       foot.innerHTML =
         '<button type="button" class="bp-ghost">‹ 继续加货</button>' +
-        '<button type="button" class="bp-done">完成（' + this.draft.length + ' 项）</button>';
+        '<button type="button" class="bp-done">完成（' + this.draft.length + ' 项 · 共 ' + totalQty + ' 件）</button>';
       return;
     }
 
