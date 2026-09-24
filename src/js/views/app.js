@@ -355,7 +355,9 @@
     updateStatusBar();
   }
 
-  /* 底部状态栏：就绪｜本地N条｜已同步HH:MM（含待同步队列计数） */
+  /* 底部状态栏：就绪｜共N条｜已同步HH:MM（含待同步队列计数）
+     P2 文案消歧（2026-09-25）：原「本地N条」易被误读成「N条没同步」，
+     现改为「共N条」= 本机记录总数；只有真积压时才输出「⚠️待同步N条」并整条变红。 */
   function updateStatusBar() {
     var el = Util.$("winStatus");
     if (!el) return;
@@ -363,9 +365,25 @@
       ? "已同步" + pad2(State.lastSync.getHours()) + ":" + pad2(State.lastSync.getMinutes())
       : "未同步";
     var q = (Cloud.loadQueue ? Cloud.loadQueue() : []);
-    var pending = q.length ? "｜⚠️待同步" + q.length + "条" : "";
-    el.textContent = (statusText || "就绪") + "｜本地" + State.list.length + "条｜" + sync + pending;
+    var pending = q.length ? "｜⚠️待同步" + q.length + "条（网络恢复会自动补推）" : "";
+    var main = (statusText || "就绪") + "｜共" + State.list.length + "条｜" + sync + pending;
+    var alarm = "";
+    if (q.length) {
+      alarm = '<span class="win-status-alarm">⚠️ ' + q.length + ' 条改动未推上云端，请点「立即同步」重试</span>';
+    } else if (statusIsErr) {
+      alarm = '<span class="win-status-alarm">⚠️ 同步异常，请检查网络或令牌后点「立即同步」</span>';
+    }
+    var needHtml = alarm !== "" || el.getAttribute("data-rich") === "1";
+    if (needHtml) {
+      el.innerHTML = '<span class="win-status-main">' + Util.esc(main) + "</span>" + alarm;
+      el.setAttribute("data-rich", "1");
+    } else {
+      el.textContent = main;
+    }
     el.className = "win-status" + (statusIsErr || q.length ? " err" : "");
+    el.title = q.length
+      ? "还有 " + q.length + " 条改动没推上云端，点「立即同步」可重试"
+      : "共 " + State.list.length + " 条记录，已与云端同步";
   }
 
   /** 同步状态（out/in/records 调用）：更新底部状态栏 */

@@ -57,8 +57,8 @@
             (hasToken ? "即将同步…" : "—") + '</span></div>' +
           '<div class="sync-row"><span class="sync-k">上次同步</span><span class="sync-v" id="syncLastTime">' +
             (State.lastSync ? Util.fmtDateTime(State.lastSync) : "尚未同步") + '</span></div>' +
-          '<div class="sync-row"><span class="sync-k">本地记录数</span><span class="sync-v" id="syncLocalCount">' +
-            State.list.length + ' 条</span></div>' +
+          '<div class="sync-row"><span class="sync-k">本机记录总数</span><span class="sync-v" id="syncLocalCount">' +
+            State.list.length + ' 条（全部记录，非待同步）</span></div>' +
           '<div class="sync-row"><span class="sync-k">云端令牌</span><span class="sync-v" id="syncTokenInfo">' +
             (info.has ? info.source : "未配置（本机模式）") + '</span></div>' +
           '<div class="sync-row"><span class="sync-k">令牌掩码</span><span class="sync-v" id="syncTokenMask">' +
@@ -73,6 +73,7 @@
           '<button type="button" class="btn ghost sm" id="syncDiag">🔍 诊断同步</button>' +
         '</div>' +
         '<div id="syncDiagOut"></div>' +
+        '<div class="sync-count-hint" id="syncCountHint"></div>' +
         '<div class="hint">自动同步：手机/电脑只要打开页面就会定时从云端拉取，最迟约 ' + autoSec +
           ' 秒；切回页面会立即同步，无需手动操作。<br>' +
           '遇到「对方仓新记录一直刷不出来 / 两端数据对不上」时：先点「🔍 诊断同步」看差异，再点「🔄 全量重建同步」强制重拉全部云端记录。</div>' +
@@ -94,7 +95,8 @@
           '<button type="button" class="btn sm" id="syncFlushQueue">↻ 一键重推</button>' +
         '</div>' +
         '<div class="hint">提交时因网络/配额/令牌问题未推上云端的记录会暂存在本机队列（不丢数据）。' +
-          '点击「一键重推」立即补推并触发钉钉通知；也可完全关闭页面后重新打开自动补推。</div>' +
+          '点击「一键重推」立即补推并触发钉钉通知；也可完全关闭页面后重新打开自动补推。<br>' +
+          '这里显示<b>「无」</b>就代表<b>没有积压</b>；云端页面顶部那个「本机记录总数」是记录总量，与「待推送」不是一回事。</div>' +
       '</div>' +
       '<div class="card">' +
         '<h2>云端令牌设置 <span class="tag">Contents API</span></h2>' +
@@ -220,6 +222,22 @@
     if (st) st.textContent = info.has ? "就绪" : "未配置令牌（本机模式）";
   }
 
+  /** 状态行：明确「总记录数」与「待推送条数」的区别（P2 消歧，2026-09-25）。
+      背景：原「本地记录数 301 条」被误读成「301 条没同步」。 */
+  function renderCountHint() {
+    var tip = Util.$("syncCountHint");
+    if (!tip) return;
+    var q = (Cloud.getQueue ? Cloud.getQueue() : []) || [];
+    if (q.length) {
+      tip.className = "sync-count-hint warn";
+      tip.textContent = "⚠️ 当前有 " + q.length + " 条改动未推上云端（真积压）——点下方「↻ 一键重推」即可补齐。";
+    } else {
+      tip.className = "sync-count-hint ok";
+      tip.textContent = "✅ 没有待推送的积压：本机 " + State.list.length +
+        " 条记录都已推上云端。上面那个数字是「本机一共有多少条记录」，不是「多少条没同步」。";
+    }
+  }
+
   /** 云端同步后刷新统计 */
   function refresh() {
     if (!container) return;
@@ -227,7 +245,8 @@
     var last = Util.$("syncLastTime");
     if (last) last.textContent = State.lastSync ? Util.fmtDateTime(State.lastSync) : "尚未同步";
     var cnt = Util.$("syncLocalCount");
-    if (cnt) cnt.textContent = State.list.length + " 条";
+    if (cnt) cnt.textContent = State.list.length + " 条（全部记录，非待同步）";
+    renderCountHint();
   }
 
   function renderQr() {
@@ -489,7 +508,9 @@
   });
 
   // 队列变化实时刷新本页列表（模块级只绑一次；去重由 cloud.js onQueueChange 保证）
-  if (Cloud.onQueueChange) Cloud.onQueueChange(function () { if (syncPanelVisible()) renderSyncQueue(); });
+  if (Cloud.onQueueChange) Cloud.onQueueChange(function () {
+    if (syncPanelVisible()) { renderSyncQueue(); renderCountHint(); }
+  });
 
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
@@ -545,7 +566,7 @@
   async function flushSyncQueue() {
     if (!Cloud.hasToken()) { Util.toast("未配置云端令牌，无法重推", true); return; }
     var items = (Cloud.getQueue ? Cloud.getQueue() : []) || [];
-    if (!items.length) { Util.toast("没有待推送的记录"); return; }
+    if (!items.length) { Util.toast("没有积压：所有记录都已推上云端"); return; }
     var btn = Util.$("syncFlushQueue");
     if (btn) { btn.disabled = true; btn.textContent = "重推中…"; }
     try {

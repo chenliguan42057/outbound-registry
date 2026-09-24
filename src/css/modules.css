@@ -434,3 +434,55 @@ html[data-theme="dark"] .flow-row.flow-open > td { background: rgba(255,255,255,
 html[data-theme="dark"] .flow-detail > td,
 html[data-theme="dark"] .flow-detail-box { background: rgba(255,255,255,.04); }
 html[data-theme="dark"] .flow-detail-title { color: #DCE5E1; }
+
+/* ===== 七、同步状态消歧 + 失败报警（P2，2026-09-25）=====
+   痛点：底部状态栏「本地 301 条」与云同步页「本地记录数 301 条」被误读成
+   「301 条没同步」，两次引发"数据是不是丢了"的担忧。故：
+   ① 文案改为「共N条」= 本机记录总数；
+   ② 只有真积压时才输出「⚠️待同步N条」；
+   ③ 底部状态栏可承载副行红色报警（长文案换行，不撑破窄侧栏）。 */
+.win-status {
+  display: block;
+  line-height: 1.45;
+}
+.win-status-main { display: block; }
+.win-status-alarm {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #B4501F;
+  background: rgba(194, 112, 63, .12);
+  border-radius: 6px;
+  padding: 3px 7px;
+}
+.win-status.err .win-status-main { color: #B4501F; }
+
+/* 云同步页：总数 / 待推送 的消歧提示条 */
+.sync-count-hint {
+  margin: 8px 0 2px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  border: 1px solid transparent;
+}
+.sync-count-hint.ok {
+  color: #3F8370;
+  background: rgba(63, 131, 112, .09);
+  border-color: rgba(63, 131, 112, .22);
+}
+.sync-count-hint.warn {
+  color: #B4501F;
+  background: rgba(194, 112, 63, .12);
+  border-color: rgba(194, 112, 63, .3);
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .win-status-alarm {
+  color: #E8A57C;
+  background: rgba(194, 112, 63, .2);
+}
+html[data-theme="dark"] .win-status.err .win-status-main { color: #E8A57C; }
+html[data-theme="dark"] .sync-count-hint.ok { color: #8FC7B3; }
+html[data-theme="dark"] .sync-count-hint.warn { color: #E8A57C; }
