@@ -1188,7 +1188,7 @@ html[data-theme="dark"] .fx-success .actions button {
    涓夈€佸€欓€夊垪琛ㄩ敭鐩橀珮浜紙鈫戔啌 閫夋嫨 / Enter 閫変腑锛屽吋瀹规壂鐮佹灙锛?
    ============================================================ */
 .suggest div.active {
-  background: var(--mint-100, #EEF2FF);
+  background: var(--mint-100, #F2F9F6);
   color: var(--mint-700, #3F6B58);
   font-weight: 600;
 }

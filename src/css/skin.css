@@ -1,0 +1,94 @@
+/* ============================================================
+   skin.css —— 管理后台统一皮肤（2026-09-24）
+   ------------------------------------------------------------
+   目标：把「系统内部」的观感与落地页（出库表单 / 选货品面板）统一为
+        低饱和薄荷绿 + 奶白 + 浅青 + 淡紫，信息显示更清爽、层次更清楚。
+   挂载：src/index.html 的最后一个 <link>（层叠最后，稳定覆盖 core/theme/patch）。
+   原则：只调颜色、圆角、阴影与滚动条，**不动任何布局尺寸与交互**，确保不影响既有排版。
+   ⚠️ 配套改造：core.css 里 40+ 处早期靛蓝紫硬编码已由 tools 脚本做字节级替换
+      （#6366F1→#8C7FC4 / #EEF2FF→#F2F9F6 / #FAFBFF→#F7FBF9 等），本文件负责收口。
+   ============================================================ */
+
+:root {
+  /* 品牌三色：与 picker.css 同源 */
+  --skin-mint: #7FB3A5;
+  --skin-mint-deep: #57826F;
+  --skin-lav: #A79ED0;
+  --skin-line: #E7EEEA;
+  --skin-line-soft: #DCE6E0;
+
+  /* 收口关键变量（theme.css 已定义 --primary，这里再显式声明一次，保证任何加载顺序下都一致） */
+  --primary: #6FA08A;
+  --primary-2: #A79ED0;
+  --primary-dark: #57826F;
+  --grad-main: linear-gradient(120deg, #A79ED0 0%, #7FB3A5 100%);
+  --text: #3C4845;
+  --muted: #74837E;
+  --border: #DCE6E0;
+  --shadow: 0 6px 20px rgba(60, 72, 69, .07);
+}
+
+/* 卡片：暖白 + 极轻阴影，去掉冷灰边 */
+.card {
+  border-color: var(--skin-line);
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(60, 72, 69, .06);
+}
+
+/* 主按钮：紫→绿渐变（与落地页一致），阴影收进品牌色 */
+.btn { box-shadow: 0 4px 14px rgba(127, 179, 165, .22); }
+.btn.ghost { color: var(--skin-mint-deep); border-color: #B9D6C7; }
+.btn.ghost:hover { background: #F2F9F6; }
+
+/* 表头：浅薄荷底 + 墨绿字，比原来的近白底更有分区感；行悬浮给一点呼吸 */
+.table th,
+.ai-table th { background: #F1F7F4; color: #5D7A6F; }
+.table th:last-child { background: #F1F7F4; }
+.table tbody tr:hover { background: #F9FCFA; }
+
+/* 选项胶囊 */
+.chip { background: #FBFDFC; border-color: var(--skin-line-soft); }
+.chip:hover { background: #F2F9F6; border-color: #93BCA6; }
+.chip.selected { box-shadow: 0 3px 10px rgba(127, 179, 165, .25); }
+
+/* 卡片标题旁的小徽标 */
+.card h2 .tag { background: #EAF4EF; color: #4F8D7F; }
+
+/* 各类悬浮浅底：兜底统一（原为靛蓝浅底） */
+.suggest div:hover,
+.photo-drop:hover,
+.collapse-head:hover,
+.ai-chip:hover,
+.ai-copy:hover,
+.ai-check-btn:hover,
+.chip-add:hover { background: #F2F9F6; }
+
+/* 图表「出库」系列：靛蓝 → 品牌淡紫（与「入库」绿色保持区分） */
+.trend-bar.out, .legend-dot.out, .compare-fill.out, .timeline-dot.out { background: #8C7FC4; }
+.timeline-item.first .timeline-dot { box-shadow: 0 0 0 2px #8C7FC4; }
+.timeline-tag.out { background: #F1EFF8; color: #7A6DA3; }
+.heatmap-t4 { background: #6FA08A; }
+
+/* 表格横向滚动条：细一些、不抢视线 */
+.table-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+.table-wrap::-webkit-scrollbar-thumb { background: #D3E3DC; border-radius: 999px; }
+.table-wrap::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- 暗色模式适配 ----------
+   上面的浅色底在暗色下会刺眼，这里用半透明色覆盖一层；
+   仅调色，不改布局，且和既有 dark 规则同一层次。 */
+html[data-theme="dark"] .card { box-shadow: 0 4px 18px rgba(0, 0, 0, .28); }
+html[data-theme="dark"] .table th,
+html[data-theme="dark"] .ai-table th,
+html[data-theme="dark"] .table th:last-child { background: rgba(255, 255, 255, .05); color: #A8BDB5; }
+html[data-theme="dark"] .table tbody tr:hover { background: rgba(255, 255, 255, .04); }
+html[data-theme="dark"] .chip { background: rgba(255, 255, 255, .06); }
+html[data-theme="dark"] .chip:hover { background: rgba(127, 179, 165, .16); }
+html[data-theme="dark"] .card h2 .tag { background: rgba(127, 179, 165, .20); color: #9CD0BF; }
+html[data-theme="dark"] .timeline-tag.out { background: rgba(167, 158, 208, .20); color: #C6BEE4; }
+html[data-theme="dark"] .btn.ghost { border-color: rgba(127, 179, 165, .45); }
+html[data-theme="dark"] .btn.ghost:hover,
+html[data-theme="dark"] .suggest div:hover,
+html[data-theme="dark"] .collapse-head:hover,
+html[data-theme="dark"] .ai-chip:hover,
+html[data-theme="dark"] .chip-add:hover { background: rgba(127, 179, 165, .16); }

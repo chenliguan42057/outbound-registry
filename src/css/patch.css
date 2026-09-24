@@ -77,7 +77,7 @@
    三、候选列表键盘高亮（↑↓ 选择 / Enter 选中，兼容扫码枪）
    ============================================================ */
 .suggest div.active {
-  background: var(--mint-100, #EEF2FF);
+  background: var(--mint-100, #F2F9F6);
   color: var(--mint-700, #3F6B58);
   font-weight: 600;
 }
