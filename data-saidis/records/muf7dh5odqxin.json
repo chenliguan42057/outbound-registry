@@ -1,0 +1,1 @@
+{"id":"muf7dh5odqxin","_ts":1790234458908,"time":"2026-09-24T15:20","type":"in","warehouse":"saidis","items":[{"name":"中号礼盒","qty":1},{"name":"中号拎袋","qty":1}],"purpose":"调拨入库来自深圳细胞","picker":"深圳细胞（调拨）","dept":"深圳细胞","note":"两仓调拨：深圳细胞 → 赛迪斯","affectsStock":true,"source":"调拨入库","transferId":"muf7df4qalupo","transferRole":"in","transferNo":"调拨多了，还一套回去"}
