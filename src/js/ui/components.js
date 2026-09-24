@@ -389,10 +389,8 @@
         '<span class="bp-selbar-title"></span>' +
         '<button type="button" class="bp-adjust">调整数量</button>' +
       '</div>' +
-      '<div class="selected"></div>' +
-      '<div class="hint"></div>';
+      '<div class="selected"></div>';
     this.listEl = container.querySelector(".selected");
-    this.hintEl = container.querySelector(".hint");
     this.openBtnEl = container.querySelector(".bp-open");
     this.openTextEl = container.querySelector(".bp-open-text");
     this.selbarEl = container.querySelector(".bp-selbar");
@@ -701,9 +699,7 @@
         this.selbarEl.style.display = n ? "" : "none";
         if (this.selbarTitleEl) this.selbarTitleEl.textContent = "已选 " + n + " 项";
       }
-      this.hintEl.textContent = n
-        ? "要改数量点「调整数量」，也可以继续添加。"
-        : "点上方这一栏挑选货品，可多选；选完统一步填数量。";
+      // 提示文案改由字段标签旁的橙色胶囊承担（主理人 2026-09-24 要求去掉此处的灰色小字）
       return;
     }
     this.selected.forEach(function (it, i) {

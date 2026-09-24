@@ -45,12 +45,11 @@
           '<div class="out-confid">仅运用于现场登记 严禁外传</div>' +
         '</div>' +
         '<div class="field">' +
-          '<span class="field-label" id="outEntityLabel">出货仓库单位（默认「' + Util.esc(Config.Sys.name()) + '」）<span class="req">*</span></span>' +
+          '<span class="field-label" id="outEntityLabel">出货仓库单位<span class="req">*</span><span class="lbl-note">默认「' + Util.esc(Config.Sys.name()) + '」</span></span>' +
           '<div id="outEntityChips" class="chip-group" role="group" aria-labelledby="outEntityLabel"></div>' +
-          '<div class="hint" style="margin-top:-4px">默认「深圳细胞法人」；如需赛迪斯仓请手动切换，切换后登记数据写入对应独立系统（本次使用内有效，重新打开回到深圳细胞）</div>' +
         '</div>' +
         '<div class="field">' +
-          '<label for="outDept">部门 / 领取单位<span class="req">*</span></label>' +
+          '<label for="outDept">部门 / 领取单位<span class="req">*</span><span class="lbl-note">申请人的所在单位</span></label>' +
           '<div class="search-wrap">' +
             '<input type="text" id="outDept" placeholder="请输入部门 / 领取单位" autocomplete="organization" inputmode="text" enterkeyhint="next" />' +
             '<div class="suggest" id="outDeptSuggest"></div>' +
@@ -65,7 +64,7 @@
         '</div>' +
         '<div class="grid2">' +
           '<div class="field">' +
-            '<label for="outTime">领取时间<span class="req">*</span></label>' +
+            '<label for="outTime">领取时间<span class="req">*</span><span class="lbl-note">点击下方【自动填入当前时间】即可</span></label>' +
             '<input type="datetime-local" id="outTime" />' +
             '<div class="hint"><span class="auto" id="outFillNow">📎 自动填入当前时间</span></div>' +
           '</div>' +
@@ -78,7 +77,7 @@
           '</div>' +
         '</div>' +
         '<div class="field">' +
-          '<span class="field-label" id="outPurposeLabel">用途 / 项目<span class="req">*</span></span>' +
+          '<span class="field-label" id="outPurposeLabel">用途 / 项目<span class="req">*</span><span class="lbl-note">向商务申请的用途（如下列选项不符 可自行添加）</span></span>' +
           '<div id="outPurposeChips" class="chip-group" role="group" aria-labelledby="outPurposeLabel"></div>' +
           '<div class="purpose-add-row">' +
             '<button type="button" class="chip-add" id="outPurposeAdd">+ 添加</button>' +
@@ -90,15 +89,15 @@
           '</div>' +
         '</div>' +
         '<div class="field">' +
-          '<span class="field-label" id="outProductLabel">货物名称<span class="req">*</span></span>' +
+          '<span class="field-label" id="outProductLabel">货物名称<span class="req">*</span><span class="lbl-note">点击下方栏选择所需货品</span></span>' +
           '<div id="outProductPicker" role="group" aria-labelledby="outProductLabel"></div>' +
         '</div>' +
         '<div class="field">' +
-          '<label for="outNote">备注（<small style="color:var(--ink-500);font-weight:400;">如有特殊情况请备注，如暂借、先借后还等</small>）</label>' +
+          '<label for="outNote">备注<span class="lbl-note">如有特殊情况请备注，如暂借、先借后还等</span></label>' +
           '<textarea id="outNote" rows="2" maxlength="500" placeholder="如有任何补充说明…" autocomplete="off" enterkeyhint="enter"></textarea>' +
         '</div>' +
         '<div class="field">' +
-          '<label>现场照片（选填）</label>' +
+          '<label>现场照片<span class="lbl-note">选填</span></label>' +
           '<div id="outPhotoUpload"></div>' +
         '</div>' +
         '<div class="actions">' +
