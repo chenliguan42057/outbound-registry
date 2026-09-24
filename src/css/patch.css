@@ -683,11 +683,11 @@ html[data-theme="dark"] .card .out-confid {
   .card .out-head .out-head-title { font-size: 21px; letter-spacing: 1px; }
 }
 
-/* 0.5) 出库登记卡（.out-form）表单标签提神：加粗 + 墨绿 + 左侧薄荷渐变短竖条。
+/* 0.5) 全站表单标签提神：加粗 + 墨绿 + 左侧薄荷渐变短竖条。
         起因：旁边有了彩色备注胶囊后，纯灰细体标签显得干巴、违和。
-        只作用于这一张卡（试点），其他表单原样不动；纯排版调整，不碰任何交互与结构。 */
-.out-form .field > label,
-.out-form .field > .field-label {
+        只作用于 `.field > label` 这种「字段直属标签」，其他表单原样不动；纯排版调整，不碰任何交互与结构。 */
+.field > label,
+.field > .field-label {
   display: block;
   font-size: 14px;
   font-weight: 600;
@@ -695,8 +695,8 @@ html[data-theme="dark"] .card .out-confid {
   letter-spacing: .2px;
   margin-bottom: 7px;
 }
-.out-form .field > label::before,
-.out-form .field > .field-label::before {
+.field > label::before,
+.field > .field-label::before {
   content: "";
   display: inline-block;
   width: 3px;
@@ -706,12 +706,15 @@ html[data-theme="dark"] .card .out-confid {
   vertical-align: -2px;
   background: linear-gradient(180deg, #9ED0B4, #6FA08A);
 }
-.out-form .field > label small { font-weight: 400; }
-html[data-theme="dark"] .out-form .field > label,
-html[data-theme="dark"] .out-form .field > .field-label { color: #E6E2DC; }
+.field > label small { font-weight: 400; }
+/* AI 设置页的复选框标签（.ai-check）不做强调：整排勾选项被加粗+竖条挤着看会乱 */
+.field > label.ai-check { font-size: 13px; font-weight: 500; }
+.field > label.ai-check::before { display: none; }
+html[data-theme="dark"] .field > label,
+html[data-theme="dark"] .field > .field-label { color: #E6E2DC; }
 @media (max-width: 640px) {
-  .out-form .field > label,
-  .out-form .field > .field-label { font-size: 13.5px; }
+  .field > label,
+  .field > .field-label { font-size: 13.5px; }
 }
 
 /* 1) 字段标签旁的小备注胶囊（暖陶土色：一眼可见，但不抢「*」必填星号的视线） */
