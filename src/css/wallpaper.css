@@ -22,13 +22,13 @@ body,
   background: rgba(255,255,255,.72);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(99,102,241,.18);
+  border-bottom: 1px solid rgba(127,179,165,.34);
 }
 .win-topbar-title { color: #2c3e50; }
 .win-topbar-menu { color: #2c3e50; }
-.win-topbar-menu:hover { background: rgba(99,102,241,.08); }
-.win-topbar-sync { background: rgba(99,102,241,.10); color: var(--primary-dark); }
-.win-topbar-sync:hover { background: rgba(99,102,241,.20); }
+.win-topbar-menu:hover { background: rgba(127,179,165,.14); }
+.win-topbar-sync { background: rgba(127,179,165,.16); color: var(--primary-dark); }
+.win-topbar-sync:hover { background: rgba(127,179,165,.30); }
 
 /* 顶栏全局搜索框：与毛玻璃融合 */
 .win-topbar-search input { background: rgba(255,255,255,.85); }
@@ -38,23 +38,23 @@ body,
   background: rgba(255,255,255,.55);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-right: 1px solid rgba(99,102,241,.18);
+  border-right: 1px solid rgba(127,179,165,.34);
   color: #2c3e50;
 }
 .win-sidebar-item { color: #2c3e50; }
-.win-sidebar-item:hover { background: rgba(99,102,241,.08); color: var(--primary-dark); }
+.win-sidebar-item:hover { background: rgba(127,179,165,.14); color: var(--primary-dark); }
 .win-sidebar-item.active {
   background: rgba(255,255,255,.85);
   color: var(--primary-dark);
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(99,102,241,.12);
+  box-shadow: 0 2px 8px rgba(60,72,69,.08);
 }
-.win-sidebar-foot { border-top: 1px solid rgba(99,102,241,.18); }
+.win-sidebar-foot { border-top: 1px solid rgba(127,179,165,.34); }
 .win-sidebar-foot .win-status { color: var(--muted); }
 .win-import-btn {
   background: rgba(255,255,255,.7);
   color: var(--primary-dark);
-  border: 1px solid rgba(99,102,241,.3);
+  border: 1px solid rgba(127,179,165,.50);
 }
 .win-import-btn:hover { background: rgba(255,255,255,.9); }
 
@@ -63,7 +63,7 @@ body,
   background: rgba(255,255,255,.86);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  box-shadow: 0 4px 16px rgba(99,102,241,.10);
+  box-shadow: 0 4px 16px rgba(60,72,69,.10);
 }
 
 /* 表格：白底更清爽 */
@@ -75,7 +75,7 @@ body,
   background: rgba(255,255,255,.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 20px 60px rgba(99,102,241,.20);
+  box-shadow: 0 20px 60px rgba(60,72,69,.18);
 }
 
 /* 落地页登录盒：适配壁纸 */
@@ -84,7 +84,7 @@ body,
   background: rgba(255,255,255,.82);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 10px 40px rgba(99,102,241,.15);
+  box-shadow: 0 10px 40px rgba(60,72,69,.14);
 }
 
 /* 报告页/库存页表格边框更柔和 */
