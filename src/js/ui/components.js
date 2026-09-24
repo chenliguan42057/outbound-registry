@@ -374,6 +374,14 @@
     return n.split(" ")[0] || "其他";
   }
 
+  /** 分类色号（0-9，对应 picker.css 里的 --bpa/--bpb/--bpl 三色套件）。
+      用「分类在 PICK_GROUP_ORDER 里的固定下标」而非渲染下标 —— 搜索过滤后组数会变，
+      用渲染下标会导致同一个分类换色，视觉上乱跳。未识别分类统一落到 9 号色。 */
+  function pickGroupColorIndex(groupName) {
+    var i = PICK_GROUP_ORDER.indexOf(groupName);
+    return i < 0 ? 9 : i;
+  }
+
   /** 表单区：入口（外观做成「输入框」而非按钮，避免被误认成提交按钮）+ 已选清单 */
   ProductPicker.prototype.attachBulk = function (container) {
     var self = this;
@@ -519,7 +527,7 @@
       title.textContent = "填写数量";
       body.innerHTML = '<div class="bp-tip">已选 ' + this.draft.length + ' 项，逐项确认数量后点「完成」。</div>' +
         this.draft.map(function (it, i) {
-          return '<div class="bp-row">' +
+          return '<div class="bp-row" data-c="' + pickGroupColorIndex(pickGroupOf(it.name)) + '">' +
               '<span class="bp-row-name">' + Util.esc(it.name) + '</span>' +
               '<div class="bp-step">' +
                 '<button type="button" class="bp-qb" data-act="dec" data-i="' + i + '" aria-label="减少">−</button>' +
@@ -554,7 +562,7 @@
       box.innerHTML = '<div class="bp-empty">没有匹配的货品</div>';
     } else {
       box.innerHTML = groups.map(function (g) {
-        return '<div class="bp-group">' +
+        return '<div class="bp-group" data-c="' + pickGroupColorIndex(g.name) + '">' +
             '<h4>' + Util.esc(g.name) + '<span class="bp-gcount">' + g.items.length + '</span></h4>' +
             '<div class="bp-grid">' +
               g.items.map(function (p) {

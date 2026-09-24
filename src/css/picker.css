@@ -59,67 +59,120 @@ body.bp-lock { overflow: hidden; }
 }
 .bp-panel {
   width: 100%; height: 100%; display: flex; flex-direction: column;
-  background: #F7FAF9; overflow: hidden;
+  background: #FBFAF6; overflow: hidden;
 }
 .bp-head {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 4px;
-  padding: 8px 10px; background: #FFFFFF; border-bottom: 1px solid #E7EEEA;
+  flex: 0 0 auto; position: relative; display: flex; align-items: center; gap: 4px;
+  padding: 10px 10px 8px; background: #FFFFFF;
+  border-bottom: 1px solid #EDF1EE;
+  box-shadow: 0 2px 10px rgba(60, 72, 69, 0.05);
+}
+/* 顶部品牌色细线：与出库表单同一套视觉语言，不再是「一张白纸」 */
+.bp-head::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  background: linear-gradient(120deg, #A79ED0 0%, #7FB3A5 100%);
 }
 .bp-head button {
   width: 42px; height: 42px; border: 0; border-radius: 12px;
   background: transparent; color: #6B7A75; font-size: 20px; line-height: 1; cursor: pointer;
 }
+.bp-head button:active { background: #F1F6F4; }
 .bp-head .bp-close { font-size: 16px; }
-.bp-title { flex: 1 1 auto; text-align: center; font-size: 16px; font-weight: 700; color: #3C4845; }
+.bp-title { flex: 1 1 auto; text-align: center; font-size: 16px; font-weight: 700; color: #3C4845; letter-spacing: .3px; }
 
-.bp-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; }
+.bp-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 12px 16px; }
 .bp-search {
   display: block; width: 100%; box-sizing: border-box; height: 44px;
-  padding: 0 14px; margin-bottom: 12px; font-size: 16px;
+  padding: 0 14px; margin-bottom: 14px; font-size: 16px;
   border: 1px solid #DDE6E2; border-radius: 12px; background: #FFFFFF; color: #3C4845;
   -webkit-appearance: none;
 }
-.bp-group { margin-bottom: 14px; }
+.bp-search:focus { outline: none; border-color: #8CBFAF; box-shadow: 0 0 0 3px rgba(127, 179, 165, 0.16); }
+
+/* —— 分类配色套件（低饱和）：一套三色 --bpa 主色 / --bpb 浅底 / --bpl 浅边 ——
+   按 PICK_GROUP_ORDER 下标固定分配，搜索过滤后不会串色。
+   同一套变量同时作用于选品网格(.bp-group)与第二步填数量行(.bp-row)。 */
+.bp-group { margin-bottom: 16px; }
+.bp-group[data-c="0"], .bp-row[data-c="0"] { --bpa: #3F8370; --bpb: #EFF7F3; --bpl: #C6E0D5; }
+.bp-group[data-c="1"], .bp-row[data-c="1"] { --bpa: #35738C; --bpb: #ECF4F8; --bpl: #C2DAE6; }
+.bp-group[data-c="2"], .bp-row[data-c="2"] { --bpa: #63559E; --bpb: #F2F0FA; --bpl: #D6D0EC; }
+.bp-group[data-c="3"], .bp-row[data-c="3"] { --bpa: #A86A34; --bpb: #FBF3EA; --bpl: #EBD6BF; }
+.bp-group[data-c="4"], .bp-row[data-c="4"] { --bpa: #B0566F; --bpb: #FBF0F3; --bpl: #EFD1DA; }
+.bp-group[data-c="5"], .bp-row[data-c="5"] { --bpa: #3F6E9E; --bpb: #EEF3F9; --bpl: #CBDCEC; }
+.bp-group[data-c="6"], .bp-row[data-c="6"] { --bpa: #8A6D31; --bpb: #F8F3E8; --bpl: #E5D9BE; }
+.bp-group[data-c="7"], .bp-row[data-c="7"] { --bpa: #5F7D31; --bpb: #F4F8EC; --bpl: #D9E4C2; }
+.bp-group[data-c="8"], .bp-row[data-c="8"] { --bpa: #A04760; --bpb: #FAF0F2; --bpl: #EACDD4; }
+.bp-group[data-c="9"], .bp-row[data-c="9"] { --bpa: #7E6039; --bpb: #F8F3EC; --bpl: #E3D5C0; }
+
 .bp-group > h4 {
-  margin: 0 0 8px; padding: 4px 0; font-size: 13px; font-weight: 700; color: #5D5478;
-  display: flex; align-items: center; gap: 6px;
+  margin: 0 0 9px; padding: 0; font-size: 13px; font-weight: 700;
+  color: var(--bpa, #5D5478);
+  display: flex; align-items: center; gap: 8px;
 }
-.bp-gcount { font-size: 11px; font-weight: 600; color: #9AA8A3; background: #EEF3F1; border-radius: 999px; padding: 1px 7px; }
+/* 分类色块：标题前的图例小方块（外发光用同色浅底） */
+.bp-group > h4::before {
+  content: ""; flex: 0 0 auto; width: 12px; height: 12px; border-radius: 4px;
+  background: var(--bpa, #7FB3A5); box-shadow: 0 0 0 3px var(--bpb, #EFF7F3);
+}
+.bp-gcount {
+  font-size: 11px; font-weight: 700; color: var(--bpa, #6B7A75);
+  background: var(--bpb, #EEF3F1); border: 1px solid var(--bpl, #E3E9E6);
+  border-radius: 999px; padding: 1px 8px;
+}
 .bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); gap: 8px; }
 
 .bp-item {
   position: relative; min-height: 48px; box-sizing: border-box;
   display: flex; align-items: center;
   padding: 10px 30px 10px 12px; text-align: left; font-size: 14px; line-height: 1.3;
-  color: #3C4845; background: #FFFFFF;
-  border: 1.5px solid #E3E9E6; border-radius: 12px; cursor: pointer;
+  color: #3C4845; background: var(--bpb, #FFFFFF);
+  border: 1.5px solid var(--bpl, #E3E9E6); border-radius: 12px; cursor: pointer;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease, border-color .12s ease, transform .12s ease;
 }
-.bp-item.on { border-color: #7FB3A5; background: #EAF5F1; color: #2F6E60; font-weight: 700; }
+.bp-item:active { transform: scale(.985); }
+/* 选中：该分类主色实心 + 白字 + 白底勾 —— 既看得出「已选」，又一眼知道属于哪一类 */
+.bp-item.on {
+  background: var(--bpa, #7FB3A5); border-color: var(--bpa, #7FB3A5);
+  color: #FFFFFF; font-weight: 700;
+  box-shadow: 0 4px 14px rgba(60, 72, 69, 0.18);
+}
 .bp-item.on::after {
   content: "\2713"; position: absolute; top: 6px; right: 8px;
   width: 20px; height: 20px; border-radius: 50%;
-  background: #7FB3A5; color: #FFFFFF; font-size: 12px; line-height: 20px; text-align: center;
+  background: rgba(255, 255, 255, .94); color: var(--bpa, #7FB3A5);
+  font-size: 12px; font-weight: 700; line-height: 20px; text-align: center;
 }
 .bp-empty { padding: 46px 0; text-align: center; font-size: 14px; color: #9AA8A3; }
 
-.bp-tip { margin-bottom: 10px; font-size: 13px; color: #6B7A75; }
-.bp-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 12px; margin-bottom: 8px;
-  background: #FFFFFF; border: 1px solid #E3E9E6; border-radius: 12px;
+.bp-tip {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 12px; padding: 8px 12px;
+  font-size: 13px; color: #5D6B66;
+  background: #F1F6F4; border-radius: 10px;
 }
-.bp-row-name { flex: 1 1 auto; font-size: 14px; color: #3C4845; line-height: 1.35; }
+.bp-row {
+  position: relative; display: flex; align-items: center; gap: 9px;
+  padding: 10px 12px; margin-bottom: 8px;
+  background: var(--bpb, #FFFFFF); border: 1.5px solid var(--bpl, #E3E9E6);
+  border-radius: 12px;
+}
+/* 左侧分类色点：与选品网格同一套色号，从选品到填数量颜色对得上号 */
+.bp-row::before {
+  content: ""; flex: 0 0 auto; width: 10px; height: 10px; border-radius: 3px;
+  background: var(--bpa, #7FB3A5);
+}
+.bp-row-name { flex: 1 1 auto; font-size: 14px; font-weight: 600; color: #3C4845; line-height: 1.35; }
 .bp-step { flex: 0 0 auto; display: flex; align-items: center; }
 .bp-step .bp-qb {
-  width: 42px; height: 44px; border: 1px solid #DDE6E2; background: #F4F8F6;
-  color: #3C4845; font-size: 18px; line-height: 1; cursor: pointer;
+  width: 42px; height: 44px; border: 1px solid var(--bpl, #DDE6E2); background: #FFFFFF;
+  color: var(--bpa, #3C4845); font-size: 18px; line-height: 1; cursor: pointer;
 }
 .bp-step .bp-qb[data-act="dec"] { border-radius: 10px 0 0 10px; }
 .bp-step .bp-qb[data-act="inc"] { border-radius: 0 10px 10px 0; }
 .bp-step .bp-q {
   width: 58px; height: 44px; box-sizing: border-box;
-  border: 1px solid #DDE6E2; border-left: 0; border-right: 0;
+  border: 1px solid var(--bpl, #DDE6E2); border-left: 0; border-right: 0;
   text-align: center; font-size: 16px; color: #3C4845; background: #FFFFFF;
 }
 .bp-rx {
