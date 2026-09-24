@@ -40,7 +40,10 @@
   function render(container) {
     container.innerHTML =
       '<div class="card">' +
-        '<h2>出库登记 <span class="tag">基础登记</span></h2>' +
+        '<div class="out-head">' +
+          '<h2 class="out-head-title">出库登记</h2>' +
+          '<div class="out-confid">仅运用于现场登记 严禁外传</div>' +
+        '</div>' +
         '<div class="field">' +
           '<span class="field-label" id="outEntityLabel">出货仓库单位（默认「' + Util.esc(Config.Sys.name()) + '」）<span class="req">*</span></span>' +
           '<div id="outEntityChips" class="chip-group" role="group" aria-labelledby="outEntityLabel"></div>' +
