@@ -47,7 +47,7 @@
         '<div class="field">' +
           '<span class="field-label" id="outEntityLabel">出货仓库单位（默认「' + Util.esc(Config.Sys.name()) + '」）<span class="req">*</span></span>' +
           '<div id="outEntityChips" class="chip-group" role="group" aria-labelledby="outEntityLabel"></div>' +
-          '<div class="hint" style="margin-top:-4px">仓库二选一：切换后系统即跳转到该仓库，登记数据写入对应独立系统</div>' +
+          '<div class="hint" style="margin-top:-4px">默认「深圳细胞法人」；如需赛迪斯仓请手动切换，切换后登记数据写入对应独立系统（本次使用内有效，重新打开回到深圳细胞）</div>' +
         '</div>' +
         '<div class="field">' +
           '<label for="outDept">部门 / 领取单位<span class="req">*</span></label>' +

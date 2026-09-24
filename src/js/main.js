@@ -7,6 +7,13 @@
 
   function init() {
     try {
+      // 2026-09-24：清除历史「上次选中仓库」的本地记忆（现已改为仅本会话记忆）。
+      // 必须在下面 URL 直达 / State.init 之前执行，否则本机残留的 saidis 记忆仍会先被读走。
+      try {
+        if (window.App.Config && window.App.Config.clearLegacyActiveSystem) {
+          window.App.Config.clearLegacyActiveSystem();
+        }
+      } catch (e) {}
       // URL 直达系统（2026-09-05）：https://…/?sys=saidis（或 shenzhen）在启动前即锁定当前仓库，
       // 供「两仓各自的登记二维码/分享链接」使用；缺省保持 localStorage 记忆的系统。必须早于 State.init。
       try {

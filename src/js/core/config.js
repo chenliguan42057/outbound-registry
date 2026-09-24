@@ -51,17 +51,21 @@
   };
   var ACTIVE_SYSTEM_KEY = "outbound_active_system";
   var Sys = {
-    /** 当前系统定义（默认深圳细胞；localStorage 记忆用户上次切换） */
+    /* 2026-09-24 主理人定稿：**每次打开一律默认「深圳细胞」**。
+       原因：手机端此前默认成了赛迪斯 —— 旧逻辑会把上次选的仓库记在 localStorage
+       （outbound_active_system），主理人在手机上点过一次赛迪斯后被永久记住，
+       之后每次打开都落在赛迪斯，与「主仓 = 深圳细胞」的预期不符，容易错仓登记。
+       现改为：**进程内会话记忆**（_sessionId），刷新/重开页面即回到深圳细胞；
+       在同一次使用过程中手动切到赛迪斯仍保持有效（避免点一下就被弹回去）。
+       localStorage 里的旧值不再读取，由 clearLegacyActiveSystem() 主动清除。 */
+    _sessionId: null,
     current: function () {
-      try {
-        var v = localStorage.getItem(ACTIVE_SYSTEM_KEY);
-        if (v === "saidis") return SYSTEM_DEFS.saidis;
-      } catch (e) {}
+      if (Sys._sessionId === "saidis") return SYSTEM_DEFS.saidis;
       return SYSTEM_DEFS.shenzhen;
     },
-    /** 切换当前系统并记忆（"shenzhen" | "saidis"） */
+    /** 切换当前系统（仅本次会话有效，不写入 localStorage） */
     set: function (id) {
-      try { localStorage.setItem(ACTIVE_SYSTEM_KEY, id === "saidis" ? "saidis" : "shenzhen"); } catch (e) {}
+      Sys._sessionId = (id === "saidis") ? "saidis" : null;
     },
     /** 云端数据目录根：data / data-saidis */
     root: function () { return Sys.current().dataDir; },
@@ -108,6 +112,15 @@
     SYSTEM_DEFS: SYSTEM_DEFS,
     ACTIVE_SYSTEM_KEY: ACTIVE_SYSTEM_KEY,
     Sys: Sys,
+    /** 2026-09-24：主动清除「上次选中的仓库」旧记忆（现已改为仅本会话记忆）。
+        每个会话执行一次，确保设备上残留的历史选择不再影响这次打开的结果。 */
+    clearLegacyActiveSystem: function () {
+      try {
+        if (sessionStorage.getItem("sys-reset-20260924") === "1") return;
+        sessionStorage.setItem("sys-reset-20260924", "1");
+        localStorage.removeItem(ACTIVE_SYSTEM_KEY);
+      } catch (e) {}
+    },
 
     /* 品牌标题（Windows 桌面壳标题栏 / 顶栏 / 落地页顶栏） */
     BRAND_TITLE: "进销存管理系统",
