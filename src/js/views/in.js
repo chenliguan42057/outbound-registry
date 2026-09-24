@@ -14,6 +14,8 @@
   var Cloud = window.App.Cloud;
 
   var picker = null;
+  var confirming = false;      // 2026-09-24：提交前「核对清单」弹窗是否开着（防连点弹两次）
+  var confirmedOnce = false;   // 确认通过后二次进入 submit()，跳过弹窗直接写库
   var photos = null;
   var editingId = null;
   var els = null;
@@ -227,7 +229,7 @@
   }
 
   function submit() {
-    if (submitting) return;   // 连点二次直接吞掉
+    if (submitting || confirming) return;   // 连点二次直接吞掉
 
     var items = picker.getItems();
     var qtyProblems = picker.validateItems ? picker.validateItems() : [];
@@ -248,6 +250,27 @@
       errs.push({ el: Util.$("inProductPicker"), msg: "以下货品数量无效：" + qtyProblems.join("、") });
     }
     if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) return;
+
+    // 2026-09-24：提交前「核对清单」（与出库统一口径）；确认后二次进入 submit() 跳过弹窗直接写库
+    if (!confirmedOnce) {
+      confirming = true;
+      UI.confirmSubmit({
+        title: "确认提交这单入库？",
+        okText: "确认入库",
+        meta: [
+          ["经办人", handlerVal],
+          ["入库来源", editingTransfer ? "（调拨自动带入，不可改）" : (sourceVal || "")]
+        ],
+        items: items
+      }).then(function (ok) {
+        confirming = false;
+        if (!ok) return;
+        confirmedOnce = true;
+        submit();
+        confirmedOnce = false;
+      });
+      return;
+    }
 
     setSubmitting(true);
     var purpose = els.purpose.value.trim();

@@ -21,6 +21,8 @@
   var listBox = null;
   var picker = null;
   var els = null;
+  var confirming = false;      // 2026-09-24：提交前「核对清单」弹窗是否开着（防连点弹两次）
+  var confirmedOnce = false;   // 确认通过后二次进入 submit()，跳过弹窗直接写库
   var selectedPurpose = "";
   var activeTab = "todo";   // "todo"（待取货）| "shipped"（已出库）
   var submitting = false;   // 提交互斥锁：防止连点造成重复登记
@@ -288,7 +290,7 @@
   }
 
   function submit() {
-    if (submitting) return;   // 连点二次直接吞掉
+    if (submitting || confirming) return;   // 连点二次直接吞掉
 
     var pickerVal = els.picker.value.trim();
     var dept = els.dept.value.trim();
@@ -312,6 +314,28 @@
     }
 
     if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) return;
+
+    // 2026-09-24：提交前「核对清单」（与出库统一口径）；确认后二次进入 submit() 跳过弹窗直接写库
+    if (!confirmedOnce) {
+      confirming = true;
+      UI.confirmSubmit({
+        title: "确认提交这单待取货？",
+        okText: "确认提交",
+        meta: [
+          ["部门 / 客户", dept],
+          ["取货人", pickerVal],
+          ["用途 / 项目", purpose]
+        ],
+        items: items
+      }).then(function (ok) {
+        confirming = false;
+        if (!ok) return;
+        confirmedOnce = true;
+        submit();
+        confirmedOnce = false;
+      });
+      return;
+    }
 
     setSubmitting(true);
     var pk = Pickups.create({

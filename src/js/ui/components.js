@@ -132,6 +132,56 @@
     });
   }
 
+  /** 提交前「核对清单」弹窗（2026-09-24）→ Promise<boolean>。
+      四个登记视图（出库 / 入库 / 待取货 / 调拨）共用，确保「确认后才写库」的口径一致。
+      data: {
+        title   弹窗标题（默认「确认提交这单？」）
+        okText  确认按钮文案（默认「确认提交」）
+        meta    [[标签, 值], ...] 关键字段区
+        items   [{name, qty}] 货品明细（自动算「N 项 · 共 X 件」）
+        extras  [html] 追加说明块（调用方自行包 class）
+      }
+      注意：本函数不做 HTML 转义的是 extras（由调用方构造），meta/items 全部走 Util.esc。 */
+  function confirmSubmit(data) {
+    data = data || {};
+    var items = data.items || [];
+    var total = 0;
+    items.forEach(function (it) { total += Math.abs(Number(it.qty) || 0); });
+    return new Promise(function (resolve) {
+      var metaHtml = (data.meta || []).map(function (r) {
+        return '<div class="cf-meta-row"><span class="cf-k">' + Util.esc(r[0]) + '</span><span class="cf-v">' + Util.esc(r[1]) + '</span></div>';
+      }).join("");
+      var listHtml = items.map(function (it) {
+        return '<div class="cf-line"><span class="cf-line-name">' + Util.esc(it.name) +
+          '</span><span class="cf-line-qty">×' + Util.esc(it.qty) + '</span></div>';
+      }).join("");
+      var body =
+        '<div class="cf-wrap">' +
+          (metaHtml ? '<div class="cf-meta">' + metaHtml + '</div>' : "") +
+          (items.length
+            ? '<div class="cf-items-title">货品（' + items.length + ' 项 · 共 ' + total + ' 件）</div>' +
+              '<div class="cf-list">' + listHtml + '</div>'
+            : "") +
+          (data.extras || []).join("") +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn ghost sm" data-act="cancel">返回修改</button>' +
+            '<button type="button" class="btn sm" data-act="ok">' + Util.esc(data.okText || "确认提交") + '</button>' +
+          '</div>' +
+        '</div>';
+      Modal.show(data.title || "确认提交这单？", body, { width: data.width || "92vw" });
+      var mBody = Modal.body();
+      function close(v) {
+        try { Modal.hide(); } catch (e) {}
+        resolve(v);
+      }
+      var okBtn = mBody && mBody.querySelector('[data-act="ok"]');
+      var noBtn = mBody && mBody.querySelector('[data-act="cancel"]');
+      if (okBtn) okBtn.addEventListener("click", function () { close(true); });
+      if (noBtn) noBtn.addEventListener("click", function () { close(false); });
+      try { setTimeout(function () { if (okBtn && document.contains(okBtn)) okBtn.focus(); }, 60); } catch (e) {}
+    });
+  }
+
   /** 带输入框的必填弹窗：Promise<{ok:boolean, value:string}>；输入为空点确认不关闭并提示 */
   function promptDialog(msg, placeholder, title, okText) {
     return new Promise(function (resolve) {
@@ -1175,6 +1225,7 @@
   window.App.UI = {
     icon: icon,
     Modal: Modal,
+    confirmSubmit: confirmSubmit,
     confirmDialog: confirmDialog,
     promptDialog: promptDialog,
     showLoginDialog: showLoginDialog,

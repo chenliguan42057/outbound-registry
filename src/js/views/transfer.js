@@ -198,21 +198,24 @@
     var userNote = (Util.$("tfNote").value || "").trim();
     var note = "两仓调拨：" + srcName + " → " + dstName + (userNote ? "；" + userNote : "");
 
-    var body =
-      '<div class="hint" style="margin-bottom:10px">核对本次调拨（提交后两端各推钉钉通知、各进金山台账）：</div>' +
-      '<div class="table-wrap"><table class="table"><thead><tr><th>货品</th><th>数量</th></tr></thead><tbody>' +
-      items.map(function (it) {
-        return '<tr><td>' + Util.esc(it.name) + '</td><td>' + it.qty + '</td></tr>';
-      }).join("") +
-      '</tbody></table></div>' +
-      '<div style="margin-top:12px;line-height:2">' +
-        '<div><b>' + Util.esc(srcName) + '</b>：出库 −' + items.reduce(function (s, it) { return s + it.qty; }, 0) + '（扣库存，推钉钉「出库」通知，进金山台账）</div>' +
-        '<div><b>' + Util.esc(dstName) + '</b>：入库 +（增库存，推对方钉钉「入库」通知，进对方金山台账）</div>' +
-        '<div>调拨单号：<b>' + Util.esc(transferNo) + '</b></div>' +
-        '<div class="hint" style="margin:6px 0 0">备注：' + Util.esc(note) + '</div>' +
-      '</div>';
-
-    UI.confirmDialog(body, "⇄ 确认调拨").then(function (ok) {
+    var outTotal = items.reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
+    /* 2026-09-24：改用通用「核对清单」弹窗。
+       原实现走 UI.confirmDialog(body) —— 而 confirmDialog 内部对 msg 做了 Util.esc，
+       传进去的表格 HTML 会被当成纯文本显示成一堆标签源码，这里一并修正。 */
+    UI.confirmSubmit({
+      title: "⇄ 确认调拨",
+      okText: "确认调拨",
+      meta: [
+        ["调拨单号", transferNo],
+        ["调出仓（本仓）", srcName + "　出库 −" + outTotal],
+        ["调入仓", dstName + "　入库 +"],
+        ["备注", note]
+      ],
+      items: items,
+      extras: [
+        '<div class="cf-photo">提交后两端各推钉钉通知、各进金山台账；撤回可在下方「调拨历史」操作。</div>'
+      ]
+    }).then(function (ok) {
       if (!ok) { lock.unlock(); return; }
       runTransfer(items, srcName, dst, dstName, note, transferNo, lock);
     })["catch"](function () { lock.unlock(); });

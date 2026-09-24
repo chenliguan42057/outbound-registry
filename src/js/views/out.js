@@ -454,52 +454,6 @@
     els.submit.setAttribute("aria-busy", on ? "true" : "false");
   }
 
-  /** 2026-09-24（C 方案）：提交前「核对清单」弹窗，返回 Promise<boolean>。
-      列出本单关键字段 + 货品明细 + 合计件数 + 照片张数；确认后才真正写库，
-      避免选错货 / 填错数量之后还要删了重建。 */
-  function showSubmitConfirm(data) {
-    var total = 0;
-    data.items.forEach(function (it) { total += Math.abs(Number(it.qty) || 0); });
-    return new Promise(function (resolve) {
-      var metaRows = [
-        ["出货仓库单位", data.entity],
-        ["部门 / 领取单位", data.dept],
-        ["申请人", data.applicant],
-        ["领取人", data.picker],
-        ["领取时间", String(data.time || "").replace("T", " ")],
-        ["用途 / 项目", data.purpose]
-      ].map(function (r) {
-        return '<div class="cf-meta-row"><span class="cf-k">' + Util.esc(r[0]) + '</span><span class="cf-v">' + Util.esc(r[1]) + '</span></div>';
-      }).join("");
-      var lines = data.items.map(function (it) {
-        return '<div class="cf-line"><span class="cf-line-name">' + Util.esc(it.name) +
-          '</span><span class="cf-line-qty">×' + Util.esc(it.qty) + '</span></div>';
-      }).join("");
-      var body =
-        '<div class="cf-wrap">' +
-          '<div class="cf-meta">' + metaRows + '</div>' +
-          '<div class="cf-items-title">货品（' + data.items.length + ' 项 · 共 ' + total + ' 件）</div>' +
-          '<div class="cf-list">' + lines + '</div>' +
-          (data.photoCount ? '<div class="cf-photo">📷 附带现场照片 ' + data.photoCount + ' 张</div>' : '') +
-          '<div class="modal-actions">' +
-            '<button type="button" class="btn ghost sm" data-act="cancel">返回修改</button>' +
-            '<button type="button" class="btn sm" data-act="ok">' + (data.isEdit ? "确认修改" : "确认提交") + '</button>' +
-          '</div>' +
-        '</div>';
-      UI.Modal.show(data.isEdit ? "确认修改这单？" : "确认提交这单？", body, { width: "92vw" });
-      var mBody = UI.Modal.body();
-      function close(v) {
-        try { UI.Modal.hide(); } catch (e) {}
-        resolve(v);
-      }
-      var okBtn = mBody && mBody.querySelector('[data-act="ok"]');
-      var noBtn = mBody && mBody.querySelector('[data-act="cancel"]');
-      if (okBtn) okBtn.addEventListener("click", function () { close(true); });
-      if (noBtn) noBtn.addEventListener("click", function () { close(false); });
-      try { setTimeout(function () { if (okBtn && document.contains(okBtn)) okBtn.focus(); }, 60); } catch (e) {}
-    });
-  }
-
   function submit() {
     if (submitting || confirming) return;   // 连点二次直接吞掉
 
@@ -539,16 +493,24 @@
     // （照片去重、乐观 UI、推送链、成功动效），把风险压到最低。
     if (!confirmedOnce) {
       confirming = true;
-      showSubmitConfirm({
-        entity: entity,
-        dept: dept,
-        time: time,
-        applicant: applicantVal,
-        picker: pickerVal,
-        purpose: purpose,
+      // 2026-09-24：核对清单弹窗已抽到 components.js（UI.confirmSubmit），四个登记视图共用同一套
+      UI.confirmSubmit({
+        title: editingId ? "确认修改这单？" : "确认提交这单？",
+        okText: editingId ? "确认修改" : "确认提交",
+        meta: [
+          ["出货仓库单位", entity],
+          ["部门 / 领取单位", dept],
+          ["申请人", applicantVal],
+          ["领取人", pickerVal],
+          ["领取时间", String(time || "").replace("T", " ")],
+          ["用途 / 项目", purpose]
+        ],
         items: items,
-        photoCount: photos.getPhotos().length,
-        isEdit: !!editingId
+        extras: [
+          photos.getPhotos().length
+            ? '<div class="cf-photo">📷 附带现场照片 ' + photos.getPhotos().length + ' 张</div>'
+            : ""
+        ]
       }).then(function (ok) {
         confirming = false;
         if (!ok) return;
