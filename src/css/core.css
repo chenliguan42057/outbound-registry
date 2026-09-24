@@ -9,14 +9,14 @@
   --primary-2: #A79ED0;
   --primary-dark: #57826F;
   --grad-main: linear-gradient(120deg, #A79ED0 0%, #7FB3A5 100%);
-  --grad-sunset: linear-gradient(135deg, #F97316, #F59E0B);
-  --grad-ocean: linear-gradient(135deg, #14B8A6, #38BDF8);
-  --grad-pink: linear-gradient(135deg, #EC4899, #F472B6);
-  --grad-rainbow: linear-gradient(90deg, #F97316, #F59E0B, #10B981, #38BDF8, #8C7FC4, #A79ED0, #EC4899);
+  --grad-sunset: linear-gradient(135deg, #A86A34, #C08A3E);
+  --grad-ocean: linear-gradient(135deg, #35738C, #3F6E9E);
+  --grad-pink: linear-gradient(135deg, #B0566F, #C98BA3);
+  --grad-rainbow: linear-gradient(90deg, #A86A34, #C08A3E, #6FA08A, #3F6E9E, #A79ED0, #63559E, #B0566F);
   --bg: linear-gradient(160deg, #F1F8F4, #FBF9F3 45%, #F0F6F5);
   --sidebar-bg: #3C4845;
-  --green: #10B981;
-  --green-dark: #0EA271;
+  --green: #6FA08A;
+  --green-dark: #57826F;
   --danger: #F04438;
   --danger-dark: #D92D20;
   --hint-bg: #E8F7EE;
@@ -785,7 +785,7 @@ body.modal-open { overflow: hidden; }
 .landing-brand {
   font-size: 16px;
   font-weight: 700;
-  background: linear-gradient(135deg, #8C7FC4, #EC4899);
+  background: linear-gradient(135deg, #A79ED0, #B0566F);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -793,9 +793,9 @@ body.modal-open { overflow: hidden; }
 /* 鍗￠€氱鐞嗘寜閽細鍦嗚鑳跺泭 + 鏆栬壊娓愬彉 + emoji + 鎮仠鏀惧ぇ/鏅冨姩 */
 .landing-admin {
   border-radius: 999px;
-  background: linear-gradient(135deg, #EC4899, #F97316);
+  background: linear-gradient(135deg, #B0566F, #A86A34);
   color: #fff;
-  box-shadow: 0 6px 16px rgba(236, 72, 153, .35);
+  box-shadow: 0 6px 16px rgba(176, 86, 111, .35);
   padding: 8px 18px;
   font-weight: 600;
   display: inline-flex;
@@ -1116,7 +1116,7 @@ body.modal-open { overflow: hidden; }
   flex: 0 0 auto;
 }
 .rank-name { flex: 0 0 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rank-bar { flex: 1; height: 10px; background: #EEF1F6; overflow: hidden; border-radius: 5px; }
+.rank-bar { flex: 1; height: 10px; background: #E9EFEB; overflow: hidden; border-radius: 5px; }
 .rank-bar-fill { height: 100%; background: var(--grad-main); border-radius: 5px; }
 .rank-val { font-weight: 600; min-width: 34px; text-align: right; }
 
@@ -1147,8 +1147,8 @@ body.modal-open { overflow: hidden; }
   justify-content: center;
 }
 .trend-bar { width: 10px; min-height: 1px; border-radius: 4px 4px 0 0; }
-.trend-bar.out { background: #8C7FC4; }
-.trend-bar.in { background: #10B981; }
+.trend-bar.out { background: #A79ED0; }
+.trend-bar.in { background: #6FA08A; }
 .trend-label { font-size: 10px; color: var(--muted); margin-top: 6px; white-space: nowrap; }
 .trend-total { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .trend-legend {
@@ -1160,8 +1160,8 @@ body.modal-open { overflow: hidden; }
   margin-top: 10px;
 }
 .legend-dot { width: 10px; height: 10px; display: inline-block; border-radius: 3px; }
-.legend-dot.out { background: #8C7FC4; }
-.legend-dot.in { background: #10B981; }
+.legend-dot.out { background: #A79ED0; }
+.legend-dot.in { background: #6FA08A; }
 
 /* ============================================================
    浜戠鍚屾妯″潡
@@ -1276,8 +1276,8 @@ body.modal-open { overflow: hidden; }
 }
 .compare-num { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .compare-fill { width: 46px; border-radius: 8px 8px 0 0; min-height: 2%; transition: height .3s; }
-.compare-fill.out { background: #8C7FC4; }
-.compare-fill.in { background: #10B981; }
+.compare-fill.out { background: #A79ED0; }
+.compare-fill.in { background: #6FA08A; }
 .compare-label { margin-top: 8px; font-size: 12px; color: var(--muted); }
 .compare-legend {
   display: flex;
@@ -1326,7 +1326,7 @@ body.modal-open { overflow: hidden; }
 .heatmap-t1 { background: #DDD6FE; }
 .heatmap-t2 { background: #A5B4FC; color: #fff; }
 .heatmap-t3 { background: #818CF8; color: #fff; }
-.heatmap-t4 { background: #8C7FC4; color: #fff; }
+.heatmap-t4 { background: #A79ED0; color: #fff; }
 .heatmap-legend {
   display: flex;
   align-items: center;
@@ -1368,9 +1368,9 @@ body.modal-open { overflow: hidden; }
   box-shadow: 0 0 0 2px #E5E7EB;
   z-index: 1;
 }
-.timeline-dot.out { background: #8C7FC4; }
-.timeline-dot.in { background: #10B981; }
-.timeline-item.first .timeline-dot { box-shadow: 0 0 0 2px #8C7FC4; }
+.timeline-dot.out { background: #A79ED0; }
+.timeline-dot.in { background: #6FA08A; }
+.timeline-item.first .timeline-dot { box-shadow: 0 0 0 2px #A79ED0; }
 .timeline-body {
   flex: 1;
   min-width: 0;
@@ -1382,7 +1382,7 @@ body.modal-open { overflow: hidden; }
 .timeline-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .timeline-time { font-size: 12px; color: var(--muted); }
 .timeline-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; }
-.timeline-tag.out { background: #F2F9F6; color: #8C7FC4; }
+.timeline-tag.out { background: #F2F9F6; color: #A79ED0; }
 .timeline-tag.in { background: #ECFDF5; color: #059669; }
 .timeline-new {
   font-size: 10px;
@@ -1518,7 +1518,7 @@ body.modal-open { overflow: hidden; }
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 12px;
-  background: var(--muted-bg, #EEF1F6);
+  background: var(--muted-bg, #E9EFEB);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1718,7 +1718,7 @@ body.modal-open { overflow: hidden; }
   font-size: 12px;
   color: var(--muted);
   background: #F0FDF4;
-  border: 1px solid rgba(16, 185, 129, .25);
+  border: 1px solid rgba(111, 160, 138, .25);
   border-radius: 8px;
   padding: 8px 10px;
   line-height: 1.6;
@@ -1864,7 +1864,7 @@ body.modal-open { overflow: hidden; }
 .ai-chips-sub { margin-top: -4px; }
 .ai-chips-sub .ai-chip {
   background: #F0FDF4;
-  border-color: rgba(16, 185, 129, .45);
+  border-color: rgba(111, 160, 138, .45);
   color: #047857;
 }
 .ai-chips-sub .ai-chip:hover { background: #DCFCE7; }
@@ -1905,7 +1905,7 @@ body.modal-open { overflow: hidden; }
 }
 .ai-sec-note-search.lock {
   background: #F0FDF4;
-  border-color: rgba(16, 185, 129, .25);
+  border-color: rgba(111, 160, 138, .25);
 }
 .ai-context-hint {
   font-size: 13px;

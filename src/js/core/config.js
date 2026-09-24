@@ -232,7 +232,7 @@
       { value: "name_asc", label: "货品名 A→Z" },
       { value: "name_desc", label: "货品名 Z→A" }
     ],
-    CHART_COLORS: ["#6366F1", "#8B5CF6", "#EC4899", "#F97316", "#F59E0B", "#10B981", "#14B8A6", "#38BDF8"],
+    CHART_COLORS: ["#6FA08A", "#A79ED0", "#35738C", "#A86A34", "#63559E", "#B0566F", "#3F6E9E", "#5F7D31"],
 
     /* 自动同步（电脑端定时从云端拉取手机端提交的数据）。
        实测：syncPull 为 N+1 拉取——1 次目录列举 + 每条记录 1 次读取，

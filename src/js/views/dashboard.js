@@ -188,7 +188,7 @@
     }).join("");
   }
 
-  /** P0-1 出入库对比柱状图：纯 CSS flex 双柱，出=紫 #6366F1 / 入=绿 #10B981，柱顶数字 + 图例 */
+  /** P0-1 出入库对比柱状图：纯 CSS flex 双柱，出=淡紫 #A79ED0 / 入=薄荷绿 #6FA08A，柱顶数字 + 图例 */
   function renderCompare(agg) {
     var el = Util.$("dashCompare");
     if (!el) return;
@@ -228,7 +228,7 @@
     var segs = keys.map(function (k, i) {
       var frac = catMap[k] / total;
       var dash = frac * C;
-      var color = colors[i % colors.length] || "#6366F1";
+      var color = colors[i % colors.length] || "#6FA08A";
       var seg = {
         key: k, val: catMap[k], frac: frac, color: color,
         html: '<circle class="donut-seg" cx="50" cy="50" r="' + R + '" fill="none" stroke="' + color +
@@ -240,7 +240,7 @@
     el.innerHTML =
       '<div class="donut-wrap">' +
         '<svg class="donut-svg" viewBox="0 0 100 100" width="140" height="140">' +
-          '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="#EEF1F6" stroke-width="18" />' +
+          '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="#E9EFEB" stroke-width="18" />' +
           '<g transform="rotate(-90 50 50)">' + segs.map(function (s) { return s.html; }).join("") + '</g>' +
           '<text x="50" y="47" text-anchor="middle" class="donut-center-num">' + total + '</text>' +
           '<text x="50" y="61" text-anchor="middle" class="donut-center-label">总库存</text>' +

@@ -41,12 +41,12 @@
   --cyan-500: #6FA3A8;
 
   /* 娣＄传绯?鈥斺€?娆＄骇寮鸿皟鑹?*/
-  --lav-100: #F1EFF8;
+  --lav-100: #F2F0FA;
   --lav-200: #E2DFF0;
   --lav-300: #CBC4E2;
   --lav-400: #B0A6D0;
   --lav-500: #968ABE;
-  --lav-600: #7A6DA3;
+  --lav-600: #63559E;
 
   /* 澧ㄧ伆鏂囧瓧锛堥潪绾粦锛?*/
   --ink-900: #3C4845;   /* 鏍囬 / 姝ｆ枃涓昏壊 */
@@ -228,7 +228,7 @@ body::before {
   border-bottom: 1px solid rgba(147, 188, 166, .20);
 }
 .landing-brand {
-  background: linear-gradient(120deg, #57826F 0%, #7A6DA3 70%, #6FA3A8 100%);
+  background: linear-gradient(120deg, #57826F 0%, #63559E 70%, #6FA3A8 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -787,7 +787,7 @@ html[data-accent="cyan"] {
 }
 html[data-accent="lavender"] {
   --grad-primary: linear-gradient(135deg, #A79ED0 0%, #8F83C0 100%);
-  --grad-brand: linear-gradient(120deg, #7A6DA3 0%, #968ABE 60%, #B0A6D0 100%);
+  --grad-brand: linear-gradient(120deg, #63559E 0%, #968ABE 60%, #B0A6D0 100%);
 }
 html[data-accent="warm"] {
   --grad-primary: linear-gradient(135deg, #D9A87E 0%, #C98B63 100%);

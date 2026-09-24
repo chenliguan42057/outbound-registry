@@ -6,7 +6,7 @@
    挂载：src/index.html 的最后一个 <link>（层叠最后，稳定覆盖 core/theme/patch）。
    原则：只调颜色、圆角、阴影与滚动条，**不动任何布局尺寸与交互**，确保不影响既有排版。
    ⚠️ 配套改造：core.css 里 40+ 处早期靛蓝紫硬编码已由 tools 脚本做字节级替换
-      （#8C7FC4→#8C7FC4 / #F2F9F6→#F2F9F6 / #F7FBF9→#F7FBF9 等），本文件负责收口。
+      （#A79ED0→#A79ED0 / #F2F9F6→#F2F9F6 / #F7FBF9→#F7FBF9 等），本文件负责收口。
    ============================================================ */
 
 :root {
@@ -64,9 +64,9 @@
 .chip-add:hover { background: #F2F9F6; }
 
 /* 图表「出库」系列：靛蓝 → 品牌淡紫（与「入库」绿色保持区分） */
-.trend-bar.out, .legend-dot.out, .compare-fill.out, .timeline-dot.out { background: #8C7FC4; }
-.timeline-item.first .timeline-dot { box-shadow: 0 0 0 2px #8C7FC4; }
-.timeline-tag.out { background: #F1EFF8; color: #7A6DA3; }
+.trend-bar.out, .legend-dot.out, .compare-fill.out, .timeline-dot.out { background: #A79ED0; }
+.timeline-item.first .timeline-dot { box-shadow: 0 0 0 2px #A79ED0; }
+.timeline-tag.out { background: #F2F0FA; color: #63559E; }
 .heatmap-t4 { background: #6FA08A; }
 
 /* 表格横向滚动条：细一些、不抢视线 */

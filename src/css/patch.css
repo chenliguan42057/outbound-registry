@@ -385,7 +385,7 @@
   font-weight: 800;
   color: var(--mint-600, #57826F);
 }
-.win-sysbar-item.active[data-sys="saidis"]::after { color: var(--lav-600, #7A6DA3); }
+.win-sysbar-item.active[data-sys="saidis"]::after { color: var(--lav-600, #63559E); }
 
 /* ============================================================
    十一、五感体验优化（2026-09-06）
