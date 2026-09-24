@@ -31,6 +31,11 @@
   function DEFAULT_ENTITY() { return Config.Sys.entity(); }
   /** 当前选中的出货仓库单位（chip 单选，互斥高亮；必填，默认当前系统实体） */
   var selectedEntity = DEFAULT_ENTITY();
+  /* ---------- 「我的提交记录」留痕（2026-09-24 新增） ---------- */
+  /** 只记「本机本仓」近 2 小时提交过的单据 id + 时间戳，不存照片（防撑爆 localStorage 配额） */
+  var RECENT_TTL = 2 * 60 * 60 * 1000;   // 时效 2 小时
+  var recentTimer = null;                // 到期剔除的轮询定时器（每次 render 重置，防叠加）
+  var recentSubscribed = false;           // onQueueChange 只订阅一次（回调按 id 取 DOM，重复 render 安全）
 
   function render(container) {
     container.innerHTML =
@@ -49,7 +54,7 @@
           '</div>' +
         '</div>' +
         '<div class="field">' +
-          '<label for="outApplicant">申请人<span class="req">*</span></label>' +
+          '<label for="outApplicant">申请人<span class="req">*</span><span class="lbl-note">向商务发领取申请的人</span></label>' +
           '<div class="search-wrap">' +
             '<input type="text" id="outApplicant" placeholder="请输入申请人姓名" autocomplete="off" inputmode="text" enterkeyhint="next" />' +
             '<div class="suggest" id="outApplicantSuggest"></div>' +
@@ -62,7 +67,7 @@
             '<div class="hint"><span class="auto" id="outFillNow">📎 自动填入当前时间</span></div>' +
           '</div>' +
           '<div class="field">' +
-            '<label for="outPicker">领取人<span class="req">*</span></label>' +
+            '<label for="outPicker">领取人<span class="req">*</span><span class="lbl-note">实际到现场领取的人</span></label>' +
             '<div class="search-wrap">' +
               '<input type="text" id="outPicker" placeholder="请输入领取人姓名" autocomplete="name" inputmode="text" enterkeyhint="next" />' +
               '<div class="suggest" id="outPickerSuggest"></div>' +
@@ -99,6 +104,14 @@
           '<button type="button" class="btn ghost" id="outCancelEdit" style="display:none;">取消编辑</button>' +
         '</div>' +
       '</div>';
+
+    // 「我的提交记录」大框（2026-09-24）：用 DOM 追加在表单卡片之后，
+    // 不改上面的模板字符串，避免多行锚点在 CRLF 文件里失配。
+    var recentBoxEl = document.createElement("div");
+    recentBoxEl.id = "outRecentBox";
+    recentBoxEl.className = "recent-box";
+    recentBoxEl.hidden = true;
+    container.appendChild(recentBoxEl);
 
     els = {
       entityChips: Util.$("outEntityChips"),
@@ -213,6 +226,14 @@
     photos.onChange = saveDraft;
 
     restoreDraft();
+
+    // 「我的提交记录」大框：首屏渲染 + 云端队列变化时刷新徽标 + 每 60 秒剔除超 2 小时的旧条目
+    if (!recentSubscribed && Cloud.onQueueChange) {
+      recentSubscribed = true;
+      Cloud.onQueueChange(function () { renderRecentBox(); });
+    }
+    renderRecentBox();
+    scheduleRecentTimer();
   }
 
   /* ---------- 用途/项目 chip 单选 ---------- */
@@ -499,6 +520,9 @@
     Store.addHistory(Config.DEPT_HISTORY_KEY, dept);
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
     Store.addHistory(Config.APPLICANT_HISTORY_KEY, applicantVal);
+    // 提交留痕：本单立刻进「我的提交记录」大框（近 2 小时），后续上云结果会刷新它的状态徽标
+    pushRecent(rec.id);
+    renderRecentBox();
     resetForm();
     // 顺捷感一（乐观 UI）：本地已落库 = 这件事已经成了，不必等云端回话。
     // 立刻解锁按钮、给提示、把记录放进同步队列（列表行会显示转圈），云端推送转后台慢慢跑。
@@ -609,6 +633,7 @@
       return Cloud.flushQueue().then(function (fres) { return { pushed: pushed, fres: fres }; });
     }).then(function (r) {
       var fres = r.fres;
+      renderRecentBox();   // 上云结果已出：同步刷新大框里的 ✅/⚠️ 徽标
       State.lastSync = new Date();
       appStatus("已同步 " + State.lastSync.toLocaleString(), false);
       var remain = (fres && fres.remain) || 0;
@@ -620,6 +645,7 @@
       }
       if (r.pushed) watchWpsReceipt(rec);
     }).catch(function (e) {
+      renderRecentBox();   // 失败态：让大框里立刻出现 ⚠️ 未上传成功 + 重试按钮
       appStatus("云端同步失败：" + e.message + "（已存本机队列，可在「云同步」页一键重推）", true);
       Util.toast("⚠️ 云端同步失败：" + e.message + "，已存本机队列，可在「云同步」页一键重推", true);
     });
@@ -681,6 +707,124 @@
     els.cancelEdit.style.display = "inline-flex";
     Util.toast("正在编辑该记录，修改后点「保存修改」");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /* ---------- 「我的提交记录」大框（近 2 小时留痕 + 上传状态警示，2026-09-24 新增） ---------- */
+
+  /** 留痕缓存键（按当前系统隔离：深圳 / 赛迪斯各存各的，不串仓） */
+  function recentKey() { return Config.Sys.key("out_recent_v1"); }
+
+  /** 读取留痕并剔除超 2 小时的旧条目（时效到点自动消失） */
+  function loadRecent() {
+    var arr = Store.get(recentKey(), []);
+    if (!Array.isArray(arr)) return [];
+    var now = Date.now();
+    return arr.filter(function (x) { return x && x.id && (now - (x.at || 0)) < RECENT_TTL; });
+  }
+
+  function saveRecent(arr) { Store.set(recentKey(), (arr || []).slice(0, 20)); }
+
+  /** 把本条记录置顶写入留痕（同 id 去重，避免编辑保存后出现两条） */
+  function pushRecent(id) {
+    if (!id) return;
+    var arr = loadRecent().filter(function (x) { return x.id !== id; });
+    arr.unshift({ id: id, at: Date.now() });
+    saveRecent(arr);
+  }
+
+  /** 上传状态判定（按严重度从高到低）：无令牌 > 记录没推上云 > 照片没传完 > 已上传成功 */
+  function recentStatus(r, pendingIds, photoPendIds, hasTok) {
+    if (!hasTok) return { lv: "warn", ico: "⚠️", txt: "未上传云端（仅存本机）" };
+    if (pendingIds.indexOf(r.id) !== -1) return { lv: "warn", ico: "⚠️", txt: "未上传成功 · 可重试" };
+    if (photoPendIds.indexOf(r.id) !== -1) return { lv: "warn", ico: "⚠️", txt: "记录已上传，照片未传完" };
+    return { lv: "ok", ico: "✅", txt: "已上传成功" };
+  }
+
+  /** 渲染「我的提交记录」大框；无有效条目时整块隐藏 */
+  function renderRecentBox() {
+    var box = Util.$("outRecentBox");
+    if (!box) return;                         // 视图已卸载
+    var arr = loadRecent();
+    if (!arr.length) { box.hidden = true; box.innerHTML = ""; saveRecent([]); return; }
+
+    var pendingIds = (Cloud.loadQueue && Cloud.loadQueue()) || [];
+    var photoPendIds = ((Cloud.loadPhotoPending && Cloud.loadPhotoPending()) || [])
+      .map(function (x) { return x && x.id; });
+    var hasTok = !!(Cloud.hasToken && Cloud.hasToken());
+
+    var alive = [];
+    var rows = [];
+    arr.forEach(function (x) {
+      var r = (State.list || []).find(function (k) { return k && k.id === x.id; });
+      if (!r) return;                         // 记录已删除 → 不再展示
+      alive.push(x);
+      var st = recentStatus(r, pendingIds, photoPendIds, hasTok);
+      var items = (r.items || []).map(function (it) { return it.name + " × " + it.qty; }).join("、") || "-";
+      rows.push(
+        '<div class="recent-item ' + (st.lv === "ok" ? "is-ok" : "is-warn") + '">' +
+          '<div class="recent-item-top">' +
+            '<span class="recent-badge ' + st.lv + '">' + st.ico + " " + st.txt + '</span>' +
+            '<span class="recent-time">' + Util.esc((r.orderNo ? r.orderNo + " · " : "") + (r.time || "")) + '</span>' +
+          '</div>' +
+          '<div class="recent-line"><b>申请人</b>' + Util.esc(r.applicant || "-") +
+            '<span class="recent-arrow">→</span><b>领取人</b>' + Util.esc(r.picker || "-") + '</div>' +
+          '<div class="recent-line"><b>部门</b>' + Util.esc(r.dept || "-") + '</div>' +
+          '<div class="recent-line"><b>货品</b>' + Util.esc(items) + '</div>' +
+          (st.lv === "warn"
+            ? '<button type="button" class="btn ghost mini recent-retry" data-id="' + Util.esc(r.id) + '">⟳ 重试上传</button>'
+            : "") +
+        '</div>'
+      );
+    });
+    saveRecent(alive);
+    if (!rows.length) { box.hidden = true; box.innerHTML = ""; return; }
+
+    box.hidden = false;
+    box.innerHTML =
+      '<div class="recent-head">' +
+        '<h3>📋 我的提交记录 <span class="recent-exp">近 2 小时内有效 · 到期自动清除</span></h3>' +
+        '<button type="button" class="btn ghost mini" id="outRecentRefresh">⟳ 刷新状态</button>' +
+      '</div>' +
+      '<div class="recent-list">' + rows.join("") + '</div>';
+
+    // 每次重绘都生成全新元素，直接绑事件不会叠加（大框本身会被反复重绘，故不在 box 上做事件委托）
+    var rf = Util.$("outRecentRefresh");
+    if (rf) rf.addEventListener("click", function () { renderRecentBox(); Util.toast("已刷新上传状态"); });
+    Array.prototype.forEach.call(box.querySelectorAll(".recent-retry"), function (b) {
+      b.addEventListener("click", function () { retryRecentUpload(b.getAttribute("data-id")); });
+    });
+  }
+
+  /** 手动重试：把该条记录再推一次云端，并顺带清空积压队列 */
+  function retryRecentUpload(id) {
+    var r = (State.list || []).find(function (k) { return k && k.id === id; });
+    if (!r) { renderRecentBox(); return; }
+    if (!(Cloud.hasToken && Cloud.hasToken())) {
+      Util.toast("⚠️ 未配置云端令牌，无法上传，请联系管理员检查同步令牌", true);
+      return;
+    }
+    Util.toast("正在重试上传…");
+    Cloud.pushRecord(r)
+      .then(function (ok) { return Cloud.flushQueue().then(function () { return ok; }); })
+      .then(function (ok) {
+        renderRecentBox();
+        // pushRecord 失败时返回 false 而非抛错，必须按返回值判断，否则会把失败当成功报给用户
+        if (ok) Util.toast("已重新上传，请查看上方状态");
+        else Util.toast("⚠️ 本条仍未上传成功（网络超时或云端拒绝），可稍后再试，或到「云同步」页一键重推", true);
+      })
+      .catch(function (e) {
+        renderRecentBox();
+        Util.toast("⚠️ 仍未成功：" + e.message + "，可稍后再试或用「云同步」页一键重推", true);
+      });
+  }
+
+  /** 每 60 秒刷新一次大框（到期条目自动消失）；视图卸载后自动停表，不空转 */
+  function scheduleRecentTimer() {
+    if (recentTimer) clearInterval(recentTimer);
+    recentTimer = setInterval(function () {
+      if (!Util.$("outRecentBox")) { clearInterval(recentTimer); recentTimer = null; return; }
+      renderRecentBox();
+    }, 60000);
   }
 
   window.App = window.App || {};

@@ -316,6 +316,18 @@
     }
 
     /** 出库状态徽标（可点击切换）：红点=未提单，绿点=已提单 */
+    /** 领取人列（2026-09-24）：出库行显示「领取人 + 申请人副标」——
+        申请人 = 向商务发领取申请的人，领取人 = 来现场领取的人，两者并列便于一眼核对。
+        入库行没有申请人概念，仍只显示经办人，保持原样。 */
+    function pickerCellHtml(r, isIn) {
+      var name = Util.esc(r.picker || "-");
+      if (isIn || !r.applicant) return name;
+      return '<div class="pk-cell">' +
+        '<span class="pk-name">' + name + '</span>' +
+        '<span class="pk-sub" title="申请人：向商务发领取申请的人">申请人：' + Util.esc(r.applicant) + '</span>' +
+        '</div>';
+    }
+
     function statusPill(r) {
       var st = Records.getStatus(r);   // "pending" | "submitted"
       var label = st === "pending" ? "未提单" : "已提单";
@@ -494,7 +506,7 @@
             (selected[r.id] ? " checked" : "") + ' /></td>' +
           '<td><div>' + (list.length - i) + pinMark + inMark + tfMark + spinMark + '</div></td>' +
           '<td>' + Util.esc(r.time || "-") + '</td>' +
-          '<td>' + Util.esc(r.picker || "-") + '</td>' +
+          '<td>' + pickerCellHtml(r, isIn) + '</td>' +
           (!isIn ? '<td>' + statusPill(r) + '</td>' : '') +
           (!isIn ? '<td>' + Util.esc(r.entity || "-") + '</td>' : '') +
           (isIn ? '<td>' + srcCellHtml(r) + '</td>' : '<td>' + Util.esc(r.dept || "-") + '</td>') +

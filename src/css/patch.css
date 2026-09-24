@@ -648,6 +648,102 @@ html[data-theme="dark"] .row-actions {
 .rec-daterange .search { flex: 1 1 auto; min-width: 0; }
 .rec-daterange .rec-dash { flex: 0 0 auto; color: var(--muted, #7A8A85); }
 .rec-daterange .btn { flex: 0 0 auto; white-space: nowrap; }
+/* ===== 2026-09-24 新增：字段小备注 / 领取人列申请人副标 / 我的提交记录大框 ===== */
+
+/* 1) 字段标签旁的小备注胶囊（暖陶土色：一眼可见，但不抢「*」必填星号的视线） */
+.lbl-note {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px 2px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: .2px;
+  color: #A85A12;
+  background: #FFF1DF;
+  border: 1px solid #EFC79A;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+html[data-theme="dark"] .lbl-note {
+  color: #F5C48C;
+  background: rgba(168, 90, 18, .22);
+  border-color: rgba(239, 199, 154, .38);
+}
+
+/* 2) 记录列表「领取人」列：主名 + 申请人副标（申请人 = 向商务发领取申请的人） */
+.pk-cell { display: flex; flex-direction: column; gap: 2px; line-height: 1.35; }
+.pk-cell .pk-name { font-weight: 600; }
+.pk-cell .pk-sub { font-size: 11px; color: #8C7A66; white-space: nowrap; }
+html[data-theme="dark"] .pk-cell .pk-sub { color: #B4ABA0; }
+
+/* 3) 「我的提交记录」大框（提交后出现在表单下方，近 2 小时内有效） */
+.recent-box {
+  margin-top: 16px;
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(111, 160, 138, .38);
+  background: linear-gradient(180deg, rgba(111, 160, 138, .10), rgba(255, 255, 255, .55));
+  box-shadow: 0 8px 22px rgba(60, 72, 69, .06);
+}
+html[data-theme="dark"] .recent-box {
+  border-color: rgba(111, 160, 138, .30);
+  background: linear-gradient(180deg, rgba(111, 160, 138, .14), rgba(255, 255, 255, .02));
+  box-shadow: none;
+}
+.recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.recent-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.recent-head .recent-exp { font-size: 12px; font-weight: 400; color: var(--muted, #7A8A85); }
+.recent-list { display: flex; flex-direction: column; gap: 10px; }
+.recent-item {
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(60, 72, 69, .10);
+  background: rgba(255, 255, 255, .72);
+}
+.recent-item.is-ok { border-color: rgba(111, 160, 138, .40); }
+.recent-item.is-warn { border-color: #E7A34A; background: #FFF8EE; }
+html[data-theme="dark"] .recent-item { border-color: rgba(255, 255, 255, .10); background: rgba(255, 255, 255, .04); }
+html[data-theme="dark"] .recent-item.is-warn { border-color: #D08A33; background: rgba(231, 163, 74, .12); }
+.recent-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.recent-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.recent-badge.ok { color: #2F6B52; background: #E4F2EA; border: 1px solid #B4D8C6; }
+.recent-badge.warn { color: #A85A12; background: #FFEBD4; border: 1px solid #EFB877; }
+html[data-theme="dark"] .recent-badge.ok { color: #9FDCC0; background: rgba(111, 160, 138, .20); border-color: rgba(180, 216, 198, .35); }
+html[data-theme="dark"] .recent-badge.warn { color: #F7C88C; background: rgba(231, 163, 74, .20); border-color: rgba(239, 184, 119, .40); }
+.recent-time { font-size: 12px; color: var(--muted, #7A8A85); }
+.recent-line { font-size: 13px; color: var(--text, #3C4845); line-height: 1.75; }
+.recent-line b { font-weight: 600; color: var(--muted, #7A8A85); margin-right: 4px; }
+html[data-theme="dark"] .recent-line { color: #E6E2DC; }
+.recent-arrow { color: #C9A26B; margin: 0 4px; }
+.recent-retry { margin-top: 8px; }
+@media (max-width: 640px) {
+  .lbl-note { display: block; margin: 4px 0 0; width: fit-content; }
+  .recent-box { padding: 12px 12px 10px; }
+}
+
 @media (max-width: 900px) {
   .rec-goods, .rec-daterange { grid-column: span 1; }
   .rec-goods, .rec-daterange { grid-column: 1 / -1; }
