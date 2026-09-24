@@ -242,11 +242,18 @@
     this.listEl = null;
     this.hintEl = null;
     this.activeIndex = -1;            // 候选列表键盘高亮下标（-1 表示无）
+    this.bulkPick = !!opts.bulkPick;  // 2026-09-24：分类多选 → 统一填数量（落地页/出库启用）
+    this.panel = null;                // bulkPick 全屏选择面板 DOM
+    this.step = 1;                    // 面板步骤：1=按分类选品，2=统一填数量
+    this.draft = [];                  // 面板暂存 [{name, qty}]（未点「完成」前不改动 selected）
+    this.panelQ = "";                 // 面板内搜索词（保留原大小写）
   }
 
   ProductPicker.prototype.attach = function (container) {
     var self = this;
     this.container = container;
+    // 2026-09-24 分类多选模式走独立分支，其余视图（入库/待取货/调拨）行为完全不变
+    if (this.bulkPick) { this.attachBulk(container); return; }
     container.innerHTML =
       '<div class="search-wrap">' +
         '<input type="text" class="search" placeholder="' + Util.esc(this.placeholder) + '" autocomplete="off" inputmode="search" enterkeyhint="search" role="combobox" aria-expanded="false" aria-autocomplete="list" />' +
@@ -349,6 +356,260 @@
     this.render();
   };
 
+  /* ================= ProductPicker · bulkPick 模式（2026-09-24） ================= */
+  /**
+   * 落地页/出库「按产品名分类多选 → 最后统一步填数量」。
+   * 与默认模式共用 selected / getItems / validateItems / setSelected / emit，对外 API 完全不变，
+   * 因此入库、待取货、调拨等视图无需改动（不传 bulkPick 即维持原交互）。
+   * 分类规则：按产品名里的系列关键词归组（与金山子表归属同一套词），保证同系列规格聚在一起。
+   */
+  var PICK_GROUP_ORDER = ["精华液", "精粹水", "精粹乳", "精粹霜", "面膜", "洁面慕斯",
+    "小鹿牛皮纸袋", "员工帆布袋", "礼盒", "拎袋"];
+
+  function pickGroupOf(name) {
+    var n = String(name || "");
+    for (var i = 0; i < PICK_GROUP_ORDER.length; i++) {
+      if (n.indexOf(PICK_GROUP_ORDER[i]) !== -1) return PICK_GROUP_ORDER[i];
+    }
+    return n.split(" ")[0] || "其他";
+  }
+
+  /** 表单区：入口按钮 + 已选清单（数量只读，改数量走面板第二步） */
+  ProductPicker.prototype.attachBulk = function (container) {
+    var self = this;
+    container.innerHTML =
+      '<div class="bp-cta">' +
+        '<button type="button" class="bp-open">＋ 选择货品（可多选）</button>' +
+        '<button type="button" class="bp-adjust" style="display:none">调整数量</button>' +
+      '</div>' +
+      '<div class="selected"></div>' +
+      '<div class="hint"></div>';
+    this.listEl = container.querySelector(".selected");
+    this.hintEl = container.querySelector(".hint");
+    container.querySelector(".bp-open").addEventListener("click", function () { self.openPanel(1); });
+    container.querySelector(".bp-adjust").addEventListener("click", function () {
+      self.openPanel(self.selected.length ? 2 : 1);
+    });
+    this.listEl.addEventListener("click", function (e) {
+      var x = e.target.closest(".bp-sel-x");
+      if (!x) return;
+      self.selected.splice(Number(x.getAttribute("data-i")), 1);
+      self.render();
+      self.emit();
+    });
+    this.render();
+  };
+
+  /** 按分类分组（q 为空返回全部）；组顺序固定，未识别组排最后 */
+  ProductPicker.prototype.buildGroups = function (q) {
+    var map = {}, order = [];
+    var key = String(q || "").toLowerCase();
+    (Config.PRODUCTS || []).forEach(function (p) {
+      if (key && String(p).toLowerCase().indexOf(key) === -1) return;
+      var g = pickGroupOf(p);
+      if (!map[g]) { map[g] = []; order.push(g); }
+      map[g].push(p);
+    });
+    order.sort(function (a, b) {
+      var ia = PICK_GROUP_ORDER.indexOf(a); if (ia < 0) ia = 999;
+      var ib = PICK_GROUP_ORDER.indexOf(b); if (ib < 0) ib = 999;
+      return ia - ib;
+    });
+    return order.map(function (g) { return { name: g, items: map[g] }; });
+  };
+
+  /** 打开全屏面板：step=1 按分类选品，step=2 统一填数量 */
+  ProductPicker.prototype.openPanel = function (step) {
+    var self = this;
+    if (this.panel) this.closePanel();
+    this.draft = this.selected.map(function (s) { return { name: s.name, qty: s.qty }; });
+    this.step = step === 2 ? 2 : 1;
+    this.panelQ = "";
+    if (this.step === 2 && !this.draft.length) this.step = 1;
+
+    var el = document.createElement("div");
+    el.className = "bp-mask";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    el.setAttribute("aria-label", "选择货品");
+    el.innerHTML =
+      '<div class="bp-panel">' +
+        '<div class="bp-head">' +
+          '<button type="button" class="bp-back" aria-label="返回">‹</button>' +
+          '<span class="bp-title">选择货品</span>' +
+          '<button type="button" class="bp-close" aria-label="关闭">✕</button>' +
+        '</div>' +
+        '<div class="bp-body"></div>' +
+        '<div class="bp-foot"></div>' +
+      '</div>';
+
+    // 面板内交互统一委托到根节点：切换步骤、重建 DOM 都不会丢事件
+    el.addEventListener("click", function (e) {
+      if (e.target === el) { self.closePanel(); return; }          // 点遮罩空白关闭
+      var t = e.target;
+      if (t.closest(".bp-close")) { self.closePanel(); return; }
+      if (t.closest(".bp-back")) { self.step = 1; self.renderPanel(); return; }
+      if (t.closest(".bp-next")) { self.gotoStep2(); return; }
+      if (t.closest(".bp-done")) { self.commitPanel(); return; }
+      var qb = t.closest(".bp-qb");
+      if (qb) {
+        var qi = Number(qb.getAttribute("data-i"));
+        var cur = Number(self.draft[qi].qty) || 0;
+        self.draft[qi].qty = qb.getAttribute("data-act") === "inc" ? cur + 1 : cur - 1;
+        self.renderPanel();
+        return;
+      }
+      var rx = t.closest(".bp-rx");
+      if (rx) {
+        self.draft.splice(Number(rx.getAttribute("data-i")), 1);
+        self.renderPanel();
+        return;
+      }
+      var item = t.closest(".bp-item");
+      if (item) self.toggleDraft(item.getAttribute("data-name"));
+    });
+    el.addEventListener("input", function (e) {
+      var box = e.target.closest(".bp-search");
+      if (box) { self.panelQ = box.value; self.renderGroups(); return; }   // 只重绘分组，保住输入焦点
+      var num = e.target.closest(".bp-q");
+      if (num) self.draft[Number(num.getAttribute("data-i"))].qty = num.value;
+    });
+    // 数量取整：与表单内口径一致（支/盒/袋按整件计）
+    el.addEventListener("change", function (e) {
+      var num = e.target.closest(".bp-q");
+      if (!num) return;
+      var i = Number(num.getAttribute("data-i"));
+      var raw = String(num.value || "").trim();
+      if (raw === "") return;
+      var v = Number(raw);
+      if (!isFinite(v)) return;
+      var r = Math.round(v);
+      self.draft[i].qty = r;
+      num.value = String(r);
+    });
+
+    document.body.appendChild(el);
+    document.body.classList.add("bp-lock");
+    this.panel = el;
+    this.renderPanel();
+  };
+
+  ProductPicker.prototype.closePanel = function () {
+    if (this.panel && this.panel.parentNode) this.panel.parentNode.removeChild(this.panel);
+    this.panel = null;
+    if (document.body) document.body.classList.remove("bp-lock");
+  };
+
+  ProductPicker.prototype.renderPanel = function () {
+    if (!this.panel) return;
+    var body = this.panel.querySelector(".bp-body");
+    var foot = this.panel.querySelector(".bp-foot");
+    var title = this.panel.querySelector(".bp-title");
+
+    if (this.step === 2) {
+      title.textContent = "填写数量";
+      body.innerHTML = '<div class="bp-tip">已选 ' + this.draft.length + ' 项，逐项确认数量后点「完成」。</div>' +
+        this.draft.map(function (it, i) {
+          return '<div class="bp-row">' +
+              '<span class="bp-row-name">' + Util.esc(it.name) + '</span>' +
+              '<div class="bp-step">' +
+                '<button type="button" class="bp-qb" data-act="dec" data-i="' + i + '" aria-label="减少">−</button>' +
+                '<input type="number" step="1" inputmode="numeric" enterkeyhint="done" class="bp-q" data-i="' + i + '" value="' + Util.esc(it.qty) + '" aria-label="数量" />' +
+                '<button type="button" class="bp-qb" data-act="inc" data-i="' + i + '" aria-label="增加">＋</button>' +
+              '</div>' +
+              '<span class="bp-rx" data-i="' + i + '" role="button" aria-label="移除">✕</span>' +
+            '</div>';
+        }).join("");
+      foot.innerHTML =
+        '<button type="button" class="bp-ghost">‹ 继续加货</button>' +
+        '<button type="button" class="bp-done">完成（' + this.draft.length + ' 项）</button>';
+      return;
+    }
+
+    title.textContent = "选择货品";
+    body.innerHTML =
+      '<input type="search" class="bp-search" placeholder="搜索货品名称…" autocomplete="off" enterkeyhint="search" value="' + Util.esc(this.panelQ) + '" />' +
+      '<div class="bp-groups"></div>';
+    this.renderGroups();
+  };
+
+  /** 只重绘分类网格 + 底部按钮（搜索时调用，避免重建输入框丢焦点） */
+  ProductPicker.prototype.renderGroups = function () {
+    if (!this.panel) return;
+    var self = this;
+    var box = this.panel.querySelector(".bp-groups");
+    if (!box) return;
+    var groups = this.buildGroups(this.panelQ);
+    var total = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
+    if (!total) {
+      box.innerHTML = '<div class="bp-empty">没有匹配的货品</div>';
+    } else {
+      box.innerHTML = groups.map(function (g) {
+        return '<div class="bp-group">' +
+            '<h4>' + Util.esc(g.name) + '<span class="bp-gcount">' + g.items.length + '</span></h4>' +
+            '<div class="bp-grid">' +
+              g.items.map(function (p) {
+                var on = self.draft.some(function (d) { return d.name === p; });
+                return '<button type="button" class="bp-item' + (on ? " on" : "") + '" data-name="' + Util.esc(p) + '" aria-pressed="' + (on ? "true" : "false") + '">' + Util.esc(p) + '</button>';
+              }).join("") +
+            '</div>' +
+          '</div>';
+      }).join("");
+    }
+    this.renderFoot();
+  };
+
+  ProductPicker.prototype.renderFoot = function () {
+    if (!this.panel || this.step === 2) return;
+    var foot = this.panel.querySelector(".bp-foot");
+    if (!foot) return;
+    var n = this.draft.length;
+    foot.innerHTML = n
+      ? '<button type="button" class="bp-next">下一步 · 填数量（' + n + '）</button>'
+      : '<button type="button" class="bp-next" disabled>请先选择货品</button>';
+  };
+
+  /** 勾选/取消勾选：只切换相关项样式 + 刷新底部计数，不整块重绘（手机上更跟手） */
+  ProductPicker.prototype.toggleDraft = function (name) {
+    if (!name) return;
+    var self = this;
+    var idx = -1;
+    this.draft.forEach(function (d, i) { if (d.name === name) idx = i; });
+    if (idx >= 0) this.draft.splice(idx, 1);
+    else this.draft.push({ name: name, qty: 1 });       // 数量默认 1，第二步统一调整
+    var items = this.panel ? this.panel.querySelectorAll(".bp-item") : [];
+    Array.prototype.forEach.call(items, function (b) {
+      var on = self.draft.some(function (d) { return d.name === b.getAttribute("data-name"); });
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    this.renderFoot();
+  };
+
+  ProductPicker.prototype.gotoStep2 = function () {
+    if (!this.draft.length) return;
+    this.step = 2;
+    this.renderPanel();
+  };
+
+  /** 第二步「完成」：校验全部数量 → 写回 selected 并通知表单 */
+  ProductPicker.prototype.commitPanel = function () {
+    var problems = [];
+    this.draft.forEach(function (d) {
+      var n = d.qty === "" ? 0 : Number(d.qty);
+      if (!isFinite(n) || n === 0) problems.push(d.name);
+      else if (Math.floor(n) !== n) problems.push(d.name + "（需整数）");
+    });
+    if (problems.length) {
+      Util.toast("请填写数量：" + problems.join("、"), true);
+      return;
+    }
+    this.selected = this.draft.map(function (d) { return { name: d.name, qty: Number(d.qty) }; });
+    this.closePanel();
+    this.render();
+    this.emit();
+  };
+
   ProductPicker.prototype.renderSuggest = function () {
     var self = this;
     var q = this.searchEl.value.trim().toLowerCase();
@@ -408,6 +669,24 @@
   ProductPicker.prototype.render = function () {
     var self = this;
     this.listEl.innerHTML = "";
+    if (this.bulkPick) {
+      // 已选清单：数量只读 + 单项移除（改数量统一走面板第二步，避免边选边填）
+      this.selected.forEach(function (it, i) {
+        var row = document.createElement("div");
+        row.className = "bp-sel";
+        row.innerHTML =
+          '<span class="bp-sel-name">' + Util.esc(it.name) + '</span>' +
+          '<span class="bp-sel-qty">×' + Util.esc(it.qty) + '</span>' +
+          '<span class="bp-sel-x" data-i="' + i + '" role="button" aria-label="移除">✕</span>';
+        self.listEl.appendChild(row);
+      });
+      var adj = this.container ? this.container.querySelector(".bp-adjust") : null;
+      if (adj) adj.style.display = this.selected.length ? "" : "none";
+      this.hintEl.textContent = this.selected.length
+        ? "已选 " + this.selected.length + " 项；要改数量点「调整数量」。"
+        : "点上方按钮按分类挑选（可多选），最后统一步填数量。";
+      return;
+    }
     this.selected.forEach(function (it, i) {
       var row = document.createElement("div");
       row.className = "sel-item";
@@ -465,6 +744,7 @@
 
   /** 显式销毁：摘掉挂在 document 上的全局监听。视图切换时可主动调用（不调也会自我摘除） */
   ProductPicker.prototype.destroy = function () {
+    this.closePanel();   // 视图切换时若面板还开着，一并摘掉，避免遮罩残留在 body 上
     if (this._docClick) {
       document.removeEventListener("click", this._docClick);
       this._docClick = null;

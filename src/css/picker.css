@@ -1,0 +1,133 @@
+/* ============================================================
+   picker.css — 货品「分类多选 → 统一填数量」面板（2026-09-24）
+   ------------------------------------------------------------
+   仅服务 components.js 的 ProductPicker({ bulkPick: true })。
+   全部类名以 bp- 前缀，避免与 core/theme/patch 既有规则互相干扰。
+   移动端优先：面板全屏、底部按钮固定、触控目标 >=44px、支持 iOS 安全区。
+   ============================================================ */
+
+/* —— 表单区：入口按钮 + 已选清单 —— */
+.bp-cta { display: flex; gap: 8px; margin-bottom: 10px; }
+.bp-open, .bp-adjust {
+  min-height: 46px; border: 0; border-radius: 12px; font-size: 15px; font-weight: 700;
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.bp-open {
+  flex: 1 1 auto; color: #fff;
+  background: linear-gradient(120deg, #A79ED0 0%, #7FB3A5 100%);
+  box-shadow: 0 6px 16px rgba(127, 179, 165, 0.28);
+}
+.bp-open:active { transform: translateY(1px); }
+.bp-adjust { flex: 0 0 auto; padding: 0 14px; color: #5D5478; background: #F1EEF9; border: 1px solid #DED7F0; }
+
+.bp-sel {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; margin-bottom: 8px;
+  border: 1px solid #E3E9E6; border-radius: 12px; background: #FBFDFC;
+}
+.bp-sel-name { flex: 1 1 auto; font-size: 14px; color: #3C4845; line-height: 1.35; word-break: break-all; }
+.bp-sel-qty { flex: 0 0 auto; font-size: 13px; font-weight: 700; color: #4F8D7F; }
+.bp-sel-x {
+  flex: 0 0 auto; width: 34px; height: 34px; line-height: 34px; text-align: center;
+  font-size: 15px; color: #9AA8A3; cursor: pointer; border-radius: 50%;
+}
+.bp-sel-x:active { background: #F3E9E9; color: #B5574F; }
+
+/* —— 全屏面板 —— */
+body.bp-lock { overflow: hidden; }
+.bp-mask {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(35, 42, 40, 0.45);
+  display: flex; align-items: stretch; justify-content: center;
+}
+.bp-panel {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  background: #F7FAF9; overflow: hidden;
+}
+.bp-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 4px;
+  padding: 8px 10px; background: #FFFFFF; border-bottom: 1px solid #E7EEEA;
+}
+.bp-head button {
+  width: 42px; height: 42px; border: 0; border-radius: 12px;
+  background: transparent; color: #6B7A75; font-size: 20px; line-height: 1; cursor: pointer;
+}
+.bp-head .bp-close { font-size: 16px; }
+.bp-title { flex: 1 1 auto; text-align: center; font-size: 16px; font-weight: 700; color: #3C4845; }
+
+.bp-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; }
+.bp-search {
+  display: block; width: 100%; box-sizing: border-box; height: 44px;
+  padding: 0 14px; margin-bottom: 12px; font-size: 16px;
+  border: 1px solid #DDE6E2; border-radius: 12px; background: #FFFFFF; color: #3C4845;
+  -webkit-appearance: none;
+}
+.bp-group { margin-bottom: 14px; }
+.bp-group > h4 {
+  margin: 0 0 8px; padding: 4px 0; font-size: 13px; font-weight: 700; color: #5D5478;
+  display: flex; align-items: center; gap: 6px;
+}
+.bp-gcount { font-size: 11px; font-weight: 600; color: #9AA8A3; background: #EEF3F1; border-radius: 999px; padding: 1px 7px; }
+.bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); gap: 8px; }
+
+.bp-item {
+  position: relative; min-height: 48px; box-sizing: border-box;
+  display: flex; align-items: center;
+  padding: 10px 30px 10px 12px; text-align: left; font-size: 14px; line-height: 1.3;
+  color: #3C4845; background: #FFFFFF;
+  border: 1.5px solid #E3E9E6; border-radius: 12px; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.bp-item.on { border-color: #7FB3A5; background: #EAF5F1; color: #2F6E60; font-weight: 700; }
+.bp-item.on::after {
+  content: "\2713"; position: absolute; top: 6px; right: 8px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #7FB3A5; color: #FFFFFF; font-size: 12px; line-height: 20px; text-align: center;
+}
+.bp-empty { padding: 46px 0; text-align: center; font-size: 14px; color: #9AA8A3; }
+
+.bp-tip { margin-bottom: 10px; font-size: 13px; color: #6B7A75; }
+.bp-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; margin-bottom: 8px;
+  background: #FFFFFF; border: 1px solid #E3E9E6; border-radius: 12px;
+}
+.bp-row-name { flex: 1 1 auto; font-size: 14px; color: #3C4845; line-height: 1.35; }
+.bp-step { flex: 0 0 auto; display: flex; align-items: center; }
+.bp-step .bp-qb {
+  width: 42px; height: 44px; border: 1px solid #DDE6E2; background: #F4F8F6;
+  color: #3C4845; font-size: 18px; line-height: 1; cursor: pointer;
+}
+.bp-step .bp-qb[data-act="dec"] { border-radius: 10px 0 0 10px; }
+.bp-step .bp-qb[data-act="inc"] { border-radius: 0 10px 10px 0; }
+.bp-step .bp-q {
+  width: 58px; height: 44px; box-sizing: border-box;
+  border: 1px solid #DDE6E2; border-left: 0; border-right: 0;
+  text-align: center; font-size: 16px; color: #3C4845; background: #FFFFFF;
+}
+.bp-rx {
+  flex: 0 0 auto; width: 36px; height: 36px; line-height: 36px; text-align: center;
+  font-size: 15px; color: #9AA8A3; cursor: pointer; border-radius: 50%;
+}
+.bp-rx:active { background: #F3E9E9; color: #B5574F; }
+
+.bp-foot {
+  flex: 0 0 auto; display: flex; gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: #FFFFFF; border-top: 1px solid #E7EEEA;
+}
+.bp-foot button {
+  min-height: 48px; border: 0; border-radius: 12px;
+  font-size: 16px; font-weight: 700; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.bp-next, .bp-done { flex: 1 1 auto; color: #FFFFFF; background: linear-gradient(120deg, #A79ED0 0%, #7FB3A5 100%); }
+.bp-next[disabled] { background: #DCE5E1; color: #97A5A0; cursor: default; }
+.bp-ghost { flex: 0 0 auto; padding: 0 16px; color: #5D5478; background: #F1EEF9; }
+
+/* 宽屏（桌面/平板）：居中卡片、圆角、高度自适应 */
+@media (min-width: 720px) {
+  .bp-mask { align-items: center; padding: 24px; }
+  .bp-panel { height: auto; max-height: 88vh; border-radius: 18px; box-shadow: 0 24px 60px rgba(35, 42, 40, 0.28); }
+  .bp-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+}
