@@ -374,19 +374,30 @@
     return n.split(" ")[0] || "其他";
   }
 
-  /** 表单区：入口按钮 + 已选清单（数量只读，改数量走面板第二步） */
+  /** 表单区：入口（外观做成「输入框」而非按钮，避免被误认成提交按钮）+ 已选清单 */
   ProductPicker.prototype.attachBulk = function (container) {
     var self = this;
     container.innerHTML =
       '<div class="bp-cta">' +
-        '<button type="button" class="bp-open">＋ 选择货品（可多选）</button>' +
-        '<button type="button" class="bp-adjust" style="display:none">调整数量</button>' +
+        '<button type="button" class="bp-open is-empty">' +
+          '<span class="bp-open-icon">＋</span>' +
+          '<span class="bp-open-text">点击选择货品（可多选）</span>' +
+          '<span class="bp-open-arrow">›</span>' +
+        '</button>' +
+      '</div>' +
+      '<div class="bp-selbar" style="display:none">' +
+        '<span class="bp-selbar-title"></span>' +
+        '<button type="button" class="bp-adjust">调整数量</button>' +
       '</div>' +
       '<div class="selected"></div>' +
       '<div class="hint"></div>';
     this.listEl = container.querySelector(".selected");
     this.hintEl = container.querySelector(".hint");
-    container.querySelector(".bp-open").addEventListener("click", function () { self.openPanel(1); });
+    this.openBtnEl = container.querySelector(".bp-open");
+    this.openTextEl = container.querySelector(".bp-open-text");
+    this.selbarEl = container.querySelector(".bp-selbar");
+    this.selbarTitleEl = container.querySelector(".bp-selbar-title");
+    this.openBtnEl.addEventListener("click", function () { self.openPanel(1); });
     container.querySelector(".bp-adjust").addEventListener("click", function () {
       self.openPanel(self.selected.length ? 2 : 1);
     });
@@ -680,11 +691,19 @@
           '<span class="bp-sel-x" data-i="' + i + '" role="button" aria-label="移除">✕</span>';
         self.listEl.appendChild(row);
       });
-      var adj = this.container ? this.container.querySelector(".bp-adjust") : null;
-      if (adj) adj.style.display = this.selected.length ? "" : "none";
-      this.hintEl.textContent = this.selected.length
-        ? "已选 " + this.selected.length + " 项；要改数量点「调整数量」。"
-        : "点上方按钮按分类挑选（可多选），最后统一步填数量。";
+      var n = this.selected.length;
+      // 入口区随「有没有选」切换文案与视觉：空 = 虚线待填框，有 = 实线 + 已选条
+      if (this.openBtnEl) {
+        this.openBtnEl.classList.toggle("is-empty", !n);
+        if (this.openTextEl) this.openTextEl.textContent = n ? "继续添加货品" : "点击选择货品（可多选）";
+      }
+      if (this.selbarEl) {
+        this.selbarEl.style.display = n ? "" : "none";
+        if (this.selbarTitleEl) this.selbarTitleEl.textContent = "已选 " + n + " 项";
+      }
+      this.hintEl.textContent = n
+        ? "要改数量点「调整数量」，也可以继续添加。"
+        : "点上方这一栏挑选货品，可多选；选完统一步填数量。";
       return;
     }
     this.selected.forEach(function (it, i) {

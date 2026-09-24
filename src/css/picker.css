@@ -6,19 +6,36 @@
    移动端优先：面板全屏、底部按钮固定、触控目标 >=44px、支持 iOS 安全区。
    ============================================================ */
 
-/* —— 表单区：入口按钮 + 已选清单 —— */
-.bp-cta { display: flex; gap: 8px; margin-bottom: 10px; }
-.bp-open, .bp-adjust {
-  min-height: 46px; border: 0; border-radius: 12px; font-size: 15px; font-weight: 700;
-  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
-}
+/* —— 表单区：入口做成「输入框」外观（明明在等你去点），不是提交按钮 + 已选清单 —— */
+.bp-cta { margin-bottom: 6px; }
 .bp-open {
-  flex: 1 1 auto; color: #fff;
-  background: linear-gradient(120deg, #A79ED0 0%, #7FB3A5 100%);
-  box-shadow: 0 6px 16px rgba(127, 179, 165, 0.28);
+  width: 100%; min-height: 50px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; text-align: left; cursor: pointer;
+  font-size: 15px; font-weight: 400; color: #3C4845;
+  background: #FFFFFF; border: 1.5px dashed #B9D2C8; border-radius: 12px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
-.bp-open:active { transform: translateY(1px); }
-.bp-adjust { flex: 0 0 auto; padding: 0 14px; color: #5D5478; background: #F1EEF9; border: 1px solid #DED7F0; }
+.bp-open.is-empty { background: #FBFDFC; }
+.bp-open.is-empty .bp-open-text { color: #9AA8A3; }
+.bp-open:active { border-color: #8CBFAF; background: #F2F9F6; }
+.bp-open-icon {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  background: linear-gradient(120deg, #A79ED0 0%, #7FB3A5 100%); color: #fff;
+  font-size: 17px; font-weight: 700; line-height: 26px; text-align: center;
+}
+.bp-open-text { flex: 1 1 auto; line-height: 1.35; }
+.bp-open-arrow { flex: 0 0 auto; color: #A9B8B3; font-size: 20px; line-height: 1; }
+
+/* 已选条：左「已选 N 项」，右「调整数量」（次要胶囊按钮，不抢视线） */
+.bp-selbar { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+.bp-selbar-title { flex: 1 1 auto; font-size: 13px; color: #6B7A75; }
+.bp-adjust {
+  flex: 0 0 auto; min-height: 34px; padding: 0 12px;
+  font-size: 13px; font-weight: 700; color: #4F8D7F;
+  background: #EAF5F1; border: 1px solid #CFE5DC; border-radius: 999px; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
 
 .bp-sel {
   display: flex; align-items: center; gap: 8px;
