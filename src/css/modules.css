@@ -136,3 +136,133 @@ html[data-theme="dark"] .module-view[data-tone] {
   .module-view[data-tone] .card h2 { padding-left: 11px; }
   .module-view[data-tone] .card h2::before { width: 3px; height: 14px; }
 }
+
+/* ============================================================
+   五、文字信息升级（2026-09-24 第 11 轮）
+   目标：各板块页面的文字有层次、有说明、有引导，
+        不再只有「标题 + 标签」，空状态也不再干巴巴。
+   ⚠️ 全部作用域收在 .module-view / .table 内，
+      不碰落地页表单（落地页的 .hint 保持原样，主理人已确认过）。
+   ============================================================ */
+
+/* ---------- 5.1 板块页头：板块名 + 一句话说明 ---------- */
+.mod-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 15px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--m2, #F2F9F6);
+  box-shadow: inset 0 0 0 1px var(--m3, #D8EAE2);
+}
+.mod-head-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--m1, var(--primary));
+  letter-spacing: .01em;
+  line-height: 1.3;
+}
+.mod-head-desc {
+  font-size: 12.5px;
+  color: #5C6B66;
+  line-height: 1.6;
+  padding-left: 11px;
+  border-left: 1px solid var(--m3, #D8EAE2);
+}
+
+/* ---------- 5.2 卡片标题：支持灰色副说明 ---------- */
+.card h2 .sub {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+/* ---------- 5.3 表格文字：表头清楚、正文好读、数字对齐 ---------- */
+.table-wrap { border-radius: 12px; }
+.table thead th {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: #5C6B66;
+  background: #F7FAF8;
+  border-bottom: 1px solid #E4EDE8;
+  white-space: nowrap;
+}
+.table tbody td {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.table tbody tr:hover > td { background: #FAFCFB; }
+.table td.c, .table th.c, .table td.num, .table th.num { font-variant-numeric: tabular-nums; }
+/* 表头里的单位用小字灰色，不跟字段名抢 */
+.table thead th .unit { font-size: 11px; font-weight: 400; color: #8D9B96; }
+
+/* ---------- 5.4 空状态：给个图形 + 主副两级文字 ---------- */
+.module-view .empty {
+  text-align: center;
+  color: #6E7D78;
+  padding: 34px 18px;
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+.module-view .empty::before {
+  content: "";
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 12px;
+  border: 2px dashed #C9DCD4;
+  border-radius: 50%;
+}
+.module-view .empty b { display: block; font-size: 14px; font-weight: 600; color: #4A5A55; margin-bottom: 2px; }
+.module-view .empty i { font-style: normal; font-size: 12.5px; color: #8D9B96; }
+
+/* ---------- 5.5 页内提示条：浅底 + 左侧色条（只作用于系统内部） ---------- */
+.module-view .hint {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #5C6B66;
+  background: #F7FAF8;
+  border-left: 3px solid var(--m3, #C6E0D5);
+  border-radius: 0 8px 8px 0;
+  padding: 9px 12px;
+  margin-top: 12px;
+}
+.module-view .hint b { color: var(--m1, var(--primary-dark)); }
+
+/* ---------- 5.6 标签胶囊：字距放宽，小字更清楚 ---------- */
+.module-view .tag {
+  font-size: 11.5px;
+  letter-spacing: .01em;
+  padding: 3px 9px;
+}
+
+/* ---------- 5.7 窄屏适配 ---------- */
+@media (max-width: 560px) {
+  .mod-head { padding: 10px 12px; gap: 6px; border-radius: 10px; }
+  .mod-head-title { font-size: 16px; }
+  .mod-head-desc {
+    padding-left: 0;
+    border-left: none;
+    flex-basis: 100%;
+    font-size: 12px;
+  }
+  .table thead th { font-size: 11.5px; }
+  .table tbody td { font-size: 13px; }
+  .module-view .empty { padding: 26px 14px; }
+}
+
+/* ---------- 5.8 深色主题 ---------- */
+html[data-theme="dark"] .table thead th { background: rgba(255,255,255,.05); color: #C6D3CE; border-bottom-color: rgba(255,255,255,.10); }
+html[data-theme="dark"] .table tbody td { color: #E3EAE7; }
+html[data-theme="dark"] .table tbody tr:hover > td { background: rgba(255,255,255,.05); }
+html[data-theme="dark"] .module-view .hint { background: rgba(255,255,255,.05); color: #C6D3CE; }
+html[data-theme="dark"] .module-view .empty { color: #A9B7B2; }
+html[data-theme="dark"] .module-view .empty::before { border-color: rgba(255,255,255,.22); }
+html[data-theme="dark"] .module-view .empty b { color: #DCE5E1; }
+html[data-theme="dark"] .mod-head-desc { color: #C6D3CE; }

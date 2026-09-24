@@ -464,7 +464,7 @@
       var list = filter();
       Util.$("recCount").textContent = list.length + " 条";
       if (!list.length) {
-        listBox.innerHTML = '<div class="empty">暂无记录，请先登记。</div>';
+        listBox.innerHTML = '<div class="empty"><b>还没有记录</b><i>先去登记一笔出入库</i></div>';
         selected = {};
         updateBulkBar();
         return;

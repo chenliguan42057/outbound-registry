@@ -218,7 +218,7 @@
     var keys = Object.keys(catMap || {});
     var total = keys.reduce(function (s, k) { return s + catMap[k]; }, 0);
     if (!total) {
-      el.innerHTML = '<div class="empty">暂无库存数据</div>';
+      el.innerHTML = '<div class="empty"><b>还没有库存数据</b><i>先到「入库管理」登记一笔入库</i></div>';
       return;
     }
     var R = 40;
@@ -292,7 +292,7 @@
     if (!el) return;
     var arr = (low || []).slice(0, 8);
     if (!arr.length) {
-      el.innerHTML = '<div class="empty">暂无低库存货品</div>';
+      el.innerHTML = '<div class="empty"><b>没有低库存货品</b><i>全部货品都在 95 件以上</i></div>';
       return;
     }
     var max = arr[arr.length - 1].stock || 1;
@@ -314,7 +314,7 @@
     if (!el) return;
     var arr = (recent || []).slice(0, 10);
     if (!arr.length) {
-      el.innerHTML = '<div class="empty">暂无活动记录</div>';
+      el.innerHTML = '<div class="empty"><b>还没有出入库活动</b><i>有登记后这里会自动出现</i></div>';
       return;
     }
     var html = '<div class="timeline">' + arr.map(function (r, i) {
@@ -352,7 +352,7 @@
         '<span class="rank-val danger-text">库存 ' + s.stock + '</span>' +
       '</div>';
     }).join("");
-    Util.$("dashLow").innerHTML = html || '<div class="empty">暂无低库存货品</div>';
+    Util.$("dashLow").innerHTML = html || '<div class="empty"><b>没有低库存货品</b><i>全部货品都在 95 件以上</i></div>';
   }
 
   function renderRecent() {
@@ -368,7 +368,7 @@
         '<div class="recent-time">' + Util.esc(String(r.time || "").replace("T", " ")) + '</div>' +
       '</div>';
     }).join("");
-    Util.$("dashRecent").innerHTML = html || '<div class="empty">暂无出库记录</div>';
+    Util.$("dashRecent").innerHTML = html || '<div class="empty"><b>还没有出库记录</b><i>去落地页登记一笔出库</i></div>';
   }
 
   /* ================= B8 业绩榜 + 高频货品（本月） ================= */
@@ -390,7 +390,7 @@
     });
     var arr = Object.keys(stat).map(function (k) { return { picker: k, count: stat[k].count, qty: stat[k].qty }; })
       .sort(function (a, b) { return b.qty - a.qty || b.count - a.count; }).slice(0, 6);
-    if (!arr.length) { el.innerHTML = '<div class="empty">本月暂无出库登记</div>'; return; }
+    if (!arr.length) { el.innerHTML = '<div class="empty"><b>本月还没有出库登记</b><i>换个时间区间看看</i></div>'; return; }
     var max = arr[0].qty || 1;
     el.innerHTML = arr.map(function (s, i) {
       var pct = Math.max(2, Math.round(s.qty / max * 100));
@@ -419,7 +419,7 @@
     });
     var arr = Object.keys(stat).map(function (k) { return { name: k, qty: stat[k] }; })
       .sort(function (a, b) { return b.qty - a.qty; }).slice(0, 6);
-    if (!arr.length) { el.innerHTML = '<div class="empty">本月暂无出入记录</div>'; return; }
+    if (!arr.length) { el.innerHTML = '<div class="empty"><b>本月还没有出入库记录</b><i>换个时间区间看看</i></div>'; return; }
     var max = arr[0].qty || 1;
     el.innerHTML = arr.map(function (s, i) {
       var pct = Math.max(2, Math.round(s.qty / max * 100));

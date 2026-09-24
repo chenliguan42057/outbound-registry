@@ -207,7 +207,7 @@
         '<span class="rank-val">' + s.stock + '</span>' +
       '</div>';
     }).join("");
-    container.querySelector("#reportRank").innerHTML = html || '<div class="empty">暂无数据</div>';
+    container.querySelector("#reportRank").innerHTML = html || '<div class="empty"><b>还没有数据</b><i>先登记出入库，报表会自动汇总</i></div>';
   }
 
   function renderTrend(days) {
@@ -241,7 +241,7 @@
     if (src) label += " · " + srcLbl(src);
     container.querySelector("#reportRangeLabel").textContent = label + " · " + list.length + " 条";
     if (!list.length) {
-      container.querySelector("#reportTable").innerHTML = '<div class="empty">该区间暂无出入库记录</div>';
+      container.querySelector("#reportTable").innerHTML = '<div class="empty"><b>这个时间区间没有记录</b><i>换一个区间再试试</i></div>';
       return;
     }
     var rows = list.map(function (r) {

@@ -140,7 +140,7 @@
     Util.$("borrowCount").textContent = ongoing.length + " 单";
     if (!shown.length) {
       listBox.innerHTML = '<div class="empty">' +
-        (activeTab === "done" ? "暂无已结清的借出记录。" : "暂无借出中的记录，点「添加借出」从出库记录转入。") + '</div>';
+        (activeTab === "done" ? "<b>还没有已结清的借出</b><i>归还完成后会归档到这里</i>" : "<b>当前没有借出中的记录</b><i>点上方「添加借出」，从出库记录转入</i>") + '</div>';
       return;
     }
     var html = '<div class="table-wrap"><table class="table"><thead><tr>' +

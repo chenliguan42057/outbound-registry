@@ -114,7 +114,7 @@
       }
     }
     if (!rows.length) {
-      tableBox.innerHTML = '<div class="empty">未找到匹配货品</div>';
+      tableBox.innerHTML = '<div class="empty"><b>没找到匹配的货品</b><i>换个关键词，或点上方「＋ 新增货品」</i></div>';
       return;
     }
     var html = '<div class="table-wrap"><table class="table stock-table"><thead><tr>' +
@@ -167,7 +167,7 @@
     if (!rankBox) return;
     var summary = Stock.summarize();
     if (!summary.length) {
-      rankBox.innerHTML = '<div class="empty">暂无数据</div>';
+      rankBox.innerHTML = '<div class="empty"><b>还没有库存数据</b><i>先登记一笔入库，这里就会有排名</i></div>';
       return;
     }
     var arr = summary.slice().sort(rankCompare);
@@ -274,7 +274,7 @@
           var remain = mBody.querySelectorAll(".del-pick-row").length;
           if (!remain) {
             var wrap = mBody.querySelector("div[style*='max-height:46vh']");
-            if (wrap) wrap.innerHTML = '<div class="empty">已全部删除，暂无货品</div>';
+            if (wrap) wrap.innerHTML = '<div class="empty"><b>货品已全部删除</b><i>点上方「＋ 新增货品」重新建立</i></div>';
           }
         }, function () {
           // 用户确认删除、云端保存进行中 → 锁住按钮防连点（弱网下不再叠出多个删除请求）

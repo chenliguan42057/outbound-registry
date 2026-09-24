@@ -84,7 +84,7 @@
     Util.$("rmCount").textContent = list.length + " 条";
     var box = Util.$("rmListBox");
     if (!list.length) {
-      box.innerHTML = '<div class="empty">暂无记录，请先登记。</div>';
+      box.innerHTML = '<div class="empty"><b>还没有可提醒的记录</b><i>先去登记一笔出入库</i></div>';
       updatePicked();
       return;
     }

@@ -16,31 +16,42 @@
   var Config = window.App.Config;
 
   /* 各板块「调调」编号（0-11，与 src/css/modules.css 的 --m1/--m2/--m3 一套一套对应）
-     与选品面板同一低饱和色族，保证全站一个家族的语言。 */
+     与选品面板同一低饱和色族，保证全站一个家族的语言。
+     desc = 板块页头的一句话说明（渲染在模块内容区顶部，12 个板块统一，见 mount()） */
   var NAV_ITEMS = [
-    { id: "stock", icon: "stock", label: "库存查询", tone: 1 },
-    { id: "dashboard", icon: "report", label: "仪表盘", tone: 5 },
-    { id: "in", icon: "in", label: "入库管理", tone: 0 },
-    { id: "pickups", icon: "box", label: "待取货", tone: 3 },
-    { id: "out-records", icon: "records", label: "出库记录", tone: 2 },
-    { id: "in-records", icon: "records", label: "入库记录", tone: 7 },
-    { id: "borrow", icon: "box", label: "先借后还", tone: 9 },
-    { id: "transfer", icon: "swap", label: "调拨", tone: 6 },
-    { id: "memos", icon: "edit", label: "备忘录", tone: 8 },
-    { id: "push", icon: "bell", label: "推送信息", tone: 4 },
-    { id: "trash", icon: "box", label: "回收站", tone: 10 },
-    { id: "ai", icon: "box", label: "AI 助手", tone: 11 }
+    { id: "stock", icon: "stock", label: "库存查询", tone: 1, desc: "全部货品的实时库存，低于 95 件自动标红提醒" },
+    { id: "dashboard", icon: "report", label: "仪表盘", tone: 5, desc: "出入库总览、库存分布、低库存分布与业绩榜" },
+    { id: "in", icon: "in", label: "入库管理", tone: 0, desc: "登记补货入库，经办人与入库来源可追溯" },
+    { id: "pickups", icon: "box", label: "待取货", tone: 3, desc: "已提单但还没出库的货品，出库后自动核销" },
+    { id: "out-records", icon: "records", label: "出库记录", tone: 2, desc: "全部出库登记，可查流水、导出 CSV 与删除" },
+    { id: "in-records", icon: "records", label: "入库记录", tone: 7, desc: "全部入库登记，可查流水与导出" },
+    { id: "borrow", icon: "box", label: "先借后还", tone: 9, desc: "借出后跟踪归还进度，未还差额一眼看清" },
+    { id: "transfer", icon: "swap", label: "调拨", tone: 6, desc: "两仓之间转移货品，调出/调入库存自动同步" },
+    { id: "memos", icon: "edit", label: "备忘录", tone: 8, desc: "待做事项与到点提醒，每一项可以单独设时间" },
+    { id: "push", icon: "bell", label: "推送信息", tone: 4, desc: "钉钉群推送内容预览，确认发送前先看一眼" },
+    { id: "trash", icon: "box", label: "回收站", tone: 10, desc: "误删的记录暂存在这里，可以还原" },
+    { id: "ai", icon: "box", label: "AI 助手", tone: 11, desc: "用大白话问库存、查记录、算数据" }
   ];
+
+  /* 非侧栏菜单模块（顶栏按钮/提醒路由直达）的页头说明 */
+  var EXTRA_INFO = {
+    sync: { label: "云端同步", tone: 1, desc: "与云端同步数据，可全量重建、诊断同步状态" },
+    "in-remind": { label: "入库提醒", tone: 0, desc: "勾选入库订单，发送到钉钉群提醒" },
+    "out-remind": { label: "出库提醒", tone: 2, desc: "勾选出库订单，发送到钉钉群提醒" }
+  };
+
+  /** 模块 id → 导航项（含非菜单模块兜底） */
+  function navItemOf(id) {
+    for (var i = 0; i < NAV_ITEMS.length; i++) {
+      if (NAV_ITEMS[i].id === id) return NAV_ITEMS[i];
+    }
+    return EXTRA_INFO[id] || null;
+  }
 
   /** 模块 id → 色调编号（含不在侧栏菜单里的 sync/提醒等） */
   function toneOfModule(id) {
-    for (var i = 0; i < NAV_ITEMS.length; i++) {
-      if (NAV_ITEMS[i].id === id) return NAV_ITEMS[i].tone;
-    }
-    if (id === "sync") return 1;
-    if (id === "in-remind") return 0;
-    if (id === "out-remind") return 2;
-    return 1;
+    var it = navItemOf(id);
+    return it ? it.tone : 1;
   }
 
   /* 模块 id → 视图注册名 */
@@ -323,10 +334,22 @@
     });
     closeDrawer();
     var content = Util.$("winContent");
+    var tone = toneOfModule(moduleName);
+    var info = navItemOf(moduleName);
     var viewEl = document.createElement("div");
     viewEl.className = "module-view";
-    viewEl.setAttribute("data-tone", toneOfModule(moduleName));   // 板块调调，接管页面内配色
+    viewEl.setAttribute("data-tone", tone);   // 板块调调，接管页面内配色
     content.innerHTML = "";
+    // 板块页头（板块名 + 一句话说明）：挂在 viewEl 之前的兄弟节点，
+    // 这样 view.render() 里的 el.innerHTML 不会把它冲掉。
+    if (info) {
+      var headEl = document.createElement("div");
+      headEl.className = "mod-head";
+      headEl.setAttribute("data-tone", tone);
+      headEl.innerHTML = '<span class="mod-head-title">' + Util.esc(info.label) + '</span>' +
+        (info.desc ? '<span class="mod-head-desc">' + Util.esc(info.desc) + '</span>' : "");
+      content.appendChild(headEl);
+    }
     content.appendChild(viewEl);
     view.render(viewEl);
     updateStatusBar();

@@ -399,7 +399,7 @@
     Util.$("pkCount").textContent = shown.length + " 条" + (activeTab === "todo" && overCount ? "（超时 " + overCount + "）" : "");
     if (!shown.length) {
       listBox.innerHTML = '<div class="empty">' +
-        (activeTab === "shipped" ? "暂无已出库记录。" : "暂无待取货登记，请先在上方登记。") +
+        (activeTab === "shipped" ? "<b>还没有已出库的待取货</b><i>出库后会出现在这里</i>" : "<b>还没有待取货登记</b><i>在上方表单登记一单即可</i>") +
         '</div>';
       return;
     }

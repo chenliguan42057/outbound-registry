@@ -210,7 +210,7 @@
     Util.$("memoCount").textContent = "未完成 " + todo.length + " 项";
     if (!shown.length) {
       listBox.innerHTML = '<div class="empty">' +
-        (activeTab === "done" ? "暂无已完成事项。" : "暂无待做事项，请先在上方添加。") +
+        (activeTab === "done" ? "<b>还没有已完成的事项</b><i>完成并归档后会出现在这里</i>" : "<b>还没有待做事项</b><i>在上方「添加待做事项」里写一条</i>") +
         '</div>';
       return;
     }
