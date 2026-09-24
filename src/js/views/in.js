@@ -74,9 +74,11 @@
     // 经办人默认带出上次值
     try { var _lh = localStorage.getItem("outbound_in_last_handler"); if (_lh) Util.$("inHandler").value = _lh; } catch (e) {}
 
+    // 2026-09-24：与出库统一为「按产品名分类多选 → 最后统一步填数量」（bulkPick）
     picker = new UI.ProductPicker({
       showInStock: true,
       showStock: false,
+      bulkPick: true,
       placeholder: "搜索并选择货品（可多选，每个单独填数量）"
     });
     picker.attach(Util.$("inProductPicker"));

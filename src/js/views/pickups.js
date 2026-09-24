@@ -122,7 +122,8 @@
     };
     listBox = Util.$("pkListBox");
 
-    picker = new UI.ProductPicker({ showStock: true });
+    // 2026-09-24：与出库统一为「按产品名分类多选 → 最后统一步填数量」（bulkPick）
+    picker = new UI.ProductPicker({ showStock: true, bulkPick: true });
     picker.attach(Util.$("pkProductPicker"));
 
     Util.$("pkReset").addEventListener("click", resetForm);

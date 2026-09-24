@@ -69,7 +69,8 @@
         '<div id="tfHistoryList"></div>' +
       '</div>';
 
-    picker = new UI.ProductPicker({ placeholder: "搜索并选择要调拨的货品（可多选，逐项填数量）" });
+    // 2026-09-24：与出库统一为「按产品名分类多选 → 最后统一步填数量」（bulkPick）
+    picker = new UI.ProductPicker({ bulkPick: true, placeholder: "搜索并选择要调拨的货品（可多选，逐项填数量）" });
     picker.attach(Util.$("tfPicker"));
 
     Util.$("tfReset").addEventListener("click", function () {
