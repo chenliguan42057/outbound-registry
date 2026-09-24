@@ -797,10 +797,23 @@
       });
   };
 
-  /** 校验已选货品的数量填写情况，返回问题描述数组（供表单做字段级提示） */
+  /** 校验已选货品的数量填写情况，返回问题描述数组（供表单做字段级提示）
+      2026-09-25 加固：增加「同一货品重复出现」拦截。
+      背景：同一次提交里同一货品出现两行时，两行会各自扣减库存、各自出现在明细与台账里，
+      人工核对极易看漏（看起来只领了一次）。数量应合并为一行填写。 */
   ProductPicker.prototype.validateItems = function () {
     var problems = [];
-    this.selected.forEach(function (s) {
+    var seen = {};
+    this.selected.forEach(function (s, i) {
+      var key = String(s.name || "").trim();
+      if (key && Object.prototype.hasOwnProperty.call(seen, key)) {
+        if (seen[key] === -1) {
+          problems.push(key + " 重复出现，请合并为一行填写数量");
+          seen[key] = -2;   // 只报一次，避免三条以上重复时重复刷屏
+        }
+      } else if (key) {
+        seen[key] = i;
+      }
       var n = s.qty === "" ? 0 : Number(s.qty);
       if (!isFinite(n) || n === 0) problems.push(s.name + " 未填数量");
       else if (Math.floor(n) !== n) problems.push(s.name + " 数量需为整数（支/盒/袋按整件计）");

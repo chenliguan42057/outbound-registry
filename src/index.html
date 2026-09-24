@@ -209,11 +209,13 @@
        js/ui/dingtalk.js、js/views/report.js、js/ai/* 原为 fetchpriority="low"；
        sound.js 已于 2026-09-06 按主理人要求移除。 -->
   <script>
-    /* 首屏等待提示（2026-09-23 新增）：弱网下二维码扫开后会白等好几秒，用户容易误判「没扫上」反复重扫。
-       这里只在「可见骨架屏持续存在超过 8 秒」时给出提示 + 重试按钮；应用渲染完成即自动移除，不残留、不遮挡。
+    /* 首屏等待与失败兜底（2026-09-23 新增等待提示；2026-09-25 增加「加载失败」兜底）
+       覆盖两种"看不到界面"的情形，都不遮挡、不残留：
+         A. 慢：可见骨架屏持续超过 8 秒 → 顶部胶囊提示 + 点此重试；
+         B. 坏：核心脚本（app.bundle.js）本身加载失败或执行报错 → 立刻全屏兜底卡片 + 重试/清理缓存。
        可见性用 offsetParent 判断：被 display:none 隐藏的骨架屏（如未激活的 #view-app）不算「还在加载」。 */
     (function () {
-      var el = null, tick = null;
+      var el = null, tick = null, failed = false;
       function booting() {
         var ls = document.querySelector('.landing-skeleton');
         var as = document.querySelector('.app-skeleton');
@@ -224,8 +226,61 @@
         if (el && el.parentNode) el.parentNode.removeChild(el);
         el = null;
       }
+      /* B. 加载失败兜底：脚本 onerror / 未捕获异常 / 启动超时，任一命中即展示兜底页 */
+      function failFast(reason) {
+        if (failed || !booting()) return;
+        failed = true;
+        drop();
+        var box = document.createElement('div');
+        box.id = 'boot-fail';
+        box.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;' +
+          'justify-content:center;padding:20px;box-sizing:border-box;background:linear-gradient(160deg,#F1F8F4,#FBF9F3,#F0F6F5)';
+        box.innerHTML = '<div style="max-width:420px;width:100%;background:#fff;border-radius:18px;' +
+          'padding:26px 22px;box-shadow:0 10px 30px rgba(60,72,69,.14);font:14px/1.75 -apple-system,' +
+          'BlinkMacSystemFont,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;color:#3C4845;text-align:center">' +
+          '<div style="font-size:34px;line-height:1">📡</div>' +
+          '<div style="font-size:17px;font-weight:700;margin:10px 0 6px">页面没能加载出来</div>' +
+          '<div style="color:#6B7A75;font-size:13px">' + (reason || '可能是网络不稳或缓存过期') +
+          '。点下面按钮重试即可，你的数据都安全地存在云端和本机，不会因为这一次失败丢掉。</div>' +
+          '<button id="boot-fail-retry" style="margin-top:18px;width:100%;border:0;border-radius:999px;' +
+          'padding:12px 16px;background:linear-gradient(120deg,#A79ED0,#7FB3A5);color:#fff;font-weight:700;' +
+          'font-size:15px;cursor:pointer">重新加载</button>' +
+          '<button id="boot-fail-clear" style="margin-top:9px;width:100%;border:1px solid #D8E5DF;' +
+          'border-radius:999px;padding:11px 16px;background:#fff;color:#4A5A55;font-weight:600;' +
+          'font-size:14px;cursor:pointer">清理缓存后重新加载</button></div>';
+        document.body.appendChild(box);
+        var r = document.getElementById('boot-fail-retry');
+        if (r) r.onclick = function () { location.reload(); };
+        var c = document.getElementById('boot-fail-clear');
+        if (c) c.onclick = function () { clearAndReload(c); };
+      }
+      /* 清理缓存：优先让 Service Worker 清掉自身缓存，再带 ?_r= 时间戳强刷，绕过边缘缓存 */
+      function clearAndReload(btn) {
+        if (btn) { btn.disabled = true; btn.textContent = '正在清理…'; }
+        var go = function () { location.replace(location.pathname + '?_r=' + Date.now()); };
+        try {
+          if (window.caches && caches.keys) {
+            caches.keys().then(function (ks) {
+              return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+            }).then(go).catch(go);
+            return;
+          }
+        } catch (e) {}
+        setTimeout(go, 150);
+      }
+      window.__bootFail = failFast;
+      window.addEventListener('error', function (ev) {
+        var t = ev && ev.target;
+        if (t && t.tagName === 'SCRIPT') { failFast('核心脚本没能下载完成'); return; }
+        if (ev && ev.message) failFast('页面脚本出现异常');
+      }, true);
+      window.addEventListener('unhandledrejection', function () { failFast('页面脚本出现异常'); });
       setTimeout(function () {
-        if (!booting()) return;
+        if (booting()) failFast('加载超时（超过 15 秒）');
+      }, 15000);
+      /* A. 慢：8 秒仍在骨架屏 → 胶囊提示 + 重试 */
+      setTimeout(function () {
+        if (failed || !booting()) return;
         var t0 = Date.now();
         el = document.createElement('div');
         el.id = 'boot-hint';
