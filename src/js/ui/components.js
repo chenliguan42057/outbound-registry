@@ -528,13 +528,15 @@
       body.innerHTML = '<div class="bp-tip">已选 ' + this.draft.length + ' 项，逐项确认数量后点「完成」。</div>' +
         this.draft.map(function (it, i) {
           return '<div class="bp-row" data-c="' + pickGroupColorIndex(pickGroupOf(it.name)) + '">' +
-              '<span class="bp-row-name">' + Util.esc(it.name) + '</span>' +
+              '<div class="bp-row-head">' +
+                '<span class="bp-row-name">' + Util.esc(it.name) + '</span>' +
+                '<span class="bp-rx" data-i="' + i + '" role="button" aria-label="移除">✕</span>' +
+              '</div>' +
               '<div class="bp-step">' +
                 '<button type="button" class="bp-qb" data-act="dec" data-i="' + i + '" aria-label="减少">−</button>' +
-                '<input type="number" step="1" inputmode="numeric" enterkeyhint="done" class="bp-q" data-i="' + i + '" value="' + Util.esc(it.qty) + '" aria-label="数量" />' +
+                '<input type="number" step="1" inputmode="numeric" enterkeyhint="done" class="bp-q" data-i="' + i + '" value="' + Util.esc(it.qty) + '" aria-label="' + Util.esc(it.name) + ' 数量" />' +
                 '<button type="button" class="bp-qb" data-act="inc" data-i="' + i + '" aria-label="增加">＋</button>' +
               '</div>' +
-              '<span class="bp-rx" data-i="' + i + '" role="button" aria-label="移除">✕</span>' +
             '</div>';
         }).join("");
       foot.innerHTML =
