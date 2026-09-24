@@ -31,11 +31,14 @@
       el.innerHTML =
         '<div class="card">' +
           '<h2>' + title + ' <span class="badge" id="recCount">0 条</span></h2>' +
-          '<div class="actions rec-actions">' +
+          '<div class="tool-row rec-actions">' +
+            '<span class="tool-row-lead">' + (isIn ? "入库工具" : "出库工具") + '</span>' +
             '<button type="button" class="btn ghost sm" id="recExport">&#11015; 导出 CSV</button>' +
             '<button type="button" class="btn ghost sm" id="recSync">&#128260; 立即同步</button>' +
+            '<span class="tool-spacer"></span>' +
             '<button type="button" class="btn ghost sm" id="recRemind">&#128276; 提醒推送</button>' +
           '</div>' +
+          '<div class="stat-cards" id="recStats"></div>' +
           // 批量操作条：默认隐藏，勾选任意一行后出现。只确认一次，避免 20 单逐条点确认
           '<div class="bulk-bar" id="recBulkBar" style="display:none;">' +
             '<span class="bulk-count" id="recBulkCount">已选 0 条</span>' +
@@ -44,31 +47,46 @@
             '<button type="button" class="btn danger sm" id="recBulkDel">批量删除</button>' +
             '<button type="button" class="btn ghost sm" id="recBulkCancel">取消选择</button>' +
           '</div>' +
-          '<div class="rec-filters">' +
-            (isIn
-              ? '<select id="recSource" class="search" title="按来源筛选"></select>'
-              : '<select id="recSource" class="search" title="按来源筛选"><option value="">全部（普通出库+调拨）</option><option value="' + Records.InSource.TRANSFER_OUT + '">⇄ 调拨出库</option><option value="' + SRC_NORMAL_OUT + '">↷ 普通出库（不含调拨）</option></select>') +
-            '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "部门/对方仓" : "部门/客户") + '" autocomplete="off" list="recDeptList" />' +
-            '<datalist id="recDeptList"></datalist>' +
-            '<input type="text" id="recPicker" class="search" placeholder="' + (isIn ? "经办人" : "领取人") + '" autocomplete="off" />' +
+          '<div class="rec-filters filter-panel">' +
+            '<div class="filter-item">' +
+              '<label>来源</label>' +
+              (isIn
+                ? '<select id="recSource" class="search" title="按来源筛选"></select>'
+                : '<select id="recSource" class="search" title="按来源筛选"><option value="">全部（普通出库+调拨）</option><option value="' + Records.InSource.TRANSFER_OUT + '">⇄ 调拨出库</option><option value="' + SRC_NORMAL_OUT + '">↷ 普通出库（不含调拨）</option></select>') +
+            '</div>' +
+            '<div class="filter-item">' +
+              '<label>' + (isIn ? "部门 / 对方仓" : "部门 / 客户") + '</label>' +
+              '<input type="text" id="recDept" class="search" placeholder="' + (isIn ? "如：细胞制备组" : "如：时空仓") + '" autocomplete="off" list="recDeptList" />' +
+              '<datalist id="recDeptList"></datalist>' +
+            '</div>' +
+            '<div class="filter-item">' +
+              '<label>' + (isIn ? "经办人" : "领取人") + '</label>' +
+              '<input type="text" id="recPicker" class="search" placeholder="' + (isIn ? "输入姓名筛选" : "输入姓名筛选") + '" autocomplete="off" />' +
+            '</div>' +
             (!isIn
-              ? '<select id="recStatus" class="search" title="按提单状态筛选"><option value="">全部状态</option><option value="pending">● 未提单</option><option value="submitted">● 已提单</option></select>'
+              ? '<div class="filter-item"><label>提单状态</label><select id="recStatus" class="search" title="按提单状态筛选"><option value="">全部状态</option><option value="pending">● 未提单</option><option value="submitted">● 已提单</option></select></div>'
               : '') +
             // 货品搜索（2026-09-13）：按货品名称模糊筛记录，命中该记录任意一个货品即保留
-            '<div class="rec-goods">' +
-              '<span class="rec-goods-ico">🔍</span>' +
-              '<input type="text" id="recGoods" class="search" placeholder="搜索货品名称（如：精粹水）" autocomplete="off" list="recGoodsList" />' +
-              '<datalist id="recGoodsList"></datalist>' +
-              '<button type="button" id="recGoodsClear" class="rec-goods-x" title="清空货品搜索" style="display:none;">✕</button>' +
+            '<div class="filter-item">' +
+              '<label>货品 <span class="opt">选填</span></label>' +
+              '<div class="rec-goods">' +
+                '<span class="rec-goods-ico">🔍</span>' +
+                '<input type="text" id="recGoods" class="search" placeholder="如：精粹水" autocomplete="off" list="recGoodsList" />' +
+                '<datalist id="recGoodsList"></datalist>' +
+                '<button type="button" id="recGoodsClear" class="rec-goods-x" title="清空货品搜索" style="display:none;">✕</button>' +
+              '</div>' +
             '</div>' +
             // 日期区间：原生 date 控件旁边紧贴「今天 / ✕ 清空」两个快捷键
             // （原生日期弹窗是浏览器自己画的，无法在里面塞按钮，所以放在控件旁边）
-            '<div class="rec-daterange">' +
-              '<input type="date" id="recFrom" class="search" title="开始日期" />' +
-              '<span class="rec-dash">~</span>' +
-              '<input type="date" id="recTo" class="search" title="结束日期" />' +
-              '<button type="button" id="recToday" class="btn ghost sm" title="把日期筛选设为今天">今天</button>' +
-              '<button type="button" id="recDateClear" class="btn ghost sm" title="清空开始/结束日期筛选">✕ 清空</button>' +
+            '<div class="filter-item wide">' +
+              '<label>日期区间 <span class="opt">选填</span></label>' +
+              '<div class="rec-daterange">' +
+                '<input type="date" id="recFrom" class="search" title="开始日期" />' +
+                '<span class="rec-dash">~</span>' +
+                '<input type="date" id="recTo" class="search" title="结束日期" />' +
+                '<button type="button" id="recToday" class="btn ghost sm" title="把日期筛选设为今天">今天</button>' +
+                '<button type="button" id="recDateClear" class="btn ghost sm" title="清空开始/结束日期筛选">✕ 清空</button>' +
+              '</div>' +
             '</div>' +
           '</div>' +
           '<div id="recListBox"></div>' +
@@ -463,6 +481,55 @@
       if (glEl) glEl.innerHTML = goodsListOptions();
       var list = filter();
       Util.$("recCount").textContent = list.length + " 条";
+      // 统计数字卡（第 12 轮）：累计单数 / 本月 / 累计件数 / 未提单 / 当前筛选结果
+      var statsEl = Util.$("recStats");
+      if (statsEl) {
+        var allRec = State.list.filter(function (r) {
+          var t = r.type || "out";
+          if (isIn ? t !== "in" : t === "in") return false;
+          if (r.borrowed === true) return false;   // 与列表口径一致：已转先借后还的不算
+          return true;
+        });
+        var nowD = new Date();
+        var monthN = allRec.filter(function (r) {
+          var d = new Date(String(r.time || "").replace(" ", "T"));
+          return !isNaN(d.getTime()) &&
+            d.getFullYear() === nowD.getFullYear() && d.getMonth() === nowD.getMonth();
+        }).length;
+        var qtyN = allRec.reduce(function (a, r) {
+          return a + (r.items || []).reduce(function (b, it) {
+            return b + Math.abs(Number(it.qty) || 0);
+          }, 0);
+        }, 0);
+        var pendN = isIn ? 0 : allRec.filter(function (r) { return r.status === "pending"; }).length;
+        statsEl.innerHTML =
+          '<div class="stat-card">' +
+            '<span class="stat-num">' + allRec.length + '</span>' +
+            '<span class="stat-label">' + (isIn ? "累计入库单" : "累计出库单") + '</span>' +
+            '<span class="stat-hint">' + (isIn ? "所有入库登记合计" : "所有出库登记合计") + '</span>' +
+          '</div>' +
+          '<div class="stat-card">' +
+            '<span class="stat-num">' + monthN + '</span>' +
+            '<span class="stat-label">本月</span>' +
+            '<span class="stat-hint">本月新登记的单数</span>' +
+          '</div>' +
+          '<div class="stat-card">' +
+            '<span class="stat-num">' + qtyN + '</span>' +
+            '<span class="stat-label">累计件数</span>' +
+            '<span class="stat-hint">所有货品数量合计</span>' +
+          '</div>' +
+          (isIn ? '' :
+            '<div class="stat-card ' + (pendN ? "warn" : "ok") + '">' +
+              '<span class="stat-num">' + pendN + '</span>' +
+              '<span class="stat-label">未提单</span>' +
+              '<span class="stat-hint">' + (pendN ? "还没标记已提单，记得跟进" : "全部都已提单") + '</span>' +
+            '</div>') +
+          '<div class="stat-card">' +
+            '<span class="stat-num">' + list.length + '</span>' +
+            '<span class="stat-label">当前筛选结果</span>' +
+            '<span class="stat-hint">符合上面筛选条件的条数</span>' +
+          '</div>';
+      }
       if (!list.length) {
         listBox.innerHTML = '<div class="empty"><b>还没有记录</b><i>先去登记一笔出入库</i></div>';
         selected = {};

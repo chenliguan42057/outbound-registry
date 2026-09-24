@@ -266,3 +266,134 @@ html[data-theme="dark"] .module-view .empty { color: #A9B7B2; }
 html[data-theme="dark"] .module-view .empty::before { border-color: rgba(255,255,255,.22); }
 html[data-theme="dark"] .module-view .empty b { color: #DCE5E1; }
 html[data-theme="dark"] .mod-head-desc { color: #C6D3CE; }
+
+/* ============================================================
+   六、信息卡 & 工具条 & 筛选面板（2026-09-24 第 12 轮）
+   主理人选的 B 方案：统计数字升级 + 出入库记录板块的工具/筛选区升级。
+   全部复用板块调调变量 --m1/--m2/--m3，自动跟随所在板块。
+   ============================================================ */
+
+/* ---------- 6.1 统计数字卡 ---------- */
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 11px;
+  margin: 4px 0 16px;
+}
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 14px 12px 16px;
+  background: #fff;
+  border: 1px solid var(--m3, #DCE9E3);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(60, 72, 69, .05);
+}
+.stat-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--m1, #6FA08A);
+}
+.stat-num {
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -.01em;
+  color: var(--m1, #6FA08A);
+  font-variant-numeric: tabular-nums;
+}
+.stat-unit { font-size: 12px; font-weight: 500; margin-left: 2px; }
+.stat-label { font-size: 12.5px; font-weight: 500; color: #4A5A55; }
+.stat-hint { font-size: 11.5px; line-height: 1.5; color: #8D9B96; margin-top: 1px; }
+
+/* 预警态（如低库存）：换成暖陶色，不跟板块色混 */
+.stat-card.warn { border-color: #F0D3C4; background: #FFFCFA; }
+.stat-card.warn::before { background: #C2703F; }
+.stat-card.warn .stat-num { color: #B4501F; }
+/* 达标态：薄荷绿 */
+.stat-card.ok::before { background: #5E9A80; }
+.stat-card.ok .stat-num { color: #4E8A70; }
+
+/* ---------- 6.2 工具条：把散落的按钮收成一条 ---------- */
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: #F9FBF8;
+  border: 1px solid #E8F0EC;
+  border-radius: 12px;
+}
+.tool-row-lead {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6E7D78;
+  letter-spacing: .02em;
+  margin-right: 2px;
+}
+.tool-row .tool-spacer { flex: 1 1 auto; }
+.tool-row > .btn { white-space: nowrap; }
+
+/* ---------- 6.3 筛选面板：每个条件都有明确标签 ---------- */
+.filter-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 11px 13px;
+  padding: 14px;
+  margin-bottom: 14px;
+  background: #FBFCFB;
+  border: 1px solid #E8F0EC;
+  border-radius: 12px;
+}
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.filter-item > label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6E7D78;
+  letter-spacing: .02em;
+}
+.filter-item > label .opt {
+  font-weight: 400;
+  color: #9AA8A3;
+}
+.filter-item .search,
+.filter-item select,
+.filter-item > input { width: 100%; box-sizing: border-box; }
+.filter-item .rec-goods,
+.filter-item .rec-daterange { width: 100%; }
+.filter-item .rec-daterange > input[type="date"] { min-width: 0; flex: 1 1 auto; }
+.filter-item.wide { grid-column: 1 / -1; }
+
+/* ---------- 6.4 窄屏 ---------- */
+@media (max-width: 560px) {
+  .stat-cards { grid-template-columns: repeat(2, 1fr); gap: 9px; }
+  .stat-num { font-size: 21px; }
+  .stat-hint { display: none; }
+  .filter-panel { grid-template-columns: 1fr; padding: 12px; }
+  .tool-row { padding: 9px 10px; }
+}
+
+/* ---------- 6.5 深色主题 ---------- */
+html[data-theme="dark"] .stat-card { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.10); }
+html[data-theme="dark"] .stat-label { color: #DCE5E1; }
+html[data-theme="dark"] .stat-hint { color: #93A29D; }
+html[data-theme="dark"] .stat-card.warn { background: rgba(194,112,63,.14); border-color: rgba(194,112,63,.34); }
+html[data-theme="dark"] .stat-card.warn .stat-num { color: #E8A87C; }
+html[data-theme="dark"] .tool-row { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.09); }
+html[data-theme="dark"] .tool-row-lead { color: #A9B7B2; }
+html[data-theme="dark"] .filter-panel { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.09); }
+html[data-theme="dark"] .filter-item > label { color: #A9B7B2; }

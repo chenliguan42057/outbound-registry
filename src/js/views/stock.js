@@ -31,13 +31,15 @@
         '<div class="field">' +
           '<input type="text" id="stockSearch" class="search" placeholder="搜索货品名称…" autocomplete="off" />' +
         '</div>' +
-        '<div class="actions" style="margin:-6px 0 14px">' +
+        '<div class="tool-row" style="margin:-6px 0 12px">' +
+          '<span class="tool-row-lead">货品管理</span>' +
           '<button type="button" class="btn sm" id="stockAddBtn">＋ 新增货品</button>' +
           '<button type="button" class="btn ghost sm" id="stockCatalogBtn">📋 货品目录</button>' +
-          '<button type="button" class="btn ghost sm" id="stockTakeBtn">📊 盘点平账</button> ' +
+          '<button type="button" class="btn ghost sm" id="stockTakeBtn">📊 盘点平账</button>' +
+          '<span class="tool-spacer"></span>' +
           '<button type="button" class="btn ghost sm" id="stockDelBtn" style="color:#c0392b">🗑 删除货品</button>' +
         '</div>' +
-        '<div class="stock-summary" id="stockSummary"></div>' +
+        '<div class="stat-cards" id="stockSummary"></div>' +
         '<div id="stockTableBox"></div>' +
         '<div class="hint" style="margin-top:10px">💡 点行内 <b>📊 流水</b> 按钮，或<b>双击</b>该行，可查看该货品完整出入库流水并导出 CSV。</div>' +
       '</div>' +
@@ -96,9 +98,30 @@
     var summary = Stock.summarize();
     var rows = summary.filter(function (s) { return q === "" || s.name.toLowerCase().includes(q); });
     var lowCount = summary.filter(function (s) { return s.stock < getWarnAt(s.name); }).length;
+    /* 统计数字卡（第 12 轮）：小胶囊 → 大号数字 + 说明，一眼看清规模 */
+    var totalIn = summary.reduce(function (a, s) { return a + (Number(s.inQty) || 0); }, 0);
+    var totalOut = summary.reduce(function (a, s) { return a + (Number(s.outQty) || 0); }, 0);
     Util.$("stockSummary").innerHTML =
-      '<span class="badge">货品总数 ' + summary.length + '</span> ' +
-      '<span class="badge low">低库存 ' + lowCount + ' 项</span>';
+      '<div class="stat-card">' +
+        '<span class="stat-num">' + summary.length + '</span>' +
+        '<span class="stat-label">在册货品</span>' +
+        '<span class="stat-hint">当前系统收录的货品数</span>' +
+      '</div>' +
+      '<div class="stat-card ' + (lowCount ? "warn" : "ok") + '">' +
+        '<span class="stat-num">' + lowCount + '</span>' +
+        '<span class="stat-label">低库存</span>' +
+        '<span class="stat-hint">' + (lowCount ? "低于各自预警线，需要补货" : "全部货品都在预警线以上") + '</span>' +
+      '</div>' +
+      '<div class="stat-card">' +
+        '<span class="stat-num">' + totalIn + '</span>' +
+        '<span class="stat-label">累计入库</span>' +
+        '<span class="stat-hint">历史入库件数合计</span>' +
+      '</div>' +
+      '<div class="stat-card">' +
+        '<span class="stat-num">' + totalOut + '</span>' +
+        '<span class="stat-label">累计出库</span>' +
+        '<span class="stat-hint">历史出库件数合计</span>' +
+      '</div>';
     // 低库存醒目 banner：每个货品显示「剩余/预警线」，不再用统一阈值
     var banner = Util.$("stockLowBanner");
     if (banner) {
