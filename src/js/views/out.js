@@ -39,7 +39,7 @@
 
   function render(container) {
     container.innerHTML =
-      '<div class="card">' +
+      '<div class="card out-form">' +
         '<div class="out-head">' +
           '<h2 class="out-head-title">出库登记</h2>' +
           '<div class="out-confid">仅运用于现场登记 严禁外传</div>' +
