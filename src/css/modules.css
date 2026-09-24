@@ -1,0 +1,138 @@
+/* ============================================================
+   modules.css —— 板块「调调」
+   每个系统板块一套低饱和三色（与选品面板同一色族）：
+     --m1 主色（图标/文字/色条）  --m2 浅底  --m3 浅边
+   承载元素：侧栏菜单项 [data-tone]、模块容器 .module-view[data-tone]
+   编号 0-11 由 src/js/views/app.js 的 NAV_ITEMS[].tone 决定，单一真相源。
+   ============================================================ */
+
+/* ---------- 12 套色卡 ---------- */
+[data-tone="0"]  { --m1:#3F8370; --m2:#EFF7F3; --m3:#C6E0D5; }  /* 薄荷绿 */
+[data-tone="1"]  { --m1:#35738C; --m2:#ECF4F8; --m3:#C2DAE6; }  /* 湖青   */
+[data-tone="2"]  { --m1:#63559E; --m2:#F2F0FA; --m3:#D6D0EC; }  /* 雾紫   */
+[data-tone="3"]  { --m1:#A86A34; --m2:#FBF3EA; --m3:#EBD6BF; }  /* 陶橙   */
+[data-tone="4"]  { --m1:#B0566F; --m2:#FBF0F3; --m3:#EFD1DA; }  /* 藕粉   */
+[data-tone="5"]  { --m1:#3F6E9E; --m2:#EEF3F9; --m3:#CBDCEC; }  /* 靛蓝   */
+[data-tone="6"]  { --m1:#8A6D31; --m2:#F8F3E8; --m3:#E5D9BE; }  /* 米棕   */
+[data-tone="7"]  { --m1:#5F7D31; --m2:#F4F8EC; --m3:#D9E4C2; }  /* 橄榄   */
+[data-tone="8"]  { --m1:#A04760; --m2:#FAF0F2; --m3:#EACDD4; }  /* 玫红   */
+[data-tone="9"]  { --m1:#7E6039; --m2:#F8F3EC; --m3:#E3D5C0; }  /* 咖棕   */
+[data-tone="10"] { --m1:#5E7A86; --m2:#EEF3F5; --m3:#CFDDE2; }  /* 灰蓝   */
+[data-tone="11"] { --m1:#8B7BA8; --m2:#F4F1F9; --m3:#DCD4E8; }  /* 藕荷   */
+
+/* ---------- 一、侧栏菜单：每个板块一个色身份 ---------- */
+.win-sidebar-item[data-tone] { position: relative; }
+
+.win-sidebar-item[data-tone] .win-sidebar-item-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  align-items: center;
+  justify-content: center;
+  background: var(--m2);
+  color: var(--m1);
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+}
+.win-sidebar-item[data-tone] .win-sidebar-item-icon svg { display: block; }
+
+.win-sidebar-item[data-tone]:hover {
+  background: var(--m2);
+  color: var(--m1);
+}
+.win-sidebar-item[data-tone]:hover .win-sidebar-item-icon { box-shadow: inset 0 0 0 1px var(--m3); }
+
+.win-sidebar-item[data-tone].active {
+  background: var(--m2);
+  color: var(--m1);
+  border-left-color: var(--m1);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--m3), 0 4px 14px rgba(60, 72, 69, .08);
+}
+.win-sidebar-item[data-tone].active .win-sidebar-item-icon {
+  background: var(--m1);
+  color: #fff;
+}
+
+/* ---------- 二、模块内容区：整套接管为板块调调 ---------- */
+.module-view[data-tone] {
+  min-height: 100%;
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--m2) 0, rgba(255, 255, 255, 0) 170px);
+}
+
+/* 卡片标题：左侧 4px 板块色条 */
+.module-view[data-tone] .card h2 {
+  position: relative;
+  padding-left: 13px;
+}
+.module-view[data-tone] .card h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--m1);
+}
+/* 卡片标题里的胶囊/计数徽标跟着板块色走 */
+.module-view[data-tone] .card h2 .tag {
+  color: var(--m1);
+  background: var(--m2);
+}
+
+/* 仪表盘/报表的小图表卡（h3 标题）同样上色 */
+.module-view[data-tone] .chart-card h3 {
+  position: relative;
+  padding-left: 13px;
+}
+.module-view[data-tone] .chart-card h3::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 15px;
+  border-radius: 2px;
+  background: var(--m1);
+}
+
+/* 卡片本体：顶部一道极细的板块色发丝线，串起整个板块 */
+.module-view[data-tone] > .card,
+.module-view[data-tone] > .chart-card {
+  border-top: 2px solid var(--m3);
+}
+
+/* 卡片内的主按钮跟随板块色（次要按钮不动，保持层级） */
+.module-view[data-tone] .card .btn.primary {
+  background: var(--m1);
+  border-color: var(--m1);
+  box-shadow: 0 4px 14px rgba(60, 72, 69, .12);
+}
+.module-view[data-tone] .card .btn.primary:hover { filter: brightness(1.06); }
+
+/* ---------- 三、深色主题适配（浅底换成半透明同色） ---------- */
+html[data-theme="dark"] [data-tone="0"]  { --m2:rgba(63,131,112,.20); --m3:rgba(63,131,112,.38); }
+html[data-theme="dark"] [data-tone="1"]  { --m2:rgba(53,115,140,.20); --m3:rgba(53,115,140,.38); }
+html[data-theme="dark"] [data-tone="2"]  { --m2:rgba(99,85,158,.22);  --m3:rgba(99,85,158,.40); }
+html[data-theme="dark"] [data-tone="3"]  { --m2:rgba(168,106,52,.20); --m3:rgba(168,106,52,.38); }
+html[data-theme="dark"] [data-tone="4"]  { --m2:rgba(176,86,111,.20); --m3:rgba(176,86,111,.38); }
+html[data-theme="dark"] [data-tone="5"]  { --m2:rgba(63,110,158,.20); --m3:rgba(63,110,158,.38); }
+html[data-theme="dark"] [data-tone="6"]  { --m2:rgba(138,109,49,.20); --m3:rgba(138,109,49,.38); }
+html[data-theme="dark"] [data-tone="7"]  { --m2:rgba(95,125,49,.20);  --m3:rgba(95,125,49,.38); }
+html[data-theme="dark"] [data-tone="8"]  { --m2:rgba(160,71,96,.20);  --m3:rgba(160,71,96,.38); }
+html[data-theme="dark"] [data-tone="9"]  { --m2:rgba(126,96,57,.20);  --m3:rgba(126,96,57,.38); }
+html[data-theme="dark"] [data-tone="10"] { --m2:rgba(94,122,134,.20); --m3:rgba(94,122,134,.38); }
+html[data-theme="dark"] [data-tone="11"] { --m2:rgba(139,123,168,.22);--m3:rgba(139,123,168,.40); }
+html[data-theme="dark"] .module-view[data-tone] {
+  background: linear-gradient(180deg, var(--m2) 0, rgba(0, 0, 0, 0) 170px);
+}
+
+/* ---------- 四、窄屏：色条与图标略缩，避免挤 ---- */
+@media (max-width: 560px) {
+  .win-sidebar-item[data-tone] .win-sidebar-item-icon { width: 26px; height: 26px; border-radius: 8px; }
+  .module-view[data-tone] .card h2 { padding-left: 11px; }
+  .module-view[data-tone] .card h2::before { width: 3px; height: 14px; }
+}

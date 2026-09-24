@@ -15,20 +15,33 @@
   var Records = window.App.Records;
   var Config = window.App.Config;
 
+  /* 各板块「调调」编号（0-11，与 src/css/modules.css 的 --m1/--m2/--m3 一套一套对应）
+     与选品面板同一低饱和色族，保证全站一个家族的语言。 */
   var NAV_ITEMS = [
-    { id: "stock", icon: "stock", label: "库存查询" },
-    { id: "dashboard", icon: "report", label: "仪表盘" },
-    { id: "in", icon: "in", label: "入库管理" },
-    { id: "pickups", icon: "box", label: "待取货" },
-    { id: "out-records", icon: "records", label: "出库记录" },
-    { id: "in-records", icon: "records", label: "入库记录" },
-    { id: "borrow", icon: "box", label: "先借后还" },
-    { id: "transfer", icon: "swap", label: "调拨" },
-    { id: "memos", icon: "edit", label: "备忘录" },
-    { id: "push", icon: "bell", label: "推送信息" },
-    { id: "trash", icon: "box", label: "回收站" },
-    { id: "ai", icon: "box", label: "AI 助手" }
+    { id: "stock", icon: "stock", label: "库存查询", tone: 1 },
+    { id: "dashboard", icon: "report", label: "仪表盘", tone: 5 },
+    { id: "in", icon: "in", label: "入库管理", tone: 0 },
+    { id: "pickups", icon: "box", label: "待取货", tone: 3 },
+    { id: "out-records", icon: "records", label: "出库记录", tone: 2 },
+    { id: "in-records", icon: "records", label: "入库记录", tone: 7 },
+    { id: "borrow", icon: "box", label: "先借后还", tone: 9 },
+    { id: "transfer", icon: "swap", label: "调拨", tone: 6 },
+    { id: "memos", icon: "edit", label: "备忘录", tone: 8 },
+    { id: "push", icon: "bell", label: "推送信息", tone: 4 },
+    { id: "trash", icon: "box", label: "回收站", tone: 10 },
+    { id: "ai", icon: "box", label: "AI 助手", tone: 11 }
   ];
+
+  /** 模块 id → 色调编号（含不在侧栏菜单里的 sync/提醒等） */
+  function toneOfModule(id) {
+    for (var i = 0; i < NAV_ITEMS.length; i++) {
+      if (NAV_ITEMS[i].id === id) return NAV_ITEMS[i].tone;
+    }
+    if (id === "sync") return 1;
+    if (id === "in-remind") return 0;
+    if (id === "out-remind") return 2;
+    return 1;
+  }
 
   /* 模块 id → 视图注册名 */
   var VIEW_MAP = {
@@ -255,7 +268,7 @@
   function renderNav() {
     var navEl = Util.$("winNav");
     navEl.innerHTML = NAV_ITEMS.map(function (item) {
-      return '<a href="#/app/' + item.id + '" class="win-sidebar-item" data-mod="' + item.id + '">' +
+      return '<a href="#/app/' + item.id + '" class="win-sidebar-item" data-mod="' + item.id + '" data-tone="' + item.tone + '">' +
         '<span class="win-sidebar-item-icon">' + UI.icon(item.icon, 18) + '</span>' +
         '<span class="win-sidebar-item-label">' + item.label + '</span>' +
       '</a>';
@@ -312,6 +325,7 @@
     var content = Util.$("winContent");
     var viewEl = document.createElement("div");
     viewEl.className = "module-view";
+    viewEl.setAttribute("data-tone", toneOfModule(moduleName));   // 板块调调，接管页面内配色
     content.innerHTML = "";
     content.appendChild(viewEl);
     view.render(viewEl);
