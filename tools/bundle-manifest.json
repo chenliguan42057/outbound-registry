@@ -9,6 +9,7 @@
     "js/core/store.js",
     "js/core/autoClear.js",
     "js/data/stock.js",
+    "js/data/freeze.js",
     "js/data/cloud.js",
     "js/data/catalog.js",
     "js/data/dict.js",
