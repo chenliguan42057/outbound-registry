@@ -10,6 +10,7 @@
   var UI = window.App.UI;
   var Config = window.App.Config;
   var Stock = window.App.Stock;
+  var Freeze = window.App.Freeze;   /* 待取货冻结库存（只读虚拟口径，见 data/freeze.js） */
   var State = window.App.State;
   var Records = window.App.Records;
   var Cloud = window.App.Cloud;
@@ -40,6 +41,7 @@
           '<button type="button" class="btn ghost sm" id="stockDelBtn" style="color:#c0392b">🗑 删除货品</button>' +
         '</div>' +
         '<div class="stat-cards" id="stockSummary"></div>' +
+        '<div id="stockFreezeBox"></div>' +
         '<div id="stockTableBox"></div>' +
         '<div class="hint" style="margin-top:10px">💡 点行内 <b>📊 流水</b> 按钮，或<b>双击</b>该行，可查看该货品完整出入库流水并导出 CSV。</div>' +
       '</div>' +
@@ -136,26 +138,119 @@
         banner.style.display = "none";
       }
     }
+    renderFreezeBox();
     if (!rows.length) {
       tableBox.innerHTML = '<div class="empty"><b>没找到匹配的货品</b><i>换个关键词，或点上方「＋ 新增货品」</i></div>';
       return;
     }
-    var html = '<div class="table-wrap"><table class="table stock-table"><thead><tr>' +
-      '<th>货品名称</th><th>当前库存</th><th>累计入库</th><th>累计出库</th><th>状态</th><th></th>' +
+    var html = '<div class="table-wrap"><table class="table stock-table freeze-table"><thead><tr>' +
+      /* 1090px 窗口下 8 列要放得下：累入/累出用简写（完整名放 title），状态文案也压到 2-3 字 */
+      '<th>货品名称</th><th>实际库存</th><th>冻结占用</th><th>可用库存</th>' +
+      '<th title="累计入库">累入</th><th title="累计出库">累出</th><th>状态</th><th></th>' +
       '</tr></thead><tbody>';
     rows.forEach(function (s) {
-      var low = s.stock < getWarnAt(s.name);
-      html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
+      var warn = getWarnAt(s.name);
+      var frozen = Freeze.of(s.name);
+      var avail = s.stock - frozen;
+      var low = s.stock < warn;
+      var over = avail < 0;                       /* 超预占：被提单占得比库存还多 */
+      var tight = !low && !over && avail < warn;  /* 预占后偏低：实际够用，扣完就紧张 */
+      var st = freezeStateCell(low, over, tight);
+      html += '<tr class="' + (over ? "freeze-over" : (low ? "low-stock" : (frozen ? "freeze-row" : ""))) + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + Util.esc(s.name) + '</td>' +
-        '<td class="stock-num" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
+        '<td class="stock-num num-strong" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
+        '<td class="num fx-freeze' + (frozen ? " has-fx" : "") + '" data-name="' + Util.esc(s.name) + '" title="点一下看是哪几单待取货占用">' + (frozen ? '<span class="fx-neg">−' + frozen + '</span>' : '<span class="fx-none">—</span>') + '</td>' +
+        '<td class="num num-strong fx-avail' + (over ? " fx-bad" : (tight ? " fx-tight" : (avail < warn ? " fx-low" : " fx-ok"))) + '">' + avail + '</td>' +
         '<td>' + s.inQty + '</td>' +
         '<td>' + s.outQty + '</td>' +
-        '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
+        '<td>' + st + '</td>' +
         '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
     tableBox.innerHTML = html;
+  }
+
+  /** 状态徽章：超预占 > 低库存 > 预占后偏低 > 正常（短文案，完整说明见 title 与顶部提醒条） */
+  function freezeStateCell(low, over, tight) {
+    if (over) return '<span class="tag danger-tag" title="可用库存为负：提单占用已超过实际库存">超预占</span>';
+    if (low) return '<span class="tag danger-tag" title="库存低于该货品预警线">低库存</span>';
+    if (tight) return '<span class="tag warn-tag" title="实际库存够用，但扣掉待取货占用后低于预警线">偏低</span>';
+    return '<span class="tag ok-tag">正常</span>';
+  }
+
+  /** 冻结总览：三张小卡 + 超预占红色提醒条（虚拟参考，明示以实际库存为准） */
+  function renderFreezeBox() {
+    var box = Util.$("stockFreezeBox");
+    if (!box) return;
+    var st = Freeze.stats();
+    if (!st.docs || !st.kinds) { box.innerHTML = ""; return; }
+    var overText = st.over.map(function (r) {
+      return Util.esc(r.name) + "(库存" + r.stock + "/占" + r.frozen + "/可用" + r.avail + ")";
+    }).join("、");
+    var tightText = st.tight.map(function (r) {
+      return Util.esc(r.name) + "(可用" + r.avail + "/预警" + r.warnAt + ")";
+    }).join("、");
+    box.innerHTML =
+      '<div class="fx-strip">' +
+        '<div class="stat-card fx-card">' +
+          '<span class="stat-num fx-neg">' + st.total + '</span>' +
+          '<span class="stat-label">冻结占用</span>' +
+          '<span class="stat-hint">' + st.docs + ' 单待取货未出库</span>' +
+        '</div>' +
+        '<div class="stat-card fx-card">' +
+          '<span class="stat-num">' + st.kinds + '</span>' +
+          '<span class="stat-label">涉及货品</span>' +
+          '<span class="stat-hint">这些货品被提前占住</span>' +
+        '</div>' +
+        '<div class="stat-card fx-card' + (st.over.length ? " warn" : " ok") + '">' +
+          '<span class="stat-num">' + st.over.length + '</span>' +
+          '<span class="stat-label">超预占</span>' +
+          '<span class="stat-hint">' + (st.over.length ? "占用量已超过现有库存" : "没有被占超的货品") + '</span>' +
+        '</div>' +
+      '</div>' +
+      (overText ? '<div class="stock-low-banner fx-banner fx-banner-over" style="margin:0 0 12px">❗ <b>超预占：</b>' + overText + '<i>可用库存已为负，建议催客户取货或先补这批货</i></div>' : '') +
+      (tightText ? '<div class="stock-low-banner fx-banner fx-banner-tight" style="margin:0 0 12px">⚠️ <b>预占后偏低：</b>' + tightText + '<i>现在够发，但取走后就会低于预警线</i></div>' : '') +
+      '<div class="hint fx-note">❄️ 「冻结占用」= 已提单但未出库的待取货数量，「可用库存」= 实际库存 − 冻结占用，仅为提前排产的<b>参考数</b>；真实库存始终以「实际库存」列为准，单据出库后自动恢复。</div>';
+  }
+
+  /** 点冻结数字 → 弹窗列出占用的单据明细 */
+  function showFreezeDetail(name) {
+    var rows = Freeze.detail(name);
+    if (!rows.length) return;
+    var stock = Stock.getStock(name);
+    var avail = Freeze.available(name);
+    var html = '<div class="fx-detail">' +
+      '<div class="fx-detail-head">' +
+        '<span>实际库存 <b>' + stock + '</b></span>' +
+        '<span class="fx-neg">冻结 <b>−' + (Freeze.of(name)) + '</b></span>' +
+        '<span class="' + (avail < 0 ? "fx-bad" : "fx-ok") + '">可用 <b>' + avail + '</b></span>' +
+      '</div>' +
+      '<table class="table" style="width:100%;min-width:0"><thead><tr>' +
+        '<th>登记时间</th><th>取货人</th><th>部门/客户</th><th>占用量</th><th>提单</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr>' +
+          '<td>' + Util.esc(fmtTs(r.ts)) + '</td>' +
+          '<td>' + Util.esc(r.picker) + '</td>' +
+          '<td>' + Util.esc(r.dept) + '</td>' +
+          '<td class="num fx-neg">' + r.qty + '</td>' +
+          '<td>' + (r.confirmed ? '<span class="tag ok-tag">已确认</span>' : '<span class="tag warn-tag">未确认</span>') + '</td>' +
+        '</tr>';
+      }).join("") +
+      '</tbody></table>' +
+      '<div class="hint">到「待取货」页点「确认出库」即可释放这部分冻结量。</div>' +
+    '</div>';
+    UI.Modal.show(Util.esc(name) + " 冻结明细", html, { width: "560px" });
+  }
+
+  /** 时间戳格式化（yyyy-MM-dd HH:mm） */
+  function fmtTs(ts) {
+    if (!ts) return "-";
+    var d = new Date(Number(ts));
+    if (isNaN(d.getTime())) return "-";
+    return Util.pad2(d.getFullYear()) + "-" + Util.pad2(d.getMonth() + 1) + "-" + Util.pad2(d.getDate()) +
+      " " + Util.pad2(d.getHours()) + ":" + Util.pad2(d.getMinutes());
   }
 
   /* ================= 全部库存排名（第六轮增量） ================= */
@@ -194,17 +289,22 @@
       return;
     }
     var arr = summary.slice().sort(rankCompare);
-    var html = '<div class="table-wrap"><table class="table stock-table rank-table"><thead><tr>' +
-      '<th>排名</th><th>货品名称</th><th>当前库存</th><th>状态</th><th></th>' +
+    var html = '<div class="table-wrap"><table class="table stock-table rank-table freeze-table"><thead><tr>' +
+      '<th>排名</th><th>货品名称</th><th>实际库存</th><th>冻结占用</th><th>可用库存</th><th>状态</th><th></th>' +
       '</tr></thead><tbody>';
     arr.forEach(function (s, i) {
-      var low = s.stock < getWarnAt(s.name);
+      var warn = getWarnAt(s.name);
+      var low = s.stock < warn;
+      var frozen = Freeze.of(s.name);
+      var avail = s.stock - frozen;
       html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + (i + 1) + '</td>' +
         '<td>' + Util.esc(s.name) + '</td>' +
         '<td class="stock-num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '">' + s.stock + '</td>' +
-        '<td>' + (low ? '<span class="tag danger-tag">低库存</span>' : '<span class="tag ok-tag">正常</span>') + '</td>' +
-        '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
+        '<td class="num fx-freeze' + (frozen ? " has-fx" : "") + '" data-name="' + Util.esc(s.name) + '" title="点一下看是哪几单待取货占用">' + (frozen ? '<span class="fx-neg">−' + frozen + '</span>' : '<span class="fx-none">—</span>') + '</td>' +
+        '<td class="num num-strong fx-avail' + (avail < 0 ? " fx-bad" : (avail < warn && s.stock >= warn ? " fx-tight" : (avail < warn ? " fx-low" : " fx-ok"))) + '">' + avail + '</td>' +
+        '<td>' + (avail < 0 ? '<span class="tag danger-tag" title="可用库存为负：提单占用已超过实际库存">超预占</span>' : (low ? '<span class="tag danger-tag" title="库存低于该货品预警线">低库存</span>' : (avail < warn ? '<span class="tag warn-tag" title="扣掉待取货占用后低于预警线">偏低</span>' : '<span class="tag ok-tag">正常</span>'))) + '</td>' +
+        '<td><button type="button" class="btn ghost sm flow-btn fx-act" data-name="' + Util.esc(s.name) + '" title="查看出入库流水">📊 流水</button></td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -323,7 +423,10 @@
       }
       // ② 点「当前库存」数字 → 弹窗（兼容旧习惯）
       var el = e.target.closest(".stock-num");
-      if (el && el.getAttribute("data-name")) showHistory(el.getAttribute("data-name"));
+      if (el && el.getAttribute("data-name")) { showHistory(el.getAttribute("data-name")); return; }
+      // ③ 点「冻结占用」数字 → 弹出是哪几单待取货占用
+      var fx = e.target.closest(".fx-freeze.has-fx");
+      if (fx && fx.getAttribute("data-name")) { e.stopPropagation(); showFreezeDetail(fx.getAttribute("data-name")); }
     });
     // ③ 双击整行 → 弹窗（桌面端快捷操作；触屏无 dblclick，走按钮）
     container.addEventListener("dblclick", function (e) {
