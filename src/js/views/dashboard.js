@@ -1,9 +1,11 @@
 /**
- * dashboard.js — 仪表盘：KPI 卡（6 张）+ 4 P0 图表 + 2 P1 增强
- * 纯前端计算，零第三方依赖：
- *   P0：出入库对比柱状图（CSS flex）/ 库存分布环形图（SVG）/ 近30天出库热力（CSS grid）/ 低库存横向条形
- *   P1：近期活动时间轴 / KPI 卡扩展（今日活跃领取人数、近30天出库总量）
- * 数据源：State.list + Stock.summarize()/Stock.trend()，与报表同源同数字。
+ * dashboard.js — 仪表盘（2026-09-26 深度重构：宏观可视化大图）
+ * 主理人要求：去掉 KPI 小卡与文字堆，融合成「一张华丽的宏观大图」：
+ *   深色渐变巨卡 = 超大数字带（总库存/今日出/今日入/低库存）
+ *               + 近30天出入库流量双曲线面积图（SVG 手绘，零依赖）
+ *               + 库存分布环形 + 30天出库热力（下半区）
+ * 纯前端计算，数据源 State.list + Stock.summarize()/Stock.trend()，与报表同源同数字。
+ * ⚠️ 只读展示层：不写任何数据。
  */
 (function () {
   'use strict';
@@ -15,7 +17,7 @@
   var Stock = window.App.Stock;
 
   var container = null;
-  var activeTab = "main";   // "main" 仪表盘 | "report" 报表统计（合并入仪表盘内的 tab，2026-08-14）
+  var activeTab = "main";   // "main" 仪表盘（宏观大图） | "report" 报表统计
 
   function render(el) {
     container = el;
@@ -27,7 +29,6 @@
         '</div>' +
       '</div>' +
       '<div id="dashTabBody"></div>';
-    // tab 切换
     el.querySelectorAll('.dash-tab').forEach(function (b) {
       b.addEventListener('click', function () {
         activeTab = b.getAttribute('data-tab');
@@ -40,7 +41,6 @@
     renderTab();
   }
 
-  /** 仪表盘 / 报表统计 tab 分发。报表统计调用 Views.report.render；refresh() 同步联动。 */
   function renderTab() {
     var body = container ? container.querySelector('#dashTabBody') : null;
     if (!body) return;
@@ -56,7 +56,6 @@
     renderMain(body);
   }
 
-  /** 云端同步后刷新：按当前 tab 分发——仪表盘走自己的 renderAll；报表统计走 Views.report.refresh（保持筛选状态） */
   function refresh() {
     if (!container) return;
     if (activeTab === 'report' && window.App.Views.report && window.App.Views.report.refresh) {
@@ -66,41 +65,14 @@
     renderTab();
   }
 
-  /** 仪表盘主视图（KPI 卡 + 4 图表 + 业绩榜 / 高频 / 低库存 / 最近出库），渲染到传入容器 */
-  function renderMain(el) {
-    el.innerHTML =
-      '<div class="dash-page">' +
-        '<div class="dash-cards" id="dashCards"></div>' +
-        '<div class="chart-grid">' +
-          '<div class="chart-card"><h3>📊 出入库对比</h3><div id="dashCompare"></div></div>' +
-          '<div class="chart-card"><h3>🍩 库存分布</h3><div id="dashDonut"></div></div>' +
-          '<div class="chart-card"><h3>🔥 近30天出库热力</h3><div class="chart-scroll" id="dashHeatmap"></div></div>' +
-        '</div>' +
-        '<div class="grid2">' +
-          '<div class="card"><h2>低库存分布 <span class="tag">各货品独立</span></h2><div id="dashLowBars"></div></div>' +
-          '<div class="card"><h2>近期活动时序</h2><div id="dashTimeline"></div></div>' +
-        '</div>' +
-        '<div class="grid2">' +
-          '<div class="card"><h2>📈 业绩榜 <span class="tag">本月</span></h2><div id="dashRank"></div></div>' +
-          '<div class="card"><h2>🔥 高频货品 <span class="tag">本月</span></h2><div id="dashHot"></div></div>' +
-        '</div>' +
-        '<div class="grid2">' +
-          '<div class="card"><h2>低库存预警 <span class="tag">各货品独立</span></h2><div id="dashLow"></div></div>' +
-          '<div class="card"><h2>最近出库</h2><div id="dashRecent"></div></div>' +
-        '</div>' +
-      '</div>';
-    renderAll();
-  }
-
   /* ================= 聚合（单遍 O(n)） ================= */
 
-  /** 单个货品独立预警线（2026-08-14）：用户在目录管理里设的 warnAt；缺省时回退全局 LOW_STOCK_THRESHOLD */
   function getWarnAt(name) {
     var w = Number((Config.WARN_AT || {})[name]);
     return (!isNaN(w) && w >= 0) ? w : Config.LOW_STOCK_THRESHOLD;
   }
 
-  /** 类目归组：summary → {类目: 库存合计}；未命中兜底「其他」；全 0 类目剔除 */
+  /** 类目归组：summary → {类目: 库存合计}（环形图用） */
   function catAggregate(summary, map) {
     var out = {};
     var keys = Object.keys(map || {});
@@ -118,318 +90,183 @@
     return result;
   }
 
-  /**
-   * 单遍聚合：KPI / 柱状图 / 环形图 / 热力 / 低条形 / 时间轴 所需全部数据一次算齐。
-   * @param {Array} list State.list（新记录在前）
-   */
   function aggregate(list) {
     list = list || State.list;
     var summary = Stock.summarize(list);
-    var low = summary.filter(function (s) { return s.stock < getWarnAt(s.name); })
-      .sort(function (a, b) { return a.stock - b.stock; });
-    var totalOut = 0, totalIn = 0, todayOut = 0, todayIn = 0;
-    var todayActive = {};
-    var today = Util.todayLocal();   // 统一走 Util，避免各文件各写一份补零逻辑
+    var low = summary.filter(function (s) { return s.stock < getWarnAt(s.name); });
+    var totalStock = summary.reduce(function (s, x) { return s + x.stock; }, 0);
+    var todayOut = 0, todayIn = 0;
+    var today = Util.todayLocal();
     list.forEach(function (r) {
       if (r.affectsStock !== true) return;
       var q = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
-      if ((r.type || "out") === "in") totalIn += q; else totalOut += q;
-      if (String(r.time || "").slice(0, 10) === today) {
-        if ((r.type || "out") === "in") todayIn += q;
-        else { todayOut += q; if (r.picker) todayActive[r.picker] = 1; }
-      }
+      if (String(r.time || "").slice(0, 10) !== today) return;
+      if ((r.type || "out") === "in") todayIn += q; else todayOut += q;
     });
     var trend30 = Stock.trend(list, 30);
-    var out30 = trend30.reduce(function (s, d) { return s + d.outQty; }, 0);
-    var catMap = catAggregate(summary, Config.CATEGORY_MAP || {});
-    var recent = list.slice(0, 10);
     return {
-      summary: summary, low: low,
-      totalOut: totalOut, totalIn: totalIn,
+      summary: summary, low: low, totalStock: totalStock,
       todayOut: todayOut, todayIn: todayIn,
-      todayActiveCount: Object.keys(todayActive).length,
-      trend30: trend30, out30: out30,
-      catMap: catMap, recent: recent
+      trend30: trend30,
+      catMap: catAggregate(summary, Config.CATEGORY_MAP || {})
     };
   }
 
-  /* ================= 渲染 ================= */
+  /* ================= 宏观大图 ================= */
 
-  function renderAll() {
-    var agg = aggregate(State.list);
-    renderCards(agg);
-    renderCompare(agg);
-    renderDonut(agg.catMap);
-    renderHeatmap(agg.trend30);
-    renderLowBars(agg.low);
-    renderTimeline(agg.recent);
-    renderRankBoard();
-    renderHotProducts();
-    renderLow();
-    renderRecent();
+  function renderMain(el) {
+    el.innerHTML = '<div class="dash-hero" id="dashHero">加载中…</div>';
+    renderHero(aggregate(State.list));
   }
 
-  /** KPI 卡：原 4 张 + P1 扩展 2 张（今日活跃领取人数 / 近30天出库总量） */
-  function renderCards(agg) {
-    var cards = [
-      { label: "本地记录数", value: State.list.length, icon: "records" },
-      { label: "今日出库", value: agg.todayOut, icon: "out" },
-      { label: "今日入库", value: agg.todayIn, icon: "in" },
-      { label: "低库存项", value: agg.low.length, icon: "stock" },
-      { label: "今日活跃领取人数", value: agg.todayActiveCount, icon: "records" },
-      { label: "近30天出库总量", value: agg.out30, icon: "report" }
-    ];
-    Util.$("dashCards").innerHTML = cards.map(function (c) {
-      return '<div class="dash-card">' +
-        '<div class="dash-card-icon">' + UI.icon(c.icon, 22) + '</div>' +
-        '<div class="dash-card-value">' + c.value + '</div>' +
-        '<div class="dash-card-label">' + Util.esc(c.label) + '</div>' +
-      '</div>';
-    }).join("");
-  }
-
-  /** P0-1 出入库对比柱状图：纯 CSS flex 双柱，出=淡紫 #A79ED0 / 入=薄荷绿 #6FA08A，柱顶数字 + 图例 */
-  function renderCompare(agg) {
-    var el = Util.$("dashCompare");
+  function renderHero(agg) {
+    var el = Util.$("dashHero");
     if (!el) return;
-    var max = Math.max(agg.totalOut, agg.totalIn, 1);
-    var outH = Math.max(2, Math.round(agg.totalOut / max * 100));
-    var inH = Math.max(2, Math.round(agg.totalIn / max * 100));
     el.innerHTML =
-      '<div class="compare-bar">' +
-        '<div class="compare-col">' +
-          '<div class="compare-num">' + agg.totalOut + '</div>' +
-          '<div class="compare-fill out" style="height:' + outH + '%" title="总出库 ' + agg.totalOut + ' 件"></div>' +
-          '<div class="compare-label">总出库</div>' +
-        '</div>' +
-        '<div class="compare-col">' +
-          '<div class="compare-num">' + agg.totalIn + '</div>' +
-          '<div class="compare-fill in" style="height:' + inH + '%" title="总入库 ' + agg.totalIn + ' 件"></div>' +
-          '<div class="compare-label">总入库</div>' +
-        '</div>' +
+      '<div class="dh-kpis">' +
+        '<div class="dh-kpi"><b>' + agg.totalStock + '</b><span>总库存</span></div>' +
+        '<div class="dh-kpi"><b>' + agg.todayOut + '</b><span>今日出库</span></div>' +
+        '<div class="dh-kpi"><b>' + agg.todayIn + '</b><span>今日入库</span></div>' +
+        '<div class="dh-kpi' + (agg.low.length ? ' warn' : '') + '"><b>' + agg.low.length + '</b><span>低库存</span></div>' +
       '</div>' +
-      '<div class="compare-legend"><span class="legend-dot out"></span>出库（紫） <span class="legend-dot in"></span>入库（绿）</div>';
+      '<div class="dh-chart-head">' +
+        '<span class="dh-chart-title">近 30 天出入库流量</span>' +
+        '<span class="dh-legend"><i class="dh-dot out"></i>出库<i class="dh-dot in"></i>入库</span>' +
+      '</div>' +
+      '<div class="dh-chart">' + flowChartSvg(agg.trend30) + '</div>' +
+      '<div class="dh-bottom">' +
+        '<div class="dh-donut">' + donutSvg(agg.catMap) + '</div>' +
+        '<div class="dh-heat">' + heatHtml(agg.trend30) + '</div>' +
+      '</div>';
   }
 
-  /** P0-2 库存分布环形图：纯 SVG circle + stroke-dasharray 分段圆弧，中心总库存 + 图例 */
-  function renderDonut(catMap) {
-    var el = Util.$("dashDonut");
-    if (!el) return;
+  /** 平滑曲线（中点法三次贝塞尔） */
+  function smoothPath(pts) {
+    if (!pts.length) return "";
+    var d = "M" + pts[0].x.toFixed(1) + " " + pts[0].y.toFixed(1);
+    for (var i = 1; i < pts.length; i++) {
+      var p0 = pts[i - 1], p1 = pts[i];
+      var mx = ((p0.x + p1.x) / 2).toFixed(1);
+      d += " C" + mx + " " + p0.y.toFixed(1) + " " + mx + " " + p1.y.toFixed(1) + " " + p1.x.toFixed(1) + " " + p1.y.toFixed(1);
+    }
+    return d;
+  }
+
+  /** 近30天双系列面积图（SVG viewBox 720×250，宽度自适应容器） */
+  function flowChartSvg(trend30) {
+    var data = trend30 || [];
+    var W = 720, H = 250, padL = 10, padR = 10, padT = 16, padB = 28;
+    var iw = W - padL - padR, ih = H - padT - padB;
+    var max = 1;
+    data.forEach(function (d) { max = Math.max(max, d.outQty, d.inQty); });
+    function pts(key) {
+      return data.map(function (d, i) {
+        return {
+          x: padL + (data.length === 1 ? iw / 2 : i * iw / (data.length - 1)),
+          y: padT + (1 - (d[key] || 0) / max) * ih
+        };
+      });
+    }
+    var pOut = pts("outQty"), pIn = pts("inQty");
+    var lineOut = smoothPath(pOut), lineIn = smoothPath(pIn);
+    var base = (H - padB).toFixed(1);
+    var areaOut = lineOut ? lineOut + " L" + pOut[pOut.length - 1].x.toFixed(1) + " " + base + " L" + pOut[0].x.toFixed(1) + " " + base + " Z" : "";
+    var areaIn = lineIn ? lineIn + " L" + pIn[pIn.length - 1].x.toFixed(1) + " " + base + " L" + pIn[0].x.toFixed(1) + " " + base + " Z" : "";
+    /* 网格 3 条 */
+    var grid = "";
+    for (var g = 1; g <= 3; g++) {
+      var gy = (padT + ih * g / 4).toFixed(1);
+      grid += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,.07)" stroke-width="1"/>';
+    }
+    /* x 轴日期：首 / 1/3 / 2/3 / 末 */
+    var labels = "";
+    var idxs = data.length > 3 ? [0, Math.round((data.length - 1) / 3), Math.round((data.length - 1) * 2 / 3), data.length - 1] : data.map(function (_, i) { return i; });
+    idxs.forEach(function (i) {
+      if (!data[i]) return;
+      var x = padL + (data.length === 1 ? iw / 2 : i * iw / (data.length - 1));
+      labels += '<text x="' + x.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" class="dh-x-label">' +
+        Util.esc(String(data[i].date).slice(5).replace("-", "/")) + '</text>';
+    });
+    /* hover 捕获列 */
+    var hover = "";
+    var step = iw / (data.length || 1);
+    data.forEach(function (d, i) {
+      hover += '<rect x="' + (padL + i * step).toFixed(1) + '" y="' + padT + '" width="' + Math.max(step, 4).toFixed(1) +
+        '" height="' + ih + '" fill="transparent"><title>' + Util.esc(String(d.date).slice(5).replace("-", "/")) +
+        '　出 ' + d.outQty + ' ／ 入 ' + d.inQty + '</title></rect>';
+    });
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:auto;display:block">' +
+      '<defs>' +
+        '<linearGradient id="dhgOut" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#B9AEDF" stop-opacity=".38"/><stop offset="1" stop-color="#B9AEDF" stop-opacity="0"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="dhgIn" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#7FCDB6" stop-opacity=".34"/><stop offset="1" stop-color="#7FCDB6" stop-opacity="0"/>' +
+        '</linearGradient>' +
+      '</defs>' +
+      grid +
+      (areaOut ? '<path d="' + areaOut + '" fill="url(#dhgOut)"/>' : '') +
+      (areaIn ? '<path d="' + areaIn + '" fill="url(#dhgIn)"/>' : '') +
+      (lineOut ? '<path d="' + lineOut + '" fill="none" stroke="#C9BFEC" stroke-width="2.2" stroke-linecap="round"/>' : '') +
+      (lineIn ? '<path d="' + lineIn + '" fill="none" stroke="#8AD4BC" stroke-width="2.2" stroke-linecap="round"/>' : '') +
+      labels + hover +
+    '</svg>';
+  }
+
+  /** 库存分布环形（深色底版本，中心总库存，极简图例） */
+  function donutSvg(catMap) {
     var keys = Object.keys(catMap || {});
     var total = keys.reduce(function (s, k) { return s + catMap[k]; }, 0);
-    if (!total) {
-      el.innerHTML = '<div class="empty"><b>还没有库存数据</b><i>先到「入库管理」登记一笔入库</i></div>';
-      return;
-    }
-    var R = 40;
-    var C = 2 * Math.PI * R;
-    var colors = Config.CHART_COLORS || [];
+    if (!total) return '<div class="dh-none">暂无库存数据</div>';
+    var R = 52, C = 2 * Math.PI * R;
+    var colors = Config.CHART_COLORS && Config.CHART_COLORS.length ? Config.CHART_COLORS : ["#7FCDB6", "#B9AEDF", "#8FBFD9", "#E3C987", "#D9A0A0"];
     var offset = 0;
     var segs = keys.map(function (k, i) {
       var frac = catMap[k] / total;
       var dash = frac * C;
-      var color = colors[i % colors.length] || "#6FA08A";
-      var seg = {
-        key: k, val: catMap[k], frac: frac, color: color,
-        html: '<circle class="donut-seg" cx="50" cy="50" r="' + R + '" fill="none" stroke="' + color +
-          '" stroke-width="18" stroke-dasharray="' + dash + ' ' + C + '" stroke-dashoffset="' + (-offset) + '" />'
-      };
+      var color = colors[i % colors.length];
+      var html = '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="' + color +
+        '" stroke-width="17" stroke-dasharray="' + dash.toFixed(2) + ' ' + C.toFixed(2) +
+        '" stroke-dashoffset="' + (-offset).toFixed(2) + '"><title>' + Util.esc(k) + ' ' + catMap[k] + '（' + Math.round(frac * 100) + '%）</title></circle>';
       offset += dash;
-      return seg;
+      return { key: k, val: catMap[k], frac: frac, color: color, html: html };
     });
-    el.innerHTML =
-      '<div class="donut-wrap">' +
-        '<svg class="donut-svg" viewBox="0 0 100 100" width="140" height="140">' +
-          '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="#E9EFEB" stroke-width="18" />' +
-          '<g transform="rotate(-90 50 50)">' + segs.map(function (s) { return s.html; }).join("") + '</g>' +
-          '<text x="50" y="47" text-anchor="middle" class="donut-center-num">' + total + '</text>' +
-          '<text x="50" y="61" text-anchor="middle" class="donut-center-label">总库存</text>' +
-        '</svg>' +
-        '<div class="donut-legend">' + segs.map(function (s) {
-          return '<div class="donut-legend-item">' +
-            '<span class="donut-legend-dot" style="background:' + s.color + '"></span>' +
-            '<span class="donut-legend-name">' + Util.esc(s.key) + '</span>' +
-            '<span class="donut-legend-val">' + s.val + '（' + Math.round(s.frac * 100) + '%）</span>' +
-          '</div>';
-        }).join("") + '</div>' +
-      '</div>';
+    return '<div class="dh-donut-wrap">' +
+      '<svg viewBox="0 0 140 140" style="width:150px;height:150px;display:block">' +
+        '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="17"/>' +
+        '<g transform="rotate(-90 70 70)">' + segs.map(function (s) { return s.html; }).join("") + '</g>' +
+        '<text x="70" y="66" text-anchor="middle" class="dh-donut-num">' + total + '</text>' +
+        '<text x="70" y="82" text-anchor="middle" class="dh-donut-cap">总库存</text>' +
+      '</svg>' +
+      '<div class="dh-donut-legend">' + segs.map(function (s) {
+        return '<div class="dh-leg-row"><i class="dh-dot" style="background:' + s.color + '"></i>' +
+          '<span class="dh-leg-name">' + Util.esc(s.key) + '</span><span class="dh-leg-val">' + Math.round(s.frac * 100) + '%</span></div>';
+      }).join("") + '</div>' +
+    '</div>';
   }
 
-  /** P0-3 近30天出库热力：CSS grid 6列×5行=30格，格内日号，5 档色阶 t0..t4（决策 D-1，无星期表头） */
-  function renderHeatmap(trend30) {
-    var el = Util.$("dashHeatmap");
-    if (!el) return;
+  /** 30 天出库热力（深色底薄荷色阶，极简） */
+  function heatHtml(trend30) {
     var data = trend30 || [];
+    if (!data.length) return '<div class="dh-none">暂无流量数据</div>';
     var max = data.reduce(function (m, d) { return Math.max(m, d.outQty); }, 0);
-    function tier(qty) {
-      if (qty <= 0 || max <= 0) return "heatmap-t0";
-      var r = qty / max;
-      if (r <= 0.2) return "heatmap-t1";
-      if (r <= 0.4) return "heatmap-t2";
-      if (r <= 0.6) return "heatmap-t3";
-      return "heatmap-t4";
+    function tier(q) {
+      if (q <= 0 || max <= 0) return 0;
+      var r = q / max;
+      if (r <= 0.2) return 1;
+      if (r <= 0.4) return 2;
+      if (r <= 0.6) return 3;
+      return 4;
     }
-    function md(s) { return String(s || "").slice(5).replace("-", "/"); }
     var cells = data.map(function (d) {
-      var day = parseInt(String(d.date).slice(8), 10);
-      var label = md(d.date);
-      return '<div class="heatmap-cell ' + tier(d.outQty) + '" title="' + Util.esc(label) + '：' + d.outQty + ' 件">' +
-        (isNaN(day) ? "" : day) + '</div>';
+      return '<div class="dh-hcell t' + tier(d.outQty) + '" title="' + Util.esc(String(d.date).slice(5).replace("-", "/")) +
+        '　出库 ' + d.outQty + ' 件">' + (parseInt(String(d.date).slice(8), 10) || "") + '</div>';
     }).join("");
-    el.innerHTML =
-      '<div class="heatmap-head">' + (data.length ? md(data[0].date) + " – " + md(data[data.length - 1].date) : "") + '（近 30 天，颜色深浅 = 出库件数）</div>' +
-      '<div class="heatmap-grid">' + cells + '</div>' +
-      '<div class="heatmap-legend">' +
-        '<span class="heatmap-cell heatmap-t0"></span><span class="heatmap-cell heatmap-t1"></span>' +
-        '<span class="heatmap-cell heatmap-t2"></span><span class="heatmap-cell heatmap-t3"></span>' +
-        '<span class="heatmap-cell heatmap-t4"></span> 少 → 多' +
-      '</div>';
-  }
-
-  /** P0-4 低库存横向条形：复用 .rank-row/.rank-bar，fill 红色渐变，Top8 */
-  function renderLowBars(low) {
-    var el = Util.$("dashLowBars");
-    if (!el) return;
-    var arr = (low || []).slice(0, 8);
-    if (!arr.length) {
-      el.innerHTML = '<div class="empty"><b>没有低库存货品</b><i>全部货品都在 95 件以上</i></div>';
-      return;
-    }
-    var max = arr[arr.length - 1].stock || 1;
-    var html = arr.map(function (s, i) {
-      var pct = Math.max(2, Math.round(s.stock / max * 100));
-      return '<div class="rank-row">' +
-        '<span class="rank-no">' + (i + 1) + '</span>' +
-        '<span class="rank-name">' + Util.esc(s.name) + '</span>' +
-        '<div class="rank-bar"><div class="rank-bar-fill low-fill" style="width:' + pct + '%"></div></div>' +
-        '<span class="rank-val danger-text">' + s.stock + '</span>' +
-      '</div>';
-    }).join("");
-    el.innerHTML = html;
-  }
-
-  /** P1 近期活动时间轴：CSS 圆点 + 竖线，最近 10 条出入混合；首条高亮「最新」 */
-  function renderTimeline(recent) {
-    var el = Util.$("dashTimeline");
-    if (!el) return;
-    var arr = (recent || []).slice(0, 10);
-    if (!arr.length) {
-      el.innerHTML = '<div class="empty"><b>还没有出入库活动</b><i>有登记后这里会自动出现</i></div>';
-      return;
-    }
-    var html = '<div class="timeline">' + arr.map(function (r, i) {
-      var isIn = (r.type || "out") === "in";
-      var items = (r.items || []).map(function (it) { return Util.esc(it.name) + "×" + it.qty; }).join("、");
-      var time = Util.esc(String(r.time || "").replace("T", " "));
-      var who = Util.esc(r.dept || "未知") + (r.picker ? "（" + Util.esc(r.picker) + "）" : "");
-      return '<div class="timeline-item' + (i === 0 ? " first" : "") + '">' +
-        '<span class="timeline-dot ' + (isIn ? "in" : "out") + '"></span>' +
-        '<div class="timeline-body">' +
-          '<div class="timeline-top">' +
-            '<span class="timeline-time">' + time + '</span>' +
-            '<span class="timeline-tag ' + (isIn ? "in" : "out") + '">' + (isIn ? "入库" : "出库") + '</span>' +
-            (i === 0 ? '<span class="timeline-new">最新</span>' : "") +
-          '</div>' +
-          '<div class="timeline-who">' + who + '</div>' +
-          '<div class="timeline-items">' + items + '</div>' +
-        '</div>' +
-      '</div>';
-    }).join("") + '</div>';
-    el.innerHTML = html;
-  }
-
-  /* ================= 保留：低库存预警列表 + 最近出库 ================= */
-
-  function renderLow() {
-    var low = Stock.summarize()
-      .filter(function (s) { return s.stock < getWarnAt(s.name); })
-      .sort(function (a, b) { return a.stock - b.stock; })
-      .slice(0, 8);
-    var html = low.map(function (s) {
-      return '<div class="rank-row">' +
-        '<span class="rank-no">' + s.stock + '</span>' +
-        '<span class="rank-name">' + Util.esc(s.name) + '</span>' +
-        '<span class="rank-val danger-text">库存 ' + s.stock + '</span>' +
-      '</div>';
-    }).join("");
-    Util.$("dashLow").innerHTML = html || '<div class="empty"><b>没有低库存货品</b><i>全部货品都在 95 件以上</i></div>';
-  }
-
-  function renderRecent() {
-    var recs = State.list.filter(function (r) { return (r.type || "out") !== "in"; }).slice(0, 8);
-    var html = recs.map(function (r) {
-      var items = (r.items || []).map(function (it) { return it.name + "×" + it.qty; }).join("、");
-      return '<div class="recent-row">' +
-        '<div class="recent-main">' +
-          '<div class="recent-title">' + Util.esc(r.dept || "未知客户") +
-            (r.picker ? "（" + Util.esc(r.picker) + "）" : "") + '</div>' +
-          '<div class="recent-items">' + Util.esc(items) + '</div>' +
-        '</div>' +
-        '<div class="recent-time">' + Util.esc(String(r.time || "").replace("T", " ")) + '</div>' +
-      '</div>';
-    }).join("");
-    Util.$("dashRecent").innerHTML = html || '<div class="empty"><b>还没有出库记录</b><i>去落地页登记一笔出库</i></div>';
-  }
-
-  /* ================= B8 业绩榜 + 高频货品（本月） ================= */
-  function monthPrefix() {
-    return Util.monthLocal();
-  }
-  function renderRankBoard() {
-    var el = Util.$("dashRank");
-    if (!el) return;
-    var mp = monthPrefix();
-    var stat = {};
-    (State.list || []).forEach(function (r) {
-      if ((r.type || "out") === "in") return;
-      if (!r.picker || String(r.time || "").slice(0, 7) !== mp) return;
-      var q = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
-      if (!stat[r.picker]) stat[r.picker] = { count: 0, qty: 0 };
-      stat[r.picker].count++;
-      stat[r.picker].qty += q;
-    });
-    var arr = Object.keys(stat).map(function (k) { return { picker: k, count: stat[k].count, qty: stat[k].qty }; })
-      .sort(function (a, b) { return b.qty - a.qty || b.count - a.count; }).slice(0, 6);
-    if (!arr.length) { el.innerHTML = '<div class="empty"><b>本月还没有出库登记</b><i>换个时间区间看看</i></div>'; return; }
-    var max = arr[0].qty || 1;
-    el.innerHTML = arr.map(function (s, i) {
-      var pct = Math.max(2, Math.round(s.qty / max * 100));
-      return '<div class="rank-row">' +
-        '<span class="rank-no">' + (i + 1) + '</span>' +
-        '<span class="rank-name">' + Util.esc(s.picker) + '</span>' +
-        '<div class="rank-bar"><div class="rank-bar-fill" style="width:' + pct + '%;background:linear-gradient(90deg,#7FB3A5,#A79ED0)"></div></div>' +
-        '<span class="rank-val">' + s.qty + ' 件/' + s.count + ' 单</span>' +
-      '</div>';
-    }).join("");
-  }
-  function renderHotProducts() {
-    var el = Util.$("dashHot");
-    if (!el) return;
-    var mp = monthPrefix();
-    var stat = {};
-    var nmap = Config.NAME_MAP || {};
-    (State.list || []).forEach(function (r) {
-      if (String(r.time || "").slice(0, 7) !== mp) return;
-      (r.items || []).forEach(function (it) {
-        var q = Number(it.qty) || 0;
-        var key = nmap[it.name] || it.name;
-        if (!stat[key]) stat[key] = 0;
-        stat[key] += q;
-      });
-    });
-    var arr = Object.keys(stat).map(function (k) { return { name: k, qty: stat[k] }; })
-      .sort(function (a, b) { return b.qty - a.qty; }).slice(0, 6);
-    if (!arr.length) { el.innerHTML = '<div class="empty"><b>本月还没有出入库记录</b><i>换个时间区间看看</i></div>'; return; }
-    var max = arr[0].qty || 1;
-    el.innerHTML = arr.map(function (s, i) {
-      var pct = Math.max(2, Math.round(s.qty / max * 100));
-      return '<div class="rank-row">' +
-        '<span class="rank-no">' + (i + 1) + '</span>' +
-        '<span class="rank-name">' + Util.esc(s.name) + '</span>' +
-        '<div class="rank-bar"><div class="rank-bar-fill" style="width:' + pct + '%;background:linear-gradient(90deg,#7FB08E,#6FA3A8)"></div></div>' +
-        '<span class="rank-val">' + s.qty + '</span>' +
-      '</div>';
-    }).join("");
+    return '<div class="dh-heat-head"><span>近 30 天出库热力</span><span class="dh-heat-scale">' +
+      '<i class="dh-hcell t0"></i><i class="dh-hcell t1"></i><i class="dh-hcell t2"></i><i class="dh-hcell t3"></i><i class="dh-hcell t4"></i>' +
+      '</span></div>' +
+      '<div class="dh-hgrid">' + cells + '</div>' +
+      '<div class="dh-heat-foot">颜色越深 = 当日出库越多 · 悬停看每天</div>';
   }
 
   window.App = window.App || {};
