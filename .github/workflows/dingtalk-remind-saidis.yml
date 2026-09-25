@@ -32,5 +32,7 @@ jobs:
           SYS_NAME: '赛迪斯'
           WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK_SAIDIS }}
           SECRET: ${{ secrets.DINGTALK_SECRET_SAIDIS }}
+          # 出库领取信息 @ 的人：暂与深圳仓共用同一个 secret；若要分别配置改成 secrets.AT_MOBILES_SAIDIS
+          AT_MOBILES: ${{ secrets.AT_MOBILES }}
           FILES: ${{ steps.changed.outputs.files }}
         run: python3 .github/scripts/dingtalk_remind.py
