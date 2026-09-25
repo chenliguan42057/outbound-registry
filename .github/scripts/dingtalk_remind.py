@@ -29,6 +29,9 @@ DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()  # 双仓库数据
 WEBHOOK = os.environ.get("WEBHOOK", "").strip()
 SECRET = os.environ.get("SECRET", "").strip()
 FILES = os.environ.get("FILES", "").strip()
+# 2026-09-26 新增：出库领取信息推送时要 @ 的人（手机号，逗号分隔，来自 repo secret AT_MOBILES）。
+# 未配置时只发消息不 @ 人，功能照常可用。
+AT_MOBILES = [m.strip() for m in (os.environ.get("AT_MOBILES") or "").split(",") if m.strip()]
 
 
 def sign_url(webhook, secret):
@@ -54,7 +57,7 @@ def load_json(path):
         return None
 
 
-def send(text, title="出入库登记通知"):
+def send(text, title="出入库登记通知", at_mobiles=None):
     """发送 markdown 消息到钉钉。返回 (ok, errmsg)。"""
     if not WEBHOOK:
         return False, "WEBHOOK 环境变量为空，无法发送（请检查 secrets.DINGTALK_WEBHOOK）"
@@ -70,6 +73,7 @@ def send(text, title="出入库登记通知"):
             {"title": "📋 管理后台", "url": REG_URL + "?goto=app"}
         ],
         btn_orientation="0",
+        at_mobiles=at_mobiles,
     )
     req = urllib.request.Request(
         url,
@@ -297,6 +301,51 @@ def build_stocktake_markdown(payload):
     ])
 
 
+def build_out_copy_markdown(payload):
+    """出库领取信息（在落地页点「复制并通知」后推送）。
+
+    载荷：{type:"out-copy", order:{applicant, picker, time, dept, purpose, entity, orderNo,
+                                    items:[{name, qty}]}}
+    群里 @ 的人由环境变量 AT_MOBILES 决定 —— 钉钉要求在正文里出现「@手机号」才会真正 @ 到人。
+    """
+    o = payload.get("order") or {}
+    items = o.get("items") or []
+    head = ""
+    if AT_MOBILES:
+        head = " ".join("@" + m for m in AT_MOBILES) + "\n\n"
+
+    lines = [
+        head + "### 📤 出库领取信息",
+        "",
+        "**领取人已通过钉钉向您发送领取信息，请查收。**",
+        "",
+        "---",
+        "",
+    ]
+    rows = [
+        ("申请人", o.get("applicant")),
+        ("领取人", o.get("picker")),
+        ("领取时间", (o.get("time") or "").replace("T", " ")),
+        ("部门 / 客户", o.get("dept")),
+    ]
+    for k, v in rows:
+        if v:
+            lines.append("- **{}**：{}".format(k, v))
+
+    if items:
+        lines += ["", "**领取货品（{} 项）**".format(len(items)), ""]
+        total = 0
+        for i, it in enumerate(items, 1):
+            try:
+                q = int(it.get("qty") or 0)
+            except (TypeError, ValueError):
+                q = 0
+            total += q
+            lines.append("{}. {} × {}".format(i, it.get("name") or "", it.get("qty") or ""))
+        lines += ["", "**合计 {} 件**".format(total)]
+    return "\n".join(lines)
+
+
 def main():
     payloads = []
     for line in (FILES or "").splitlines():
@@ -313,6 +362,7 @@ def main():
 
     pickup_confirm = []
     stocktakes = []
+    out_copies = []
     for line in (FILES or "").splitlines():
         line = line.strip()
         if not line:
@@ -328,8 +378,10 @@ def main():
             pickup_confirm.append(data)
         elif data.get("type") == "stocktake":
             stocktakes.append(data)
+        elif data.get("type") == "out-copy":
+            out_copies.append(data)
 
-    if not payloads and not pickup_confirm and not stocktakes:
+    if not payloads and not pickup_confirm and not stocktakes and not out_copies:
         print("没有可解析的提醒请求，跳过发送（不报错）")
         return 0
 
@@ -370,6 +422,18 @@ def main():
             print("库存盘点差异已发送")
         else:
             print("库存盘点差异发送失败: {}".format(err), file=sys.stderr)
+            return 1
+
+    # 4) 出库领取信息（2026-09-26 新增：落地页点「复制并通知」触发；按 AT_MOBILES @ 群里指定人）
+    for oc in out_copies:
+        text = build_out_copy_markdown(oc)
+        if not text:
+            continue
+        ok, err = send(text, title="出库领取信息", at_mobiles=AT_MOBILES)
+        if ok:
+            print("出库领取信息已发送（@ {}）".format(", ".join(AT_MOBILES) if AT_MOBILES else "未配置"))
+        else:
+            print("出库领取信息发送失败: {}".format(err), file=sys.stderr)
             return 1
 
     return 0
