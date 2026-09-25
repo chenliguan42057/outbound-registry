@@ -57,12 +57,12 @@ def btn_manage():
     return {"title": "📋 管理后台", "url": REG_URL + "?goto=app"}
 
 
-def build_card_payload(text, title, btns=None, btn_orientation="0", decorate_text=True):
+def build_card_payload(text, title, btns=None, btn_orientation="0", decorate_text=True, at_mobiles=None):
     if decorate_text:
         text = decorate(text)
     if not btns:
         btns = [btn_landing()]
-    return {
+    payload = {
         "msgtype": "actionCard",
         "actionCard": {
             "title": title,
@@ -71,9 +71,15 @@ def build_card_payload(text, title, btns=None, btn_orientation="0", decorate_tex
             "btns": [{"title": b["title"], "actionURL": b["url"]} for b in btns],
         },
     }
+    # 2026-09-26 新增：支持在群里 @ 指定人（出库领取信息要 @ 对接人）。
+    # 钉钉规则：at.atMobiles 列出手机号，且正文里要出现「@手机号」才会真正 @ 到人
+    # （正文由调用方在 text 里拼好，这里只负责把 at 字段放进 payload）。
+    if at_mobiles:
+        payload["at"] = {"atMobiles": list(at_mobiles), "isAtAll": False}
+    return payload
 
 
-def send_action_card(text, title, webhook, secret, btns=None, btn_orientation="0", decorate_text=True):
+def send_action_card(text, title, webhook, secret, btns=None, btn_orientation="0", decorate_text=True, at_mobiles=None):
     # 2026-09-06 统一加系统名标记：深圳=深圳细胞 / 赛迪斯=赛迪斯（由 workflow 注入 SYS_NAME）。
     # 样式：# 一级标题（钉钉手机/电脑端都渲染成蓝色背景大号粗体块）+ 加粗 + 🏢 + --- 分隔线。
     # 放在 send_action_card 统一处理，notify/remind/memo/pending/stock/sync_health/summary/pushmenu 全一致。
@@ -90,7 +96,7 @@ def send_action_card(text, title, webhook, secret, btns=None, btn_orientation="0
         return False, "WEBHOOK 环境变量为空"
     if not secret:
         return False, "SECRET 环境变量为空"
-    payload = json.dumps(build_card_payload(text, title, btns, btn_orientation, decorate_text)).encode("utf-8")
+    payload = json.dumps(build_card_payload(text, title, btns, btn_orientation, decorate_text, at_mobiles)).encode("utf-8")
     url = sign_url(webhook, secret)
     req = urllib.request.Request(
         url,
