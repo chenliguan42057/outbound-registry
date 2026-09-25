@@ -31,5 +31,9 @@ jobs:
           WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
           SECRET: ${{ secrets.DINGTALK_SECRET }}
           SYS_NAME: '深圳细胞'
+          # 出库领取信息推送时要 @ 的人（手机号，多个用逗号分隔）。
+          # 在仓库 Settings → Secrets and variables → Actions 里加名为 AT_MOBILES 的 secret；
+          # 未配置时只发消息不 @ 人，功能照常可用。
+          AT_MOBILES: ${{ secrets.AT_MOBILES }}
           FILES: ${{ steps.changed.outputs.files }}
         run: python3 .github/scripts/dingtalk_remind.py
