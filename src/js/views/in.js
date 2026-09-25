@@ -102,6 +102,10 @@
     renderSourceChips();
     renderPreview();
     restoreDraft();
+
+    // 自动识别回填（2026-09-26）：从「自动识别」页跳转过来时取走待填数据（取一次即清空）
+    var _pendIn = window.App.Views.recognize && window.App.Views.recognize.takePending("in");
+    if (_pendIn) fillRecognized(_pendIn);
   }
 
   /** 当前可用来源全集（预设 + 本仓自定义），无词典时降级空数组 */
@@ -423,5 +427,26 @@
 
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
-  window.App.Views.in = { render: render, edit: edit };
+  /**
+   * 自动识别回填（2026-09-26）：由「自动识别」页经 Views.recognize.takePending 传入。
+   * @param {{picker?:string, items?:Array<{name:string,qty:number}>}} d
+   * 入库页口径（主理人 2026-09-26 确认）：
+   *   · 经办人    ← 订单编号（入库 payload 里写入的键名是 picker，见 submit 内构造）
+   *   · 入库来源  ← 留空，由人工手动选（吉客云订单文字里没有这个信息）
+   * 注意：ProductPicker.setSelected 不触发 onChange，必须手动补 saveDraft + renderPreview。
+   */
+  function fillRecognized(d) {
+    if (!d || !els) return;
+    /* 经办人：主理人 2026-09-26 定稿 —— 「沿用上次填的人」（render 时已自动带出），本函数**不覆盖**它。
+       这里只处理「用途 ← 入库号」（粘贴格式第 1 行的 DB 号）。 */
+    if (d.purpose != null && els.purpose) els.purpose.value = d.purpose;
+    if (d.items && d.items.length) picker.setSelected(d.items);
+    saveDraft();
+    renderPreview();                 // 入库有「库存变化预览」，回填后必须刷新
+    var n = (d.items || []).length;
+    Util.toast("已填入" + (n ? " " + n + " 项货品" : "") + "，记得选入库来源再提交");
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
+  }
+
+  window.App.Views.in = { render: render, edit: edit, fill: fillRecognized };
 })();

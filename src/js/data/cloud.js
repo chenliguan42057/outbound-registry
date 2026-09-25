@@ -1021,6 +1021,23 @@
     return false;
   }
 
+  /** 读取远端任意 JSON 文件；404 / 失败返回 null（不抛错）。
+      与 fetchCatalogAt 同构，路径由 dataDir + subdir + id 自由拼接，
+      供「吉客云产品对照字典」(data/dict/jikeyun.json) 等单文件集合读取。 */
+  async function fetchJsonFile(opts) {
+    opts = opts || {};
+    var dir = String(opts.dataDir || "").replace(/[\\/]+$/, "");
+    var subdir = String(opts.subdir || "").replace(/^[\\/]+|[\\/]+$/g, "");
+    var id = String(opts.id || "");
+    if (!dir || !id) return null;
+    var path = dir + (subdir ? "/" + subdir : "") + "/" + id + ".json";
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    try {
+      var j = await apiJson(url);
+      return JSON.parse(Util.b64dec(j.content));
+    } catch (e) { return null; }
+  }
+
   /** 读取远端 catalog.json；404 / 失败返回 null（不抛错）。 */
   async function fetchCatalogAt(dataDir) {
     var dir = String(dataDir || "").replace(/[\\/]+$/, "");
@@ -1494,6 +1511,7 @@
     pushRecord: pushRecord,
     pushRecordTo: pushRecordTo,
     putJsonFile: putJsonFile,
+    fetchJsonFile: fetchJsonFile,
     fetchCatalogAt: fetchCatalogAt,
     pushWithRetry: pushWithRetry,
     flushQueue: flushQueue,

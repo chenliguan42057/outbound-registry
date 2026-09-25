@@ -22,7 +22,7 @@
     r: { hash: "/app/report", label: "报表" },
     b: { hash: "/app/borrow", label: "先借后还" },
     m: { hash: "/app/memos", label: "备忘录" },
-    a: { hash: "/app/ai", label: "AI 助手" },
+    a: { hash: "/app/ai", label: "自动识别" },
     y: { hash: "/app/sync", label: "云端同步" }
   };
 

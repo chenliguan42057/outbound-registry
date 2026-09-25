@@ -30,7 +30,7 @@
     { id: "memos", icon: "edit", label: "备忘录", tone: 8, desc: "待做事项与到点提醒，每一项可以单独设时间" },
     { id: "push", icon: "bell", label: "推送信息", tone: 4, desc: "钉钉群推送内容预览，确认发送前先看一眼" },
     { id: "trash", icon: "box", label: "回收站", tone: 10, desc: "误删的记录暂存在这里，可以还原" },
-    { id: "ai", icon: "box", label: "AI 助手", tone: 11, desc: "用大白话问库存、查记录、算数据" }
+    { id: "ai", icon: "clipboard", label: "自动识别", tone: 11, desc: "粘贴吉客云订单文字，自动填好表单" }
   ];
 
   /* 非侧栏菜单模块（顶栏按钮/提醒路由直达）的页头说明 */
@@ -76,7 +76,7 @@
 
   var MODULE_TITLES = {
     dashboard: "仪表盘", stock: "库存查询", in: "入库管理", pickups: "待取货", memos: "备忘录", sync: "云端同步",
-    "in-records": "入库记录", "out-records": "出库记录", report: "报表统计", ai: "AI 助手",
+    "in-records": "入库记录", "out-records": "出库记录", report: "报表统计", ai: "自动识别",
     borrow: "先借后还", transfer: "调拨", push: "推送信息", trash: "回收站",
     "in-remind": "入库提醒", "out-remind": "出库提醒"
   };

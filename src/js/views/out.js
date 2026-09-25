@@ -232,6 +232,10 @@
 
     restoreDraft();
 
+    // 自动识别回填（2026-09-26）：从「自动识别」页跳转过来时取走待填数据（取一次即清空）
+    var _pendOut = window.App.Views.recognize && window.App.Views.recognize.takePending("out");
+    if (_pendOut) fillRecognized(_pendOut);
+
     // 「我的提交记录」大框：首屏渲染 + 云端队列变化时刷新徽标 + 每 60 秒剔除超 2 小时的旧条目
     if (!recentSubscribed && Cloud.onQueueChange) {
       recentSubscribed = true;
@@ -867,5 +871,32 @@
 
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
-  window.App.Views.out = { render: render, edit: edit };
+  /**
+   * 自动识别回填（2026-09-26）：由「自动识别」页经 Views.recognize.takePending 传入。
+   * @param {{dept?:string, picker?:string, applicant?:string, purpose?:string, items?:Array<{name:string,qty:number}>}} d
+   * 出库页比待取货多出三项，按主理人 2026-09-26 确认的口径处理：
+   *   · 申请人   ← 订单编号（与取货人同值）
+   *   · 领取时间 ← 当前时间
+   *   · 结算法人 ← 保持当前系统默认，不自动改（避免误改结算法人）
+   * 注意：ProductPicker.setSelected 内部只 render、不触发 onChange，必须手动补一次 saveDraft。
+   */
+  function fillRecognized(d) {
+    if (!d || !els) return;
+    if (d.dept != null) els.dept.value = d.dept;
+    if (d.picker != null) els.picker.value = d.picker;
+    /* 申请人：主理人 2026-09-26 定稿 —— 出库「申请人」直接写**客户账号**（与部门/领取单位同值），
+       不是订单编号。识别页会显式传 applicant；没传时回退成 dept。 */
+    if (d.applicant != null) els.applicant.value = d.applicant;
+    else if (d.dept != null) els.applicant.value = d.dept;
+    if (els.time) els.time.value = Util.nowLocal();
+    if (d.purpose) setPurposeSelected(d.purpose);
+    else if (!selectedPurpose) setPurposeSelected((Config.PURPOSE_PRESETS || [])[0] || "");
+    if (d.items && d.items.length) picker.setSelected(d.items);
+    saveDraft();
+    var n = (d.items || []).length;
+    Util.toast("已填入" + (n ? " " + n + " 项货品" : "") + "，请核对后提交");
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
+  }
+
+  window.App.Views.out = { render: render, edit: edit, fill: fillRecognized };
 })();

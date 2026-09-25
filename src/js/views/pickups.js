@@ -162,6 +162,10 @@
     listBox.addEventListener("click", onListClick);
 
     restoreDraft();
+
+    // 自动识别回填（2026-09-26）：从「自动识别」页跳转过来时取走待填数据（取一次即清空）
+    var _pend = window.App.Views.recognize && window.App.Views.recognize.takePending("pickups");
+    if (_pend) fillRecognized(_pend);
     renderList();
   }
 
@@ -592,5 +596,24 @@
 
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
-  window.App.Views.pickups = { render: render, refresh: refresh, doSync: doSync };
+  /**
+   * 自动识别回填（2026-09-26）：由「自动识别」页经 Views.recognize.takePending 传入。
+   * @param {{dept?:string, picker?:string, purpose?:string, items?:Array<{name:string,qty:number}>}} d
+   * 注意：ProductPicker.setSelected 内部只 render、不触发 onChange，
+   *       所以回填后必须手动补一次 saveDraft，否则刷新页面草稿会丢。
+   */
+  function fillRecognized(d) {
+    if (!d || !els) return;
+    if (d.dept != null) els.dept.value = d.dept;
+    if (d.picker != null) els.picker.value = d.picker;
+    if (d.purpose) setPurposeSelected(d.purpose);            // 内部已触发 saveDraft
+    else if (!selectedPurpose) setPurposeSelected((Config.PURPOSE_PRESETS || [])[0] || "");   // 用途为必填，回填时先给预设首项
+    if (d.items && d.items.length) picker.setSelected(d.items);
+    saveDraft();
+    var n = (d.items || []).length;
+    Util.toast("已填入" + (n ? " " + n + " 项货品" : "") + "，请核对后提交");
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
+  }
+
+  window.App.Views.pickups = { render: render, refresh: refresh, doSync: doSync, fill: fillRecognized };
 })();
