@@ -125,7 +125,8 @@
     lastCardEl.style.display = "none";
     container.appendChild(lastCardEl);
     lastCardEl.addEventListener("click", function (ev) {
-      if (ev.target.closest("#outCopyBtn")) { ev.preventDefault(); copyAndNotify(); }
+      if (ev.target.closest("#outCopyBtn")) { ev.preventDefault(); copyAndNotify(); return; }
+      if (ev.target.closest("#outRetractBtn")) { ev.preventDefault(); retractLast(); return; }
     });
     restoreLastCard();     // 刷新后若还没过期，继续显示
     startLastTicker();     // 每分钟刷新剩余时效，过期自动收起
@@ -803,7 +804,8 @@
      只存本次登记的字段（不涉及其他数据）；30 分钟后自动收起并清理。 */
 
   var LAST_OUT_KEY = "outbound_last_out_v1";
-  var LAST_OUT_TTL = 30 * 60 * 1000;   // 30 分钟
+  var LAST_OUT_TTL = 30 * 60 * 1000;   // 卡片保留 30 分钟
+  var RETRACT_WINDOW = 60 * 1000;      // 提交后 1 分钟内可撤回
   var lastTicker = null;
 
   /** 提交成功后落盘并立刻显示 */
@@ -812,6 +814,7 @@
     try {
       var p = {
         ts: Date.now(),
+        recordId: rec.id || "",      // 撤回时要靠它定位记录
         orderNo: rec.orderNo || "",
         applicant: rec.applicant || "",
         picker: rec.picker || "",
@@ -869,11 +872,16 @@
     if (!el) return;
     if (!p) { el.style.display = "none"; el.innerHTML = ""; return; }
     var mins = Math.max(0, Math.ceil((LAST_OUT_TTL - (Date.now() - p.ts)) / 60000));
+    var leftMs = Date.now() - p.ts;
+    var canRetract = leftMs <= RETRACT_WINDOW;
+    var secs = Math.max(0, Math.ceil((RETRACT_WINDOW - leftMs) / 1000));
     el.innerHTML =
-      '<h2>刚刚提交的记录 <span class="hint">（' + mins + " 分钟后自动收起）</span></h2>" +
+      '<h2>刚刚提交的记录 <span class="hint">（' + mins + " 分钟后自动收起" +
+        (canRetract ? "，<b>" + secs + " 秒</b>内可撤回" : "") + "）</span></h2>" +
       '<div class="out-copy-box">' + Util.esc(buildCopyText(p)) + "</div>" +
       '<div class="actions" style="margin-top:10px">' +
-        '<button type="button" class="btn" id="outCopyBtn">📋 复制并通知群里</button>' +
+        '<button type="button" class="btn" id="outCopyBtn">📋 复制</button>' +
+        (canRetract ? '<button type="button" class="btn ghost" id="outRetractBtn">↩️ 撤回</button>' : "") +
       "</div>";
     el.style.display = "";
   }
@@ -884,7 +892,7 @@
     if (p) renderLastCard(p);
   }
 
-  /** 每分钟刷新剩余时效，过期自动收起 */
+  /** 每 10 秒刷新剩余时效与撤回倒计时，过期自动收起 */
   function startLastTicker() {
     if (lastTicker) clearInterval(lastTicker);
     lastTicker = setInterval(function () {
@@ -892,7 +900,7 @@
       if (p) { renderLastCard(p); return; }
       var el = Util.$("outLastCard");
       if (el) { el.style.display = "none"; el.innerHTML = ""; }
-    }, 60000);
+    }, 10000);
   }
 
   /** 复制到剪贴板（HTTPS 用标准 API，失败退回 execCommand） */
@@ -947,6 +955,68 @@
     } catch (e) {
       Util.toast("钉钉推送失败：" + (e && e.message ? e.message : e) + "（内容已复制，可稍后重试）", true);
     }
+  }
+
+  /**
+   * 撤回：仅提交后 1 分钟内可用。
+   * 做四件事：① 删掉这条记录（库存自动回滚，等于没登记过）
+   *          ② 走墓碑队列推云端 → 触发 Actions 在钉钉群发「记录已删除」通知
+   *          ③ 收起卡片、清掉本机记录
+   *          ④ 把内容填回表单，恢复成提交前的样子等你改完重提
+   */
+  async function retractLast() {
+    var p = loadLastRecord();
+    if (!p) { Util.toast("这条记录已收起，无法撤回", true); return; }
+    if ((Date.now() - p.ts) > RETRACT_WINDOW) {
+      Util.toast("已超过 1 分钟，不能撤回了", true);
+      renderLastCard(p);
+      return;
+    }
+    var rec = null;
+    try {
+      /* 记录全集挂在 window.App.State.list（Records 只导出增删改，没有 list） */
+      var all = (window.App.State && window.App.State.list) || [];
+      rec = all.filter(function (x) { return x.id === p.recordId; })[0] || null;
+    } catch (e) {}
+    if (!rec) { Util.toast("这条记录已不在系统中（可能已被删除）", true); return; }
+
+    var yes = await UI.confirmDialog(
+      "撤回后这条登记会被删除、库存自动恢复，表单回到提交前的内容，你可以改完重新提交。确定撤回吗？",
+      "撤回这条登记"
+    );
+    if (!yes) return;
+
+    var reason = "提交后 1 分钟内撤回";
+    try {
+      Cloud.enqueueTomb(rec.id, reason);    // ① 本地墓碑队列（离线也入队，防复活）
+      Records.remove(rec.id);               // ② 本地删除 → 库存自动回滚
+      if (Cloud.hasToken && Cloud.hasToken()) {
+        try {
+          await Cloud.delWithTombstone(rec, reason);   // ③ 云端墓碑 + 删除 → 钉钉群「记录已删除」通知
+          Cloud.dequeueTomb(rec.id);
+          try { await Cloud.delCloudPhotos(rec.photoUrls); } catch (e) {}
+        } catch (e) {
+          if (window.App.Views.app && window.App.Views.app.setSyncStatus) {
+            window.App.Views.app.setSyncStatus("云端撤回失败（已存本地墓碑，下次同步自动补推）", true);
+          }
+        }
+      }
+    } catch (e) {
+      Util.toast("撤回失败：" + (e && e.message ? e.message : e), true);
+      return;
+    }
+
+    /* ④ 收起卡片 + 清本机记录 + 内容填回表单 */
+    try { localStorage.removeItem(LAST_OUT_KEY); } catch (e) {}
+    var el = Util.$("outLastCard");
+    if (el) { el.style.display = "none"; el.innerHTML = ""; }
+    fillRecognized({
+      dept: p.dept,
+      picker: p.picker,
+      applicant: p.applicant,
+      items: p.items
+    });
+    Util.toast("↩️ 已撤回，内容已回到表单，可修改后重新提交");
   }
 
   function renderRecentBox() {
