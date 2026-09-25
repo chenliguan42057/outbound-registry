@@ -1034,6 +1034,131 @@
   /* ================= 提交成功动效（D1，2026-08-08 新增） ================= */
   var fxStyleInjected = false;
   /** 提交成功页随机暖心话（每次随机一条，长期可扩展） */
+  /* ================= 开心大转盘（2026-09-26，主理人要求） =================
+     提交成功后的彩蛋：点一下转盘 → 炫技转 3 秒 → 随机蹦出一句夸人的话。
+     纯前端表现层，不参与任何业务/数据逻辑，转出的结果也不落库。 */
+
+  /* 8 个扇区：emoji + 短词 + 低饱和配色（沿用系统主色系） */
+  var WHEEL_SECTORS = [
+    { e: "✨", t: "闪光", bg: "#A8D5C2" },
+    { e: "💛", t: "好运", bg: "#F2DFA8" },
+    { e: "🍀", t: "顺利", bg: "#BEDCC6" },
+    { e: "🎁", t: "惊喜", bg: "#F1CFC4" },
+    { e: "🌟", t: "闪耀", bg: "#CFC7E8" },
+    { e: "🎈", t: "开心", bg: "#F6D9C0" },
+    { e: "💎", t: "值钱", bg: "#BFD8E8" },
+    { e: "🌈", t: "甜一整天", bg: "#E5CDE0" }
+  ];
+
+  /* 100 句随机话术：分五类，不肉麻、有网感、多为夸"人"而非夸"事" */
+  var WHEEL_LINES = [
+    /* —— 夸颜值 —— */
+    "你今天真好看",
+    "你今天怎么这么好看？",
+    "说实话，你今天有点耀眼",
+    "你这状态，比昨天还精神",
+    "认真做事的人最好看，说的就是你",
+    "你今天气色好得离谱",
+    "这一单很配你的气质",
+    "你笑起来应该更好看",
+    "今天这身打扮，库存都多看了两眼",
+    "别人是来干活的，你是来发光的",
+    "你今天的颜值，值得报备一下",
+    "好看的人连登记都这么快",
+    "你今天帅得很安静",
+    "这份状态，建议长期保持",
+    "你往这儿一站，办公室都亮了",
+    "长得好看还这么靠谱，有点犯规",
+    "今天的你，值得被夸三次",
+    "你现在的样子，就是「靠谱」的样子",
+    "有点羡慕你今天的精气神",
+    "这一单，长得和你一样利落",
+    /* —— 夸靠谱能干 —— */
+    "这事儿交给你，稳了",
+    "又快又准，专业",
+    "你办事，我放心",
+    "这一单干净得挑不出刺",
+    "库存谢谢你",
+    "你就是那种「交给他就没问题」的人",
+    "手速惊人，全程零差错",
+    "有你在，流程都顺了",
+    "这效率，别人得追一阵",
+    "你是团队里那颗定心丸",
+    "干得漂亮，不用谦虚",
+    "一单不乱，全靠你稳",
+    "你今天处理事情的思路特别清晰",
+    "这种细活儿，也就你能这么快",
+    "你做事的样子特别有说服力",
+    "这单登记得像教科书",
+    "你的靠谱是能被看见的",
+    "厉害的人连打勾都好看",
+    "你把琐碎的事做得很有章法",
+    "这就是传说中的「闭环」",
+    /* —— 好运吉利 —— */
+    "今天顺得有点离谱",
+    "这一单开了个好头",
+    "好运正在来找你的路上",
+    "今天的运气值已经满格",
+    "星星今天站你这边",
+    "你今天的运气，建议分我一点",
+    "好事会一件接一件",
+    "今天诸事皆宜",
+    "这一单很吉利",
+    "运气这种事，你从来不缺",
+    "今天你会遇到一点小惊喜",
+    "幸运在排队等你",
+    "你今天的运气好得像有人开挂",
+    "今天适合干大事",
+    "财运正在靠近你",
+    "这一单，顺顺利利",
+    "今天的风向对你有利",
+    "你值得一整天都顺",
+    "好运是你的默认设置",
+    "今天的世界对你很温柔",
+    /* —— 轻松逗趣 —— */
+    "库存都替你高兴",
+    "这一单干净得像刚洗过的数据",
+    "系统都想给你鼓掌",
+    "你按下的不是提交，是快乐",
+    "表格看了都说好",
+    "你这手速，键盘都跟不上",
+    "这条数据长得特别正",
+    "你现在价值连城",
+    "别怀疑，你就是很棒",
+    "连打印机都想为你欢呼",
+    "你把一件小事做出了仪式感",
+    "系统提示：检测到一位高手",
+    "这一单，堪称艺术品",
+    "你不是在登记，是在创作",
+    "数据世界的秩序由你守护",
+    "你今天的输出质量超标了",
+    "建议给自己倒杯水，辛苦了",
+    "这一单值得配一个下午茶",
+    "你现在做的事，很重要",
+    "解锁隐藏成就：稳如老狗",
+    /* —— 温柔打气 —— */
+    "你今天也辛苦了",
+    "慢慢来，你已经做得很好",
+    "每一条记录都是你的认真",
+    "你今天很努力，值得被看见",
+    "谢谢你今天这么认真",
+    "做得好，也记得休息",
+    "你在把事情一点点变好",
+    "你今天的样子，很踏实",
+    "你已经比昨天更熟练了",
+    "这一单是你今天的小成就",
+    "认真生活的人，运气不会差",
+    "你今天的状态值得表扬",
+    "别太累，你已经很好了",
+    "你做的每件小事都有意义",
+    "今天的你，值得一句「厉害」",
+    "保持这个节奏，很稳",
+    "你正在成为更好的自己",
+    "谢谢你让流程转得更顺",
+    "你今天完成的，比你以为的多",
+    "新的记录，新的开始"
+  ];
+
   var WARM_LINES = [
     "每一份登记，都是你为出库流程多节省的一分钟。",
     "今日的每一单，都会被明天记得。",
@@ -1077,7 +1202,52 @@
       ".fx-success .actions{display:flex;gap:10px;justify-content:center;}" +
       ".fx-success .actions button{flex:1 1 0;min-width:0;padding:10px 0;border-radius:11px;border:1px solid #C6DAD1;background:#fff;color:#3C4845;font-size:13.5px;font-weight:600;cursor:pointer;}" +
       ".fx-success .actions button.primary{background:linear-gradient(135deg,#7FB08E,#5E9A79);border-color:transparent;color:#fff;}" +
-      ".recent-item-no{display:inline-block;font-size:11px;font-weight:600;color:var(--mint-600,#57826F);background:var(--mint-100,#EAF4EF);border:1px solid rgba(185,214,199,.7);border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:1px;white-space:nowrap;}";
+      ".recent-item-no{display:inline-block;font-size:11px;font-weight:600;color:var(--mint-600,#57826F);background:var(--mint-100,#EAF4EF);border:1px solid rgba(185,214,199,.7);border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:1px;white-space:nowrap;}" +
+      /* ===== 开心大转盘（2026-09-26）===== */
+      ".fx-wheel-card{width:min(380px,92vw);padding:26px 22px 20px;}" +
+      ".fx-wheel-wrap{display:flex;flex-direction:column;align-items:center;margin-top:6px;}" +
+      ".fx-wheel{position:relative;width:236px;height:236px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;transition:transform .45s cubic-bezier(.3,.9,.4,1),opacity .45s,filter .45s;}" +
+      ".fx-wheel.dim{transform:scale(.88);opacity:.38;filter:saturate(.65);}" +
+      /* 外圈金环 + 跑马灯灯泡 */
+      ".fx-wheel-ring{position:absolute;inset:-12px;border-radius:50%;background:linear-gradient(135deg,#F3EAD6,#DCC9A2 42%,#BFA87A);box-shadow:0 12px 28px rgba(88,78,48,.28),inset 0 2px 5px rgba(255,255,255,.75);}" +
+      ".fx-wheel-ring i{position:absolute;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;background:#FFF9EA;box-shadow:0 0 7px rgba(255,236,180,.95);opacity:.4;transition:opacity .2s,transform .2s;}" +
+      ".fx-wheel.spin .fx-wheel-ring i{opacity:1;animation:fxBulb 1.05s linear infinite;}" +
+      "@keyframes fxBulb{0%,100%{transform:scale(1);box-shadow:0 0 7px rgba(255,236,180,.95);}50%{transform:scale(1.5);box-shadow:0 0 14px rgba(255,214,120,1);}}" +
+      /* 盘面：8 扇区用 conic-gradient 铺色 */
+      ".fx-wheel-rotor{position:absolute;inset:0;border-radius:50%;overflow:hidden;transition:transform .18s ease-out;will-change:transform;" +
+        "background:conic-gradient(#A8D5C2 0 45deg,#F2DFA8 45deg 90deg,#BEDCC6 90deg 135deg,#F1CFC4 135deg 180deg,#CFC7E8 180deg 225deg,#F6D9C0 225deg 270deg,#BFD8E8 270deg 315deg,#E5CDE0 315deg 360deg);" +
+        "box-shadow:inset 0 0 0 5px #FFFDF8,inset 0 0 26px rgba(255,255,255,.6),0 12px 30px rgba(60,90,75,.2);}" +
+      /* 扇区里的 emoji + 短词（整体旋转到扇区中线，再反向旋正文字） */
+      ".fx-wheel-sec{position:absolute;left:50%;top:50%;width:66px;margin:-33px 0 0 -33px;text-align:center;pointer-events:none;}" +
+      ".fx-wheel-sec b{display:block;font-size:17px;line-height:1.1;font-weight:400;}" +
+      ".fx-wheel-sec span{display:block;font-size:9.5px;color:#44604F;letter-spacing:.2px;margin-top:1px;}" +
+      /* 中心按钮 */
+      ".fx-wheel-hub{position:absolute;left:50%;top:50%;width:76px;height:76px;margin:-38px 0 0 -38px;border-radius:50%;z-index:3;" +
+        "background:radial-gradient(circle at 34% 28%,#93C7B0,#5E9A79 72%);color:#fff;font-size:13px;font-weight:700;letter-spacing:.5px;" +
+        "display:flex;align-items:center;justify-content:center;box-shadow:0 9px 22px rgba(70,120,98,.45),inset 0 2px 7px rgba(255,255,255,.5);}" +
+      ".fx-wheel.idle .fx-wheel-hub{animation:fxHub 2s ease-in-out infinite;}" +
+      "@keyframes fxHub{0%,100%{transform:scale(1);box-shadow:0 9px 22px rgba(70,120,98,.45),inset 0 2px 7px rgba(255,255,255,.5);}50%{transform:scale(1.07);box-shadow:0 9px 30px rgba(70,130,104,.62),inset 0 2px 7px rgba(255,255,255,.5);}}" +
+      ".fx-wheel.spin .fx-wheel-hub{animation:fxHubSpin .85s ease-in-out infinite;}" +
+      "@keyframes fxHubSpin{0%,100%{transform:scale(1);}50%{transform:scale(1.15);}}" +
+      ".fx-wheel-hub:active{transform:scale(.93);}" +
+      /* 顶部指针 */
+      ".fx-wheel-pin{position:absolute;left:50%;top:-17px;margin-left:-12px;width:0;height:0;z-index:4;" +
+        "border-left:12px solid transparent;border-right:12px solid transparent;border-top:21px solid #4E8A6B;" +
+        "filter:drop-shadow(0 3px 4px rgba(45,75,60,.4));}" +
+      /* 提示与结果 */
+      ".fx-wheel-tip{margin-top:16px;font-size:12.5px;color:#7A8A85;text-align:center;min-height:18px;}" +
+      ".fx-wheel-lines{margin-top:8px;min-height:76px;display:flex;align-items:center;justify-content:center;padding:0 6px;}" +
+      ".fx-wheel-lines .line{font-size:20px;font-weight:700;color:#2F4A3E;line-height:1.5;text-align:center;opacity:0;transform:scale(.55) translateY(8px);" +
+        "transition:transform .52s cubic-bezier(.2,1.55,.4,1),opacity .3s ease-out;}" +
+      ".fx-wheel-lines.show .line{opacity:1;transform:scale(1) translateY(0);}" +
+      /* 撒落星星 */
+      ".fx-wheel-confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:20px;z-index:9;}" +
+      ".fx-wheel-confetti span{position:absolute;top:-16px;opacity:0;animation:fxFall 1.7s cubic-bezier(.25,.6,.4,1) forwards;}" +
+      "@keyframes fxFall{0%{opacity:0;transform:translateY(0) rotate(0);}12%{opacity:1;}100%{opacity:0;transform:translateY(400px) rotate(var(--fx-rot,360deg));}}" +
+      "html[data-theme=\"dark\"] .fx-wheel-lines .line{color:#E8E4DD;}" +
+      "html[data-theme=\"dark\"] .fx-wheel-sec span{color:#3F5A4C;}" +
+      "html[data-theme=\"dark\"] .fx-success-card.fx-wheel-card{background:#2A3632;border-color:#3E4F49;}" +
+      "html[data-theme=\"dark\"] .fx-wheel-ring{background:linear-gradient(135deg,#7A6E52,#5C523A 42%,#453E2C);}";
     document.head.appendChild(st);
   }
 
@@ -1092,21 +1262,118 @@
     var warm = WARM_LINES[Math.floor(Math.random() * WARM_LINES.length)];
     var el = document.createElement("div");
     el.className = "fx-success";
+    /* 8 个扇区的 emoji + 短词：先整体旋到扇区中线，再把文字反向旋正 */
+    var secHtml = "";
+    for (var si = 0; si < WHEEL_SECTORS.length; si++) {
+      var sAng = si * 45 + 22.5;
+      secHtml += '<div class="fx-wheel-sec" style="transform:rotate(' + sAng + 'deg) translateY(-77px) rotate(' + (-sAng) + 'deg)">' +
+        '<b>' + WHEEL_SECTORS[si].e + '</b><span>' + WHEEL_SECTORS[si].t + '</span></div>';
+    }
+
     el.innerHTML =
-      '<div class="fx-success-card">' +
-        '<div class="stage">' +
-          '<div class="fx-particles" id="fxBurstHost"></div>' +
-          '<span class="check"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg></span>' +
-        '</div>' +
+      '<div class="fx-success-card fx-wheel-card">' +
         (orderNo ? '<span class="order-no">' + Util.esc(orderNo) + '</span>' : '') +
-        '<h3>提交成功</h3>' +
-        '<div class="warm">' + Util.esc(warm) + '</div>' +
-        '<div class="actions">' +
-          '<button type="button" data-act="view">查看最新记录</button>' +
+        '<div class="fx-wheel-wrap">' +
+          '<div class="fx-wheel idle" id="fxWheel">' +
+            '<div class="fx-wheel-pin"></div>' +
+            '<div class="fx-wheel-ring" id="fxWheelRing"></div>' +
+            '<div class="fx-wheel-rotor" id="fxWheelRotor">' + secHtml + '</div>' +
+            '<div class="fx-wheel-hub">点我</div>' +
+          '</div>' +
+          '<div class="fx-wheel-tip" id="fxWheelTip">点一下转盘，看看今天的彩蛋 ✨</div>' +
+        '</div>' +
+        '<div class="fx-wheel-lines" id="fxWheelLines"></div>' +
+        '<div class="actions" id="fxWheelActs" style="visibility:hidden">' +
+          '<button type="button" data-act="again">再转一次</button>' +
+          (orderNo ? '<button type="button" data-act="view">查看最新记录</button>' : '') +
           '<button type="button" class="primary" data-act="close">知道了</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(el);
+
+    /* ---------- 开心大转盘交互（纯表现层，不碰任何业务数据） ---------- */
+    var wheel = el.querySelector("#fxWheel");
+    var rotor = el.querySelector("#fxWheelRotor");
+    var ring = el.querySelector("#fxWheelRing");
+    var tip = el.querySelector("#fxWheelTip");
+    var linesBox = el.querySelector("#fxWheelLines");
+    var actsBox = el.querySelector("#fxWheelActs");
+    var spinning = false;
+    var rotorDeg = 0;
+
+    /* 外圈 12 颗灯泡，沿圆周均匀分布 */
+    if (ring) {
+      for (var bi = 0; bi < 12; bi++) {
+        var ba = bi * 30 * Math.PI / 180;
+        var bulb = document.createElement("i");
+        bulb.style.left = "calc(50% + " + (Math.cos(ba) * 123).toFixed(1) + "px)";
+        bulb.style.top = "calc(50% + " + (Math.sin(ba) * 123).toFixed(1) + "px)";
+        bulb.style.animationDelay = (bi * 0.085).toFixed(3) + "s";
+        ring.appendChild(bulb);
+      }
+    }
+
+    /* 撒星星 */
+    function confetti() {
+      var box = document.createElement("div");
+      box.className = "fx-wheel-confetti";
+      var colors = ["#F2D06B", "#A8D5C2", "#C9C2E8", "#F1CFC4", "#9FD3E8", "#EFB6D3"];
+      var glyphs = ["✦", "✧", "★", "✿", "❋"];
+      for (var ci = 0; ci < 36; ci++) {
+        var sp = document.createElement("span");
+        sp.textContent = glyphs[ci % glyphs.length];
+        sp.style.color = colors[ci % colors.length];
+        sp.style.left = (Math.random() * 100).toFixed(1) + "%";
+        sp.style.fontSize = (9 + Math.random() * 11).toFixed(1) + "px";
+        sp.style.animationDelay = (Math.random() * 0.45).toFixed(2) + "s";
+        sp.style.setProperty("--fx-rot", (Math.random() * 720 - 360).toFixed(0) + "deg");
+        box.appendChild(sp);
+      }
+      el.querySelector(".fx-success-card").appendChild(box);
+      setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 3800);
+    }
+
+    /* 转动：蓄力 → 高速 4~5 圈 → 过冲缓停，全程 3 秒 → 揭晓话术 */
+    function spin() {
+      if (spinning) return;
+      spinning = true;
+      wheel.classList.remove("idle", "dim");
+      wheel.classList.add("spin");
+      linesBox.classList.remove("show");
+      linesBox.innerHTML = "";
+      actsBox.style.visibility = "hidden";
+      tip.textContent = "转起来啦…";
+
+      var turns = 4 + Math.floor(Math.random() * 2);          /* 4 或 5 圈 */
+      var target = rotorDeg + turns * 360 + 22.5 + Math.floor(Math.random() * 8) * 45;
+
+      /* ① 蓄力：反向回撤 14°，那一下回缩最抓人 */
+      rotor.style.transition = "transform .18s ease-out";
+      rotor.style.transform = "rotate(" + (rotorDeg - 14) + "deg)";
+
+      /* ② 主旋：突然加速转出去，曲线前段猛、后段缓 */
+      setTimeout(function () {
+        rotor.style.transition = "transform 2.72s cubic-bezier(.12,.72,.16,1)";
+        rotor.style.transform = "rotate(" + target + "deg)";
+        rotorDeg = target;
+      }, 180);
+
+      /* ③ 停稳揭晓：转盘后退让位 → 话术从小到大弹出 → 撒星星 */
+      setTimeout(function () {
+        spinning = false;
+        wheel.classList.remove("spin");
+        wheel.classList.add("dim");
+        var line = WHEEL_LINES[Math.floor(Math.random() * WHEEL_LINES.length)];
+        linesBox.innerHTML = '<div class="line">✨ ' + Util.esc(line) + ' ✨</div>';
+        tip.textContent = "";
+        requestAnimationFrame(function () { linesBox.classList.add("show"); });
+        confetti();
+        actsBox.style.visibility = "visible";
+      }, 3000);
+    }
+
+    if (wheel) wheel.addEventListener("click", spin);
+
     // 烟花粒子：70 颗从中心向四周随机角度爆裂，颜色随机、距离随机、稍错延迟
     var host = el.querySelector("#fxBurstHost");
     if (host) {
@@ -1138,6 +1405,7 @@
       if (!b) { if (e.target === el) close(); return; }
       var act = b.getAttribute("data-act");
       if (act === "close") close();
+      else if (act === "again") spin();
       else if (act === "view") {
         close();
         var target = opts.target || document.getElementById("recentBox") || document.getElementById("recListBox");
@@ -1148,8 +1416,8 @@
         }
       }
     });
-    // 4.5 秒自动关闭（不强制，可点「知道了」立即关）
-    setTimeout(function () { if (document.body.contains(el)) close(); }, 4500);
+    // 转盘是主动交互，不能被超时打断：只留一个宽松兜底（40 秒防卡住），主要靠「知道了」关闭
+    setTimeout(function () { if (document.body.contains(el)) close(); }, 40000);
   }
 
   /* ============================================================
