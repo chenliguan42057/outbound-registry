@@ -1159,20 +1159,26 @@ html[data-theme="dark"] .fx-detail-head { color: #A9B8B2; }
 .stock-table.freeze-table { table-layout: fixed; width: 100%; min-width: 0; }
 .stock-table.freeze-table th, .stock-table.freeze-table td { white-space: nowrap; }
 .stock-table.freeze-table th:nth-child(1), .stock-table.freeze-table td:nth-child(1) { white-space: normal; word-break: break-word; }
+.stock-table.freeze-table:not(.rank-table) th:nth-child(1),
+.stock-table.freeze-table:not(.rank-table) td:nth-child(1) { width: 27%; }
 .stock-table.freeze-table:not(.rank-table) th:nth-child(2),
 .stock-table.freeze-table:not(.rank-table) th:nth-child(3),
-.stock-table.freeze-table:not(.rank-table) th:nth-child(4) { width: 74px; }
+.stock-table.freeze-table:not(.rank-table) th:nth-child(4) { width: 12%; }
 .stock-table.freeze-table:not(.rank-table) th:nth-child(5),
-.stock-table.freeze-table:not(.rank-table) th:nth-child(6) { width: 52px; }
-.stock-table.freeze-table:not(.rank-table) th:nth-child(7) { width: 82px; }
-.stock-table.freeze-table:not(.rank-table) th:nth-child(8) { width: 92px; }
-.rank-table.freeze-table th:nth-child(1) { width: 48px; }
+.stock-table.freeze-table:not(.rank-table) th:nth-child(6) { width: 8%; }
+.stock-table.freeze-table:not(.rank-table) th:nth-child(7) { width: 11%; }
+.stock-table.freeze-table:not(.rank-table) th:nth-child(8) { width: 11.5%; }
+.stock-table.freeze-table:not(.rank-table) td:nth-child(n+2) { text-align: center; }
+.rank-table.freeze-table th:nth-child(1) { width: 7%; }
+.rank-table.freeze-table th:nth-child(2) { width: 27%; }
 .rank-table.freeze-table th:nth-child(2), .rank-table.freeze-table td:nth-child(2) { white-space: normal; word-break: break-word; }
 .rank-table.freeze-table th:nth-child(3),
 .rank-table.freeze-table th:nth-child(4),
-.rank-table.freeze-table th:nth-child(5) { width: 74px; }
-.rank-table.freeze-table th:nth-child(6) { width: 82px; }
-.rank-table.freeze-table th:nth-child(7) { width: 92px; }
+.rank-table.freeze-table th:nth-child(5) { width: 12%; }
+.rank-table.freeze-table th:nth-child(6) { width: 16%; }
+.rank-table.freeze-table th:nth-child(7) { width: 14%; }
+.rank-table.freeze-table td:nth-child(n+3) { text-align: center; }
+.rank-table.freeze-table td:nth-child(1) { text-align: center; }
 
 .freeze-table .fx-act { white-space: nowrap; }
 /* 待取货表（9 列，含「占用后可用」）：同样解除 min-width，明细列挤压到 1090px 内 */
@@ -1180,12 +1186,92 @@ html[data-theme="dark"] .fx-detail-head { color: #A9B8B2; }
 .freeze-table:not(.stock-table) th, .freeze-table:not(.stock-table) td { white-space: nowrap; }
 .freeze-table:not(.stock-table) th:nth-child(4), .freeze-table:not(.stock-table) td:nth-child(4),
 .freeze-table:not(.stock-table) th:nth-child(5), .freeze-table:not(.stock-table) td:nth-child(5) { white-space: normal; word-break: break-word; }
-.freeze-table:not(.stock-table) th:nth-child(1) { width: 44px; }
-.freeze-table:not(.stock-table) th:nth-child(2) { width: 112px; }
-.freeze-table:not(.stock-table) th:nth-child(3) { width: 64px; }
-.freeze-table:not(.stock-table) th:nth-child(4) { width: 76px; }
-.freeze-table:not(.stock-table) th:nth-child(6) { width: 48px; }
-.freeze-table:not(.stock-table) th:nth-child(7) { width: 76px; }
-.freeze-table:not(.stock-table) th:nth-child(8) { width: 76px; }
-.freeze-table:not(.stock-table) th:nth-child(9) { width: 118px; }
+.freeze-table:not(.stock-table) th:nth-child(1) { width: 6%; }
+.freeze-table:not(.stock-table) th:nth-child(2) { width: 13%; }
+.freeze-table:not(.stock-table) th:nth-child(3) { width: 9%; }
+.freeze-table:not(.stock-table) th:nth-child(4) { width: 11%; }
+.freeze-table:not(.stock-table) th:nth-child(6) { width: 7%; }
+.freeze-table:not(.stock-table) th:nth-child(7) { width: 12%; }
+.freeze-table:not(.stock-table) th:nth-child(8) { width: 10%; }
+.freeze-table:not(.stock-table) th:nth-child(9) { width: 11%; }
+.freeze-table:not(.stock-table) td:nth-child(n+2) { text-align: center; }
 .freeze-table:not(.stock-table) td:nth-child(9) { white-space: normal; }
+.freeze-table:not(.stock-table) td.items-cell { text-align: left; }
+
+/* ===================== 仪表盘宏观大图（2026-09-26 深度重构） ===================== */
+.dash-hero {
+  background: linear-gradient(140deg, #2A4A40 0%, #1F3630 52%, #33554A 100%);
+  border-radius: 18px;
+  padding: 26px 30px 22px;
+  color: #EAF2EE;
+  box-shadow: 0 10px 32px rgba(31, 51, 45, .22);
+}
+.dh-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 20px; }
+.dh-kpi b { display: block; font-size: 36px; font-weight: 500; line-height: 1.15; letter-spacing: .5px; font-variant-numeric: tabular-nums; }
+.dh-kpi span { font-size: 12px; color: rgba(234, 242, 238, .55); letter-spacing: 3px; }
+.dh-kpi.warn b { color: #F2C94C; }
+.dh-chart-head { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 8px; }
+.dh-chart-title { font-size: 13px; color: rgba(234, 242, 238, .72); letter-spacing: 1px; }
+.dh-legend { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(234, 242, 238, .6); }
+.dh-dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin: 0 4px 0 10px; vertical-align: -1px; }
+.dh-legend .dh-dot:first-child { margin-left: 0; }
+.dh-dot.out { background: #C9BFEC; }
+.dh-dot.in { background: #8AD4BC; }
+.dh-chart svg { width: 100%; height: auto; display: block; }
+.dh-x-label { font-size: 10px; fill: rgba(234, 242, 238, .42); }
+.dh-bottom { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; margin-top: 20px; padding-top: 18px; border-top: 1px solid rgba(255, 255, 255, .09); }
+.dh-donut-wrap { display: flex; align-items: center; gap: 18px; }
+.dh-donut-num { font-size: 24px; font-weight: 500; fill: #EAF2EE; font-variant-numeric: tabular-nums; }
+.dh-donut-cap { font-size: 10px; fill: rgba(234, 242, 238, .5); letter-spacing: 2px; }
+.dh-donut-legend { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.dh-leg-row { display: flex; align-items: center; gap: 7px; font-size: 12px; color: rgba(234, 242, 238, .78); }
+.dh-leg-row .dh-dot { margin: 0; width: 8px; height: 8px; }
+.dh-leg-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dh-leg-val { margin-left: auto; color: rgba(234, 242, 238, .5); font-variant-numeric: tabular-nums; }
+.dh-none { color: rgba(234, 242, 238, .45); font-size: 13px; padding: 30px 0; text-align: center; }
+.dh-heat-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: rgba(234, 242, 238, .6); letter-spacing: 1px; margin-bottom: 10px; }
+.dh-heat-scale .dh-hcell { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 4px; }
+.dh-hgrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; }
+.dh-hcell { aspect-ratio: 1 / 1; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: rgba(234, 242, 238, .55); font-variant-numeric: tabular-nums; }
+.dh-hcell.t0, i.dh-hcell.t0 { background: rgba(255, 255, 255, .07); }
+.dh-hcell.t1 { background: rgba(127, 205, 182, .28); }
+.dh-hcell.t2 { background: rgba(127, 205, 182, .5); }
+.dh-hcell.t3 { background: rgba(127, 205, 182, .74); color: #1F3630; }
+.dh-hcell.t4 { background: #8AD4BC; color: #1F3630; font-weight: 500; }
+.dh-heat-foot { margin-top: 10px; font-size: 11px; color: rgba(234, 242, 238, .38); letter-spacing: .5px; }
+
+/* ===================== 全局精修包（2026-09-26：毛坯 → 精修） ===================== */
+/* 手感：统一过渡 + 按压反馈 */
+.btn, .win-sidebar-item, .chart-card, .card, .dash-tab, .win-titlebar-btn, .win-sysbar-item,
+.stat-card, .tag, .status-pill, .nav-mv { transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease, transform .12s ease; }
+.btn:active { transform: scale(.97); }
+.win-sidebar-item:active { transform: scale(.985); }
+/* 卡片质感：极轻投影 + 悬停微浮 */
+.card, .chart-card { box-shadow: 0 1px 2px rgba(60, 72, 69, .05); }
+.card:hover, .chart-card:hover { box-shadow: 0 4px 14px rgba(60, 72, 69, .09); }
+/* 侧栏选中指示条（当前模块一眼定位） */
+.win-sidebar-item[data-tone] { position: relative; }
+.win-sidebar-item[data-tone].active::before {
+  content: ""; position: absolute; left: 0; top: 22%; bottom: 22%;
+  width: 3px; border-radius: 0 3px 3px 0; background: #7FB3A5;
+}
+/* 全局细滚动条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C3CEC8; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #A6B5AD; }
+/* 键盘焦点可见（可访问性 + 手感） */
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid #7FB3A5; outline-offset: 2px; border-radius: 4px;
+}
+/* 数字全局等宽（表格/统计不跳动） */
+.stock-num, .stat-num, .num, .rank-val, .dh-kpi b, .dh-leg-val { font-variant-numeric: tabular-nums; }
+/* 空状态更轻盈 */
+.empty { padding: 26px 16px; }
+html[data-theme="dark"] .dash-hero { background: linear-gradient(140deg, #233B34 0%, #182823 52%, #29443B 100%); box-shadow: none; border: 1px solid rgba(255, 255, 255, .07); }
+@media (max-width: 760px) {
+  .dh-kpi b { font-size: 26px; }
+  .dh-kpi span { letter-spacing: 1px; }
+  .dh-bottom { grid-template-columns: 1fr; }
+  .dash-hero { padding: 20px 18px 16px; }
+}
