@@ -32,6 +32,8 @@
 
   var dict = null;       // {version, updatedAt, entries:[]}
   var loaded = false;
+  /* 加载状态（供视图区分「加载中 / 已从云端拉到 / 用本机缓存 / 真的没有」，避免一律显示「（空）」造成误解） */
+  var loadState = "idle";   // idle | loading | cloud | cache | empty
   var dirty = false;     // learn() 后置位，供静默上云
 
   /* ---------- 工具 ---------- */
@@ -92,17 +94,20 @@
   async function load() {
     if (loaded) return;
     loaded = true;
+    loadState = "loading";
     var cloud = await fetchCloud();
     if (cloud && Array.isArray(cloud.entries)) {
       dict = { version: cloud.version || 1, updatedAt: cloud.updatedAt || 0, entries: sanitize(cloud.entries) };
       cacheLocal();
+      loadState = "cloud";
       return;
     }
     try {
       var cached = JSON.parse(localStorage.getItem(DICT_LS_KEY) || "null");
-      if (cached && Array.isArray(cached.entries)) { dict = cached; return; }
+      if (cached && Array.isArray(cached.entries)) { dict = cached; loadState = "cache"; return; }
     } catch (e) {}
     dict = defaultDict();
+    loadState = "empty";
   }
 
   /* ---------- 查表 / 学习 ---------- */
@@ -196,6 +201,7 @@
       });
       if (!okCloud) { if (cb) cb(false, "云端保存失败，已存本机（可稍后在字典弹窗重试）"); return; }
       dirty = false;
+      loadState = "cloud";
       if (cb) cb(true, "对照字典已保存到云端（" + entries.length + " 条）");
     } catch (e) {
       if (cb) cb(false, "云端保存异常：" + ((e && e.message) || e));
@@ -352,6 +358,7 @@
     count: function () { return ((dict && dict.entries) || []).length; },
     lookup: lookup,
     lookupAll: lookupAll,
+    state: function () { return loadState; },
     isKnown: isKnown,
     learn: learn,
     save: save,

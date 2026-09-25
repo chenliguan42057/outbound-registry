@@ -55,65 +55,91 @@
     return html;
   }
 
-  /** 状态徽章：把「到底是哪种问题」直接说清楚（主理人要求详细错误点） */
+  /** 状态徽章：文案尽量短（避免把表格撑宽），完整说明放 title 与顶部警告清单里 */
   function statusBadge(status, qty, known, sysName) {
-    if (qty === 0) return '<span class="status-pill pending"><span class="dot"></span>数量为 0，请确认</span>';
+    if (qty === 0) return '<span class="status-pill pending" title="系统不接受数量 0，请确认后改数量或删掉这行"><span class="dot"></span>数量为 0</span>';
     if (sysName) {
       var Jk2 = Jk();
       if (Jk2 && typeof Jk2.isInCurrentSystem === "function" && !Jk2.isInCurrentSystem(sysName)) {
-        return '<span class="status-pill pending"><span class="dot"></span>本仓无此货品</span>';
+        return '<span class="status-pill pending" title="这个货品在当前仓库的目录里没有，请换一个或先切仓库"><span class="dot"></span>本仓无</span>';
       }
       return '<span class="status-pill submitted static"><span class="dot"></span>' + (known ? "已记住" : "已对上") + '</span>';
     }
-    if (status === "pick") return '<span class="status-pill pending"><span class="dot"></span>多候选，请选</span>';
-    return '<span class="status-pill pending"><span class="dot"></span>系统里没有</span>';
+    if (status === "pick") return '<span class="status-pill pending" title="有多个相近货品，请从下拉里选一个"><span class="dot"></span>请选择</span>';
+    return '<span class="status-pill pending" title="系统货品目录里找不到，请从下拉里选一个"><span class="dot"></span>未收录</span>';
   }
 
   /* ---------- 渲染 ---------- */
 
   function render(el) {
     el.innerHTML =
-      '<div class="card">' +
-        '<h2>自动识别 <span class="tag">粘贴吉客云订单文字</span></h2>' +
-        '<div class="hint" style="line-height:1.8;margin-bottom:10px">' +
-          '在吉客云里<b>整段复制 → 回来 Ctrl + V</b>，粘到下面任一框都能自动识别。' +
-          '<br>· <b>待取货 / 出库</b>：第 1 行是「客户账号 ＋ 订单编号」，其余每行是「货品名 ＋ 数量」' +
-          '<br>· <b>入库</b>：第 1 行是入库号（DB 开头，会自动填进「用途」），其余每行是「货品名 ＋ 数量」' +
-          '识别结果先摆给你过目，对应不上或有错的地方会直接列出来，确认无误才填进表单。' +
-        '</div>' +
-        '<div class="actions" style="margin-bottom:12px">' +
-          '<button type="button" class="btn ghost sm" id="rcDictBtn">📖 产品对照字典 <span id="rcDictCount"></span></button>' +
-        '</div>' +
-        '<div class="field">' +
-          '<label>目标页面<span class="req">*</span></label>' +
-          '<div class="chip-group" id="rcTargetChips">' +
-            '<button type="button" class="chip selected" data-t="pickups">待取货</button>' +
-            '<button type="button" class="chip" data-t="out">出库</button>' +
-            '<button type="button" class="chip" data-t="in">入库</button>' +
+      '<div class="rc-layout">' +
+
+        /* ---------- 左栏：设置 + 粘贴 ---------- */
+        '<div class="card">' +
+          '<h2>自动识别 <span class="tag">粘贴吉客云订单文字</span></h2>' +
+
+          '<details class="rc-help">' +
+            '<summary>怎么用？（点开看格式说明）</summary>' +
+            '<div class="rc-help-body">' +
+              '在吉客云里<b>整段复制</b>，回来 <b>Ctrl + V</b> 粘到下面任一框，会自动识别。<br>' +
+              '· <b>待取货 / 出库</b>：第 1 行是「客户账号 ＋ 订单编号」，其余每行是「货品名 ＋ 数量」<br>' +
+              '· <b>入库</b>：第 1 行是入库号（DB 开头，会自动填进「用途」），其余每行是「货品名 ＋ 数量」<br>' +
+              '识别结果先摆给你过目，对应不上或有错的地方会直接列出来，确认无误才填进表单。' +
+            '</div>' +
+          '</details>' +
+
+          '<div class="actions" style="margin-bottom:12px">' +
+            '<button type="button" class="btn ghost sm" id="rcDictBtn">📖 产品对照字典 <span id="rcDictCount"></span></button>' +
+          '</div>' +
+
+          '<div class="field">' +
+            '<label>要填到哪张单？<span class="req">*</span></label>' +
+            '<div class="chip-group" id="rcTargetChips">' +
+              '<button type="button" class="chip selected" data-t="pickups">待取货</button>' +
+              '<button type="button" class="chip" data-t="out">出库</button>' +
+              '<button type="button" class="chip" data-t="in">入库</button>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="field">' +
+            '<label for="rcOrderText">① 订单信息 / 入库号 <span class="hint">（整段文字粘这里）</span></label>' +
+            '<textarea id="rcOrderText" rows="4" autocomplete="off" ' +
+              'placeholder="整段复制粘这里即可。待取货 / 出库：第 1 行「客户账号 + 订单编号」；入库：第 1 行「DB 开头的入库号」"></textarea>' +
+          '</div>' +
+
+          '<div class="field">' +
+            '<label for="rcItemText">② 货品明细 <span class="hint">（分两个框也行，整段粘上面那个一样能认）</span></label>' +
+            '<textarea id="rcItemText" rows="5" autocomplete="off" ' +
+              'placeholder="每行「货品名 + 数量」，例如：韶初泌语鹿茸凝时抗皱冻干精华液-20支装&#9;2"></textarea>' +
+          '</div>' +
+
+          '<div class="actions">' +
+            '<button type="button" class="btn" id="rcParse">开始识别</button>' +
+            '<span class="rc-kbd">Ctrl + Enter</span>' +
+            '<button type="button" class="btn ghost sm" id="rcClearIn" style="margin-left:auto">清空</button>' +
           '</div>' +
         '</div>' +
-        '<div class="field">' +
-          '<label for="rcOrderText">① 订单信息 / 入库号 <span class="hint">（整段文字粘这里）</span></label>' +
-          '<textarea id="rcOrderText" rows="3" autocomplete="off" ' +
-            'placeholder="整段复制粘这里即可。待取货 / 出库：第 1 行「客户账号 + 订单编号」；入库：第 1 行「DB 开头的入库号」"></textarea>' +
+
+        /* ---------- 右栏：还没识别时的引导 ---------- */
+        '<div class="card" id="rcEmptyCard">' +
+          '<div class="rc-empty-hint">' +
+            '<b>👈 把吉客云那段文字粘到左边</b>' +
+            '粘完会自动识别，这里就摆出结果<br>你核对无误，再点「填入表单」' +
+          '</div>' +
         '</div>' +
-        '<div class="field">' +
-          '<label for="rcItemText">② 货品明细 <span class="hint">（不分两个框也行，整段粘上面那个一样能认出来）</span></label>' +
-          '<textarea id="rcItemText" rows="6" autocomplete="off" ' +
-            'placeholder="每行「货品名 + 数量」，例如：韶初泌语鹿茸凝时抗皱冻干精华液-20支装&#9;2"></textarea>' +
+
+        /* ---------- 右栏：识别结果 ---------- */
+        '<div class="card" id="rcResultCard" style="display:none">' +
+          '<h2>识别结果 <span class="badge" id="rcSummary"></span></h2>' +
+          '<div id="rcResultBody"></div>' +
+          '<div class="actions" style="margin-top:12px">' +
+            '<button type="button" class="btn" id="rcFill">填入表单</button>' +
+            '<span class="rc-kbd">Ctrl + Enter</span>' +
+            '<button type="button" class="btn ghost sm" id="rcClearOut" style="margin-left:auto">清空结果</button>' +
+          '</div>' +
         '</div>' +
-        '<div class="actions">' +
-          '<button type="button" class="btn" id="rcParse">开始识别</button>' +
-          '<button type="button" class="btn ghost" id="rcClearIn">清空粘贴框</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="card" id="rcResultCard" style="display:none">' +
-        '<h2>识别结果 <span class="badge" id="rcSummary"></span></h2>' +
-        '<div id="rcResultBody"></div>' +
-        '<div class="actions" style="margin-top:12px">' +
-          '<button type="button" class="btn" id="rcFill">填入表单</button>' +
-          '<button type="button" class="btn ghost" id="rcClearOut">清空识别结果</button>' +
-        '</div>' +
+
       '</div>';
 
     els = {
@@ -122,6 +148,7 @@
       itemText: q("rcItemText"),
       parse: q("rcParse"),
       clearIn: q("rcClearIn"),
+      emptyCard: q("rcEmptyCard"),
       resultCard: q("rcResultCard"),
       resultBody: q("rcResultBody"),
       summary: q("rcSummary"),
@@ -131,7 +158,7 @@
       dictCount: q("rcDictCount")
     };
 
-    /* 目标页面 chip 单选 */
+    /* 目标页 chip 单选 */
     els.targetChips.addEventListener("click", function (ev) {
       var btn = ev.target.closest(".chip");
       if (!btn) return;
@@ -149,17 +176,9 @@
       els.itemText.value = "";
       els.orderText.focus();
     });
-    els.clearOut.addEventListener("click", function () {
-      result = null;
-      els.resultCard.style.display = "none";
-      els.resultBody.innerHTML = "";
-    });
+    els.clearOut.addEventListener("click", clearResult);
     els.fill.addEventListener("click", doFill);
-    els.dictBtn.addEventListener("click", function () {
-      var Dd = D();
-      if (!Dd) { Util.toast("字典组件未就绪，请刷新页面", true); return; }
-      Dd.openManager(function () { updateDictCount(); if (result) renderResult(); });
-    });
+    els.dictBtn.addEventListener("click", openDict);
 
     /* 粘贴即识别：两个框都监听 paste，粘贴后自动跑一次（体验对齐「粘完就出结果」） */
     [els.orderText, els.itemText].forEach(function (ta) {
@@ -168,14 +187,92 @@
       });
     });
 
+    /* 键盘流：Ctrl / Cmd + Enter —— 还没识别就识别，识别过就直接填入（不用移鼠标） */
+    el.addEventListener("keydown", function (ev) {
+      if (!(ev.ctrlKey || ev.metaKey) || ev.key !== "Enter") return;
+      ev.preventDefault();
+      var hasResult = els.resultCard && els.resultCard.style.display !== "none";
+      if (hasResult) doFill(); else doParse();
+    });
+
+    /* 字典状态轮询：最多 6 秒，把「（空）」换成真实状态（加载中 / N 条 / 本机缓存） */
     updateDictCount();
+    var _tries = 0;
+    var _timer = setInterval(function () {
+      _tries++;
+      var st = (D() && D().state) ? D().state() : "idle";
+      var settled = (st !== "loading" && st !== "idle");
+      updateDictCount();
+      if (settled || _tries >= 12) {
+        clearInterval(_timer);
+        if (result) renderResult();
+      }
+    }, 500);
   }
 
+  /** 切到右栏的空状态引导（识别不出内容时用） */
+  function showEmptyHint() {
+    if (els && els.resultCard) els.resultCard.style.display = "none";
+    if (els && els.emptyCard) els.emptyCard.style.display = "";
+  }
+
+  /** 清空识别结果，回到右栏的空状态引导 */
+  function clearResult() {
+    result = null;
+    if (els && els.resultCard) els.resultCard.style.display = "none";
+    if (els && els.resultBody) els.resultBody.innerHTML = "";
+    if (els && els.emptyCard) els.emptyCard.style.display = "";
+  }
+
+  /** 打开产品对照字典（警告条里的行内按钮也走这里） */
+  function openDict() {
+    var Dd = D();
+    if (!Dd) { Util.toast("字典组件未就绪，请刷新页面", true); return; }
+    Dd.openManager(function () { updateDictCount(); if (result) renderResult(); });
+  }
+
+  /**
+   * 在目标表单卡片顶部插一条常驻提示（自动识别填入后提醒核对）。
+   * 三个目标视图（待取货 / 出库 / 入库）共用；只在内存 DOM 操作，不落库。
+   * @param {HTMLElement} anchorEl 表单里的任一元素（用它的 .card 作锚点）
+   */
+  function showBanner(anchorEl) {
+    var card = (anchorEl && anchorEl.closest) ? anchorEl.closest(".card") : null;
+    if (!card || !card.parentNode) return;
+    var old = document.getElementById("rcFilledBanner");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var b = document.createElement("div");
+    b.id = "rcFilledBanner";
+    b.className = "rc-filled-banner";
+    b.innerHTML = "✅ <span><b>已从「自动识别」填入</b>，核对货品与数量后再提交。</span>" +
+      '<button type="button" id="rcFilledBannerX">知道了</button>';
+    card.parentNode.insertBefore(b, card);
+    var x = document.getElementById("rcFilledBannerX");
+    if (x) {
+      x.addEventListener("click", function () { if (b.parentNode) b.parentNode.removeChild(b); });
+    }
+  }
+
+  /**
+   * 字典入口按钮上的状态文案：区分「加载中 / 云端 N 条 / 本机缓存 N 条 / 真的空」。
+   * 原来一律显示「（空）」，会让主理人在加载未完成时误以为字典丢了。
+   */
   function updateDictCount() {
     if (!els || !els.dictCount) return;
     var Dd = D();
-    var n = (Dd && typeof Dd.count === "function") ? Dd.count() : 0;
-    els.dictCount.textContent = n ? "（" + n + " 条）" : "（空）";
+    if (!Dd) { els.dictCount.textContent = "（组件未就绪）"; return; }
+    var st = (typeof Dd.state === "function") ? Dd.state() : "idle";
+    var n = (typeof Dd.count === "function") ? Dd.count() : 0;
+    var txt;
+    if (st === "loading" || st === "idle") txt = "（加载中…）";
+    else if (st === "cloud") txt = "（" + n + " 条）";
+    else if (st === "cache") txt = "（" + n + " 条·本机缓存）";
+    else txt = n ? ("（" + n + " 条）") : "（还没有条目，点这里添加）";
+    els.dictCount.textContent = txt;
+    /* 数据没就绪时给按钮一个提醒态，免得被当成"字典丢了" */
+    if (els.dictBtn) {
+      els.dictBtn.classList.toggle("rc-dict-warn", (st === "empty" || st === "loading" || st === "idle"));
+    }
   }
 
   /* ---------- 识别 ---------- */
@@ -231,11 +328,12 @@
 
     if (result.kind === "none" && !itemsUniq.length) {
       if (!silent) Util.toast("没识别出内容：第 1 行应为「客户账号 + 订单编号」或入库号，其后每行是「货品名 + 数量」", true);
-      els.resultCard.style.display = "none";
+      showEmptyHint();
       return;
     }
     renderResult();
     els.resultCard.style.display = "";
+    if (els.emptyCard) els.emptyCard.style.display = "none";
     if (!silent) Util.toast("识别完成");
   }
 
@@ -255,7 +353,7 @@
     }
 
     /* 统计 + 问题清单（主理人 2026-09-26 要求：对应不上或出错必须直接警告，并指出详细错误点） */
-    var okCount = 0, pickCount = 0, warns = [];
+    var okCount = 0, pickCount = 0, warns = [], needDict = false;
     items.forEach(function (r) {
       var nm = r.name;
       if (!r.sysName) {
@@ -263,7 +361,8 @@
         if (r.status === "pick") {
           warns.push("「" + nm + "」有 " + ((r.candidates || []).length) + " 个相近货品，请从下拉里选一个");
         } else {
-          warns.push("「" + nm + "」系统货品目录里找不到，请从下拉里选一个（或到「产品对照字典」里补一条）");
+          warns.push("「" + nm + "」系统货品目录里找不到，请从下拉里选一个");
+          needDict = true;
         }
       } else {
         okCount++;
@@ -289,6 +388,7 @@
         '<b>⚠️ 有 ' + warns.length + ' 处需要你处理：</b><br>' +
         warns.slice(0, 8).map(function (w) { return "· " + Util.esc(w); }).join("<br>") +
         (warns.length > 8 ? '<br>· …另有 ' + (warns.length - 8) + ' 处' : '') +
+        (needDict ? '<div style="margin-top:8px"><button type="button" class="rc-inline-btn" id="rcWarnDictBtn">📖 点开字典补一条对照</button></div>' : '') +
         '</div>';
     } else if (!warnHtml) {
       warnHtml = '<div class="hint" style="margin:0 0 10px;padding:10px 12px;border-radius:10px;' +
@@ -352,21 +452,32 @@
         '</div>';
     }
 
-    var itemRowsHtml = items.map(function (r, i) {
-      var Jk3 = Jk();
-      var inSys = !!(r.sysName && Jk3 && typeof Jk3.isInCurrentSystem === "function" && Jk3.isInCurrentSystem(r.sysName));
-      var needPick = !inSys;
-      var rowStyle = needPick ? ' style="background:rgba(201,135,127,.10)"' : '';
+    /* 待处理置顶：有问题的行排到最前（data-i 仍指向 result.items 的真实下标，collect 不受影响） */
+    var JkNow = Jk();
+    function rowInSys(r) {
+      return !!(r.sysName && JkNow && typeof JkNow.isInCurrentSystem === "function" && JkNow.isInCurrentSystem(r.sysName));
+    }
+    var rowOrder = items.map(function (r, i) { return i; });
+    rowOrder.sort(function (ia, ib) {
+      var pa = rowInSys(items[ia]) ? 1 : 0;
+      var pb = rowInSys(items[ib]) ? 1 : 0;
+      return pa - pb;          /* 有问题的(0) 排在 已对上(1) 之前；同档保持原顺序 */
+    });
+
+    var itemRowsHtml = rowOrder.map(function (i) {
+      var r = items[i];
+      var needPick = !rowInSys(r);
+      var rowAttr = needPick ? ' class="rc-row-todo"' : '';
       var known = !!(D() && D().isKnown && D().isKnown(r.name));
-      return '<tr' + rowStyle + '>' +
+      return '<tr' + rowAttr + '>' +
         '<td style="word-break:break-all">' + Util.esc(r.name) +
           (r.splitOf ? ' <span class="hint">（套装拆出）</span>' : '') +
           (r.unit ? ' <span class="hint">' + Util.esc(r.unit) + '</span>' : '') + '</td>' +
-        '<td><select class="rc-sys" data-i="' + i + '" style="width:100%;min-width:150px;padding:8px 10px;' +
+        '<td><select class="rc-sys" data-i="' + i + '" style="width:100%;min-width:96px;padding:8px 10px;' +
           'border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)">' +
           productOptions(r.sysName) + '</select></td>' +
         '<td><input type="number" class="rc-qty" data-i="' + i + '" min="0" step="1" value="' +
-          (r.qty === null ? "" : r.qty) + '" style="width:76px;padding:8px 10px;text-align:center;' +
+          (r.qty === null ? "" : r.qty) + '" style="width:62px;padding:8px 6px;text-align:center;' +
           'border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)" /></td>' +
         '<td>' + statusBadge(r.status, r.qty, known, r.sysName) + '</td>' +
         '<td><button type="button" class="btn-clear" data-del="' + i + '">✕</button></td>' +
@@ -378,9 +489,9 @@
       warnHtml +
       orderPickHtml +
       attrHtml +
-      '<div class="table-wrap"><table class="table"><thead><tr>' +
-        '<th style="width:30%">吉客云货品名</th><th style="width:34%">系统货品名</th>' +
-        '<th style="width:11%">数量</th><th style="width:19%">状态</th><th style="width:6%"></th>' +
+      '<div class="table-wrap"><table class="table" style="width:100%;min-width:0"><thead><tr>' +
+        '<th style="width:26%">吉客云货品名</th><th style="width:29%">系统货品名</th>' +
+        '<th style="width:11%">数量</th><th style="width:28%">状态</th><th style="width:6%"></th>' +
       '</tr></thead><tbody id="rcItemRows">' + itemRowsHtml + '</tbody></table></div>' +
       (result.ignored ? '<div class="hint" style="margin-top:8px">已忽略无关行 ' + result.ignored + ' 行</div>' : '');
 
@@ -394,6 +505,10 @@
         if (dEl) dEl.value = o.customer || "";
       });
     }
+
+    /* 警告条里的「点开字典」按钮（有对不上的货品时直接跳去补对照） */
+    var wdb = q("rcWarnDictBtn");
+    if (wdb) wdb.addEventListener("click", openDict);
 
     /* 行操作：删除 / 手选货品后清掉标红 */
     var rowsBox = q("rcItemRows");
@@ -550,6 +665,7 @@
   window.App.Views.recognize = {
     render: render,
     refresh: refresh,
-    takePending: takePending
+    takePending: takePending,
+    showBanner: showBanner
   };
 })();

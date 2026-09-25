@@ -612,6 +612,10 @@
     saveDraft();
     var n = (d.items || []).length;
     Util.toast("已填入" + (n ? " " + n + " 项货品" : "") + "，请核对后提交");
+    try {
+      var R = window.App.Views.recognize;
+      if (R && R.showBanner) R.showBanner(els.submit);
+    } catch (e) {}
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
   }
 

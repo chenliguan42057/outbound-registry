@@ -445,6 +445,10 @@
     renderPreview();                 // 入库有「库存变化预览」，回填后必须刷新
     var n = (d.items || []).length;
     Util.toast("已填入" + (n ? " " + n + " 项货品" : "") + "，记得选入库来源再提交");
+    try {
+      var R = window.App.Views.recognize;
+      if (R && R.showBanner) R.showBanner(els.submit);
+    } catch (e) {}
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
   }
 
