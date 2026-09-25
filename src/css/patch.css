@@ -822,14 +822,17 @@ html[data-theme="dark"] .recent-line { color: #E6E2DC; }
    ============================================================ */
 .rc-layout {
   display: grid;
-  /* 左栏固定 380px（粘贴区不需要更宽），右栏拿走剩余宽度 —— 保证货品表 5 列放得下 */
+  /* 只在足够宽时才两栏：货品表 5 列约需 770px，加左栏 380px → 屏宽 <1450 时两栏必挤 */
   grid-template-columns: 380px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
 .rc-layout > .card { min-width: 0; margin: 0; }
-@media (max-width: 980px) {
+@media (max-width: 1400px) {
+  /* 中等宽度：回到上下堆叠（卡片撑满、输入框宽敞、表格放得下），比挤成"窄条+空块"清爽 */
   .rc-layout { grid-template-columns: 1fr; }
+  /* 单列时左栏已在上方，右栏那条引导没意义 → 隐藏，避免底部一大块空白 */
+  #rcEmptyCard { display: none !important; }
 }
 
 /* 用法说明：默认收起成一行，点开才展开（第二次进来不再占地方） */
@@ -858,25 +861,65 @@ html[data-theme="dark"] .recent-line { color: #E6E2DC; }
   color: var(--text, #4A5A55);
 }
 
-/* 右栏空状态：还没识别时的引导（min-height 让右栏与左栏高度接近，避免下方空一大块） */
+/* 右栏空状态：还没识别时的引导（有图标 + 三步流程，避免"一大块空白"观感） */
 .rc-empty-hint {
-  padding: 46px 22px;
-  min-height: 340px;
+  padding: 40px 22px;
+  min-height: 300px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   text-align: center;
-  line-height: 2;
+  line-height: 1.9;
   color: var(--muted, #8A9995);
   font-size: 13px;
+}
+.rc-empty-icon {
+  font-size: 38px;
+  line-height: 1;
+  margin-bottom: 14px;
+  opacity: .9;
 }
 .rc-empty-hint b {
   display: block;
   font-size: 15px;
   font-weight: 600;
   color: var(--text, #4A5A55);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
+.rc-empty-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.rc-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(111, 160, 138, .13);
+  color: #3C5A50;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.rc-step i {
+  font-style: normal;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #7FB3A5;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rc-step-arrow { color: #B4C6BE; font-size: 12px; }
+html[data-theme="dark"] .rc-step { background: rgba(111, 160, 138, .20); color: #CBE6D9; }
 
 /* 待处理行：淡红底，与已对上的行拉开区别 */
 .rc-row-todo { background: rgba(201, 135, 127, .10); }

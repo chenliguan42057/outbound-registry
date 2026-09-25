@@ -105,7 +105,7 @@
           '<div class="field">' +
             '<label for="rcOrderText">① 订单信息 / 入库号 <span class="hint">（整段文字粘这里）</span></label>' +
             '<textarea id="rcOrderText" rows="4" autocomplete="off" ' +
-              'placeholder="整段复制粘这里即可。待取货 / 出库：第 1 行「客户账号 + 订单编号」；入库：第 1 行「DB 开头的入库号」"></textarea>' +
+              'placeholder="整段复制粘这里即可（格式说明见上方「怎么用？」）"></textarea>' +
           '</div>' +
 
           '<div class="field">' +
@@ -124,8 +124,16 @@
         /* ---------- 右栏：还没识别时的引导 ---------- */
         '<div class="card" id="rcEmptyCard">' +
           '<div class="rc-empty-hint">' +
-            '<b>👈 把吉客云那段文字粘到左边</b>' +
-            '粘完会自动识别，这里就摆出结果<br>你核对无误，再点「填入表单」' +
+            '<div class="rc-empty-icon">📋</div>' +
+            '<b>把吉客云那段文字粘到左边</b>' +
+            '粘完会自动识别，这里就摆出结果' +
+            '<div class="rc-empty-steps">' +
+              '<span class="rc-step"><i>1</i>吉客云里整段复制</span>' +
+              '<span class="rc-step-arrow">→</span>' +
+              '<span class="rc-step"><i>2</i>粘到左边输入框</span>' +
+              '<span class="rc-step-arrow">→</span>' +
+              '<span class="rc-step"><i>3</i>核对无误再填入</span>' +
+            '</div>' +
           '</div>' +
         '</div>' +
 
