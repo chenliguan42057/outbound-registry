@@ -117,6 +117,19 @@
     recentBoxEl.hidden = true;
     container.appendChild(recentBoxEl);
 
+    // 「最近提交的记录」卡片（2026-09-26，主理人要求）：提交后自动出现在表单最底下、保留 30 分钟，
+    // 供一键复制成文本转发（并可同时推送到钉钉群 @ 对接人）。同样用 DOM 追加，不动上面的模板字符串。
+    var lastCardEl = document.createElement("div");
+    lastCardEl.id = "outLastCard";
+    lastCardEl.className = "card out-last-card";
+    lastCardEl.style.display = "none";
+    container.appendChild(lastCardEl);
+    lastCardEl.addEventListener("click", function (ev) {
+      if (ev.target.closest("#outCopyBtn")) { ev.preventDefault(); copyAndNotify(); }
+    });
+    restoreLastCard();     // 刷新后若还没过期，继续显示
+    startLastTicker();     // 每分钟刷新剩余时效，过期自动收起
+
     els = {
       entityChips: Util.$("outEntityChips"),
       dept: Util.$("outDept"),
@@ -565,6 +578,7 @@
     // 提交留痕：本单立刻进「我的提交记录」大框（近 2 小时），后续上云结果会刷新它的状态徽标
     pushRecent(rec.id);
     renderRecentBox();
+    saveLastRecord(rec);   // 「最近提交的记录」卡片：表单最底下显示 30 分钟，供一键复制转发
     resetForm();
     // 顺捷感一（乐观 UI）：本地已落库 = 这件事已经成了，不必等云端回话。
     // 立刻解锁按钮、给提示、把记录放进同步队列（列表行会显示转圈），云端推送转后台慢慢跑。
@@ -783,6 +797,158 @@
   }
 
   /** 渲染「我的提交记录」大框；无有效条目时整块隐藏 */
+  /* ================= 「最近提交的记录」卡片（2026-09-26，主理人要求） =================
+     提交成功后：记录存本机（带时间戳）→ 表单最底部出现卡片 → 保留 30 分钟。
+     卡片内容就是「将要复制的文本」，所见即所得；点按钮 = 复制到剪贴板 ＋ 推送钉钉群。
+     只存本次登记的字段（不涉及其他数据）；30 分钟后自动收起并清理。 */
+
+  var LAST_OUT_KEY = "outbound_last_out_v1";
+  var LAST_OUT_TTL = 30 * 60 * 1000;   // 30 分钟
+  var lastTicker = null;
+
+  /** 提交成功后落盘并立刻显示 */
+  function saveLastRecord(rec) {
+    if (!rec) return;
+    try {
+      var p = {
+        ts: Date.now(),
+        orderNo: rec.orderNo || "",
+        applicant: rec.applicant || "",
+        picker: rec.picker || "",
+        time: rec.time || "",
+        dept: rec.dept || "",
+        purpose: rec.purpose || "",
+        items: (rec.items || []).map(function (it) { return { name: it.name, qty: it.qty }; })
+      };
+      localStorage.setItem(LAST_OUT_KEY, JSON.stringify(p));
+      renderLastCard(p);
+    } catch (e) {}
+  }
+
+  /** 读本机记录；不存在或已超过 30 分钟返回 null（过期顺手清掉） */
+  function loadLastRecord() {
+    try {
+      var p = JSON.parse(localStorage.getItem(LAST_OUT_KEY) || "null");
+      if (!p || !p.ts || (Date.now() - p.ts) > LAST_OUT_TTL) {
+        localStorage.removeItem(LAST_OUT_KEY);
+        return null;
+      }
+      return p;
+    } catch (e) { return null; }
+  }
+
+  /** 生成要复制的文本（分段直观，粘到聊天框也清爽） */
+  function buildCopyText(p) {
+    if (!p) return "";
+    var L = [];
+    L.push("📋 出库领取信息");
+    L.push("");
+    if (p.applicant) L.push("申请人：" + p.applicant);
+    if (p.picker) L.push("领取人：" + p.picker);
+    if (p.time) L.push("领取时间：" + String(p.time).replace("T", " "));   // ISO 的 T 换成空格，读起来自然
+    if (p.dept) L.push("部门 / 客户：" + p.dept);
+    var items = p.items || [];
+    if (items.length) {
+      L.push("");
+      L.push("📦 领取货品：");
+      var total = 0;
+      for (var i = 0; i < items.length; i++) {
+        total += Number(items[i].qty) || 0;
+        L.push((i + 1) + ". " + items[i].name + " × " + items[i].qty);
+      }
+      L.push("");
+      L.push("共 " + items.length + " 项，合计 " + total + " 件");
+    }
+    if (p.orderNo) { L.push(""); L.push("出库单号：" + p.orderNo); }
+    return L.join("\n");
+  }
+
+  /** 渲染卡片（含剩余时效） */
+  function renderLastCard(p) {
+    var el = Util.$("outLastCard");
+    if (!el) return;
+    if (!p) { el.style.display = "none"; el.innerHTML = ""; return; }
+    var mins = Math.max(0, Math.ceil((LAST_OUT_TTL - (Date.now() - p.ts)) / 60000));
+    el.innerHTML =
+      '<h2>刚刚提交的记录 <span class="hint">（' + mins + " 分钟后自动收起）</span></h2>" +
+      '<div class="out-copy-box">' + Util.esc(buildCopyText(p)) + "</div>" +
+      '<div class="actions" style="margin-top:10px">' +
+        '<button type="button" class="btn" id="outCopyBtn">📋 复制并通知群里</button>' +
+      "</div>";
+    el.style.display = "";
+  }
+
+  /** 刷新后恢复（未过期才显示） */
+  function restoreLastCard() {
+    var p = loadLastRecord();
+    if (p) renderLastCard(p);
+  }
+
+  /** 每分钟刷新剩余时效，过期自动收起 */
+  function startLastTicker() {
+    if (lastTicker) clearInterval(lastTicker);
+    lastTicker = setInterval(function () {
+      var p = loadLastRecord();
+      if (p) { renderLastCard(p); return; }
+      var el = Util.$("outLastCard");
+      if (el) { el.style.display = "none"; el.innerHTML = ""; }
+    }, 60000);
+  }
+
+  /** 复制到剪贴板（HTTPS 用标准 API，失败退回 execCommand） */
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(
+        function () { return true; },
+        function () { return fallbackCopy(text); }
+      );
+    }
+    return Promise.resolve(fallbackCopy(text));
+  }
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  /** 点「复制并通知群里」：先复制，再推钉钉（推送失败不影响已复制的内容） */
+  async function copyAndNotify() {
+    var p = loadLastRecord();
+    if (!p) { Util.toast("这条记录已超过 30 分钟，请重新查看提交结果", true); return; }
+    var ok = await copyText(buildCopyText(p));
+    Util.toast(ok ? "✅ 已复制，可直接粘贴到聊天框" : "⚠️ 复制失败，请手动选中复制", !ok);
+
+    /* 推送钉钉群：走仓库既有 notify 通道（写 data/notify/*.json → Actions 加签推送） */
+    if (!Cloud.hasToken || !Cloud.hasToken()) {
+      Util.toast("未配置云端令牌，未推送钉钉（内容已复制）", true);
+      return;
+    }
+    try {
+      await Cloud.pushNotifyFile("out-copy", {
+        _ts: Date.now(),
+        type: "out-copy",
+        order: {
+          orderNo: p.orderNo, applicant: p.applicant, picker: p.picker,
+          time: p.time, dept: p.dept, purpose: p.purpose, items: p.items
+        }
+      });
+      Util.toast("📤 已通知钉钉群");
+      if (window.App.Views.app && window.App.Views.app.setSyncStatus) {
+        window.App.Views.app.setSyncStatus("领取信息已提交推送", false);
+      }
+    } catch (e) {
+      Util.toast("钉钉推送失败：" + (e && e.message ? e.message : e) + "（内容已复制，可稍后重试）", true);
+    }
+  }
+
   function renderRecentBox() {
     var box = Util.$("outRecentBox");
     if (!box) return;                         // 视图已卸载
