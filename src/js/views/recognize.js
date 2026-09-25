@@ -47,7 +47,9 @@
     var html = '<option value="">（请选择）</option>';
     var prods = (Config.PRODUCTS || []).slice();
     if (selected && prods.indexOf(selected) === -1) {
-      html += '<option value="' + Util.esc(selected) + '" selected>' + Util.esc(selected) + '（已失效）</option>';
+      /* 当前值不在本仓目录里（如「大号礼盒」只有赛迪斯有）：仍然列出，但不加长标记——
+         否则窄列会把货品名截断；「本仓无」由状态列与警告清单明确说明。 */
+      html += '<option value="' + Util.esc(selected) + '" selected>' + Util.esc(selected) + '</option>';
     }
     prods.forEach(function (p) {
       html += '<option value="' + Util.esc(p) + '"' + (p === selected ? " selected" : "") + '>' + Util.esc(p) + '</option>';
@@ -472,22 +474,23 @@
       return pa - pb;          /* 有问题的(0) 排在 已对上(1) 之前；同档保持原顺序 */
     });
 
-    var itemRowsHtml = rowOrder.map(function (i) {
+    var itemRowsHtml = rowOrder.map(function (i, pos) {
       var r = items[i];
       var needPick = !rowInSys(r);
       var rowAttr = needPick ? ' class="rc-row-todo"' : '';
       var known = !!(D() && D().isKnown && D().isKnown(r.name));
       return '<tr' + rowAttr + '>' +
-        '<td style="word-break:break-all">' + Util.esc(r.name) +
+        '<td class="rc-cell-no" style="text-align:center;color:var(--muted,#8A9995)">' + (pos + 1) + '</td>' +
+        '<td class="rc-cell-raw" style="word-break:break-all">' + Util.esc(r.name) +
           (r.splitOf ? ' <span class="hint">（套装拆出）</span>' : '') +
           (r.unit ? ' <span class="hint">' + Util.esc(r.unit) + '</span>' : '') + '</td>' +
         '<td><select class="rc-sys" data-i="' + i + '" style="width:100%;min-width:96px;padding:8px 10px;' +
           'border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)">' +
           productOptions(r.sysName) + '</select></td>' +
-        '<td><input type="number" class="rc-qty" data-i="' + i + '" min="0" step="1" value="' +
+        '<td class="rc-cell-qty"><input type="number" class="rc-qty" data-i="' + i + '" min="0" step="1" value="' +
           (r.qty === null ? "" : r.qty) + '" style="width:62px;padding:8px 6px;text-align:center;' +
           'border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)" /></td>' +
-        '<td>' + statusBadge(r.status, r.qty, known, r.sysName) + '</td>' +
+        '<td class="rc-cell-status">' + statusBadge(r.status, r.qty, known, r.sysName) + '</td>' +
         '<td><button type="button" class="btn-clear" data-del="' + i + '">✕</button></td>' +
       '</tr>';
     }).join("") || '<tr><td colspan="5" style="text-align:center;color:var(--muted,#8A9995);padding:16px">没识别到货品明细<br><span class="hint">请确认第二个框里粘的是货品明细（带「货品名称 / 数量」表头）</span></td></tr>';
@@ -498,9 +501,10 @@
       orderPickHtml +
       attrHtml +
       '<div class="table-wrap"><table class="table" style="width:100%;min-width:0"><thead><tr>' +
-        '<th style="width:26%">吉客云货品名</th><th style="width:29%">系统货品名</th>' +
-        '<th style="width:11%">数量</th><th style="width:28%">状态</th><th style="width:6%"></th>' +
-      '</tr></thead><tbody id="rcItemRows">' + itemRowsHtml + '</tbody></table></div>' +
+        '<th style="width:5%">#</th><th style="width:24%">吉客云货品名</th><th style="width:26%">系统货品名</th>' +
+        '<th style="width:10%">数量</th><th style="width:28%">状态</th><th style="width:7%"></th>' +
+      '</tr></thead><tbody id="rcItemRows">' + itemRowsHtml + '</tbody>' +
+      '<tfoot id="rcTotalFoot"></tfoot></table></div>' +
       (result.ignored ? '<div class="hint" style="margin-top:8px">已忽略无关行 ' + result.ignored + ' 行</div>' : '');
 
     /* 多订单切换 */
@@ -528,6 +532,10 @@
         result.items.splice(i, 1);
         renderResult();
       });
+      /* 数量改动 → 底部合计实时跟随 */
+      rowsBox.addEventListener("input", function (ev) {
+        if (ev.target && ev.target.classList && ev.target.classList.contains("rc-qty")) updateTotal();
+      });
       rowsBox.addEventListener("change", function (ev) {
         var sel = ev.target.closest("select.rc-sys");
         if (!sel) return;
@@ -537,12 +545,13 @@
         result.items[i].sysName = v;
         result.items[i].status = v ? "ok" : (result.items[i].candidates.length ? "pick" : "none");
         var tr = sel.closest("tr");
-        if (tr) tr.style.background = v ? "" : "rgba(201,135,127,.10)";
+        if (tr) tr.classList.toggle("rc-row-todo", !v);
         updateSummaryOnly();
       });
     }
 
     els.fill.textContent = "填入" + TARGETS[activeTarget].label + "表单";
+    updateTotal();
   }
 
   function updateSummaryOnly() {
@@ -553,6 +562,33 @@
     });
     els.summary.textContent = "货品 " + result.items.length + " 项（已对上 " + ok + " / 待确认 " + pick + "）";
     els.fill.textContent = "填入" + TARGETS[activeTarget].label + "表单";
+    updateTotal();
+  }
+
+  /**
+   * 表格底部合计：从预览区的**实际值**算「共几项、总数量」。
+   * 刻意读 DOM 而非 result.items —— 这样你在预览区改数量时能实时跟随；空值与 0 不计入。
+   */
+  function updateTotal() {
+    var foot = q("rcTotalFoot");
+    if (!foot) return;
+    var rowsBox = q("rcItemRows");
+    if (!rowsBox) { foot.innerHTML = ""; return; }
+    var qtys = rowsBox.querySelectorAll("input.rc-qty");
+    var total = 0, n = 0;
+    for (var i = 0; i < qtys.length; i++) {
+      var v = String(qtys[i].value || "").trim();
+      if (v === "") continue;
+      var num = Number(v);
+      if (!isFinite(num) || num === 0) continue;
+      total += num;
+      n++;
+    }
+    foot.innerHTML = '<tr class="rc-total-row">' +
+      '<td colspan="3" style="text-align:right">合计</td>' +
+      '<td style="text-align:center"><b>' + total + '</b></td>' +
+      '<td colspan="2" style="padding-left:16px">共 ' + n + ' 项</td>' +
+      '</tr>';
   }
 
   /* ---------- 填入表单 ---------- */

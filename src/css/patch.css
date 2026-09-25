@@ -924,9 +924,23 @@ html[data-theme="dark"] .rc-step { background: rgba(111, 160, 138, .20); color: 
 /* 待处理行：淡红底，与已对上的行拉开区别 */
 .rc-row-todo { background: rgba(201, 135, 127, .10); }
 
-/* 右栏表格：窗口再窄也能横向滚动，不至于把「状态」列裁掉；状态徽章不换行（货品名照常换行） */
+/* 右栏表格：窗口再窄也能横向滚动，不至于把「状态」列裁掉；状态徽章不换行（货品名照常换行）
+   列序：# | 吉客云货品名 | 系统货品名 | 数量 | 状态 | 删除 →「状态」是第 5 列 */
 .rc-layout .table-wrap { overflow-x: auto; }
-.rc-layout .table td:nth-child(4) { white-space: nowrap; }
+.rc-layout .table td:nth-child(5) { white-space: nowrap; }
+
+/* 货品表底部合计行（总共多少数量） */
+.rc-total-row td {
+  border-top: 2px solid rgba(111, 160, 138, .38) !important;
+  background: rgba(111, 160, 138, .08);
+  font-size: 13px;
+  color: #2C4A3E;
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+}
+.rc-total-row b { font-size: 15px; font-weight: 600; color: #0F6E56; }
+html[data-theme="dark"] .rc-total-row td { background: rgba(111, 160, 138, .14); color: #CBE6D9; }
+html[data-theme="dark"] .rc-total-row b { color: #9FDCC0; }
 
 /* 字典入口按钮：数据没拉到时给出提醒态 */
 .rc-dict-warn { border-color: rgba(186, 117, 23, .55) !important; color: #854F0B !important; }
