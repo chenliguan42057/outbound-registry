@@ -15,6 +15,7 @@
   var Config = window.App.Config;
   var Records = window.App.Records;
   var Pickups = window.App.Pickups;
+  var Freeze = window.App.Freeze;   /* 冻结库存只读口径（data/freeze.js） */
   var Cloud = window.App.Cloud;
 
   var container = null;
@@ -404,6 +405,7 @@
     Util.$("pkCount").textContent = shown.length + " 条" + (activeTab === "todo" && overCount ? "（超时 " + overCount + "）" : "");
     // 统计数字卡（第 12/13 轮）
     var pkStatsEl = Util.$("pkStats");
+    var fxStats = Freeze.stats();
     if (pkStatsEl) {
       pkStatsEl.innerHTML =
         '<div class="stat-card">' +
@@ -417,6 +419,11 @@
           '<span class="stat-hint">' + (overCount ? "超过约定时间还没被取走，催一下" : "没有超时的待取货") + '</span>' +
         '</div>' +
         '<div class="stat-card">' +
+          '<span class="stat-num fx-neg">' + fxStats.total + '</span>' +
+          '<span class="stat-label">冻结占用</span>' +
+          '<span class="stat-hint">' + (fxStats.kinds ? "这些数量被提前占住，还没真正出库" : "当前没有未出库的占用") + '</span>' +
+        '</div>' +
+        '<div class="stat-card">' +
           '<span class="stat-num">' + shipped.length + '</span>' +
           '<span class="stat-label">已出库</span>' +
           '<span class="stat-hint">已经完成出库的待取货</span>' +
@@ -428,8 +435,17 @@
         '</div>';
       return;
     }
-    var html = '<div class="table-wrap"><table class="table"><thead><tr>' +
-      '<th>序号</th><th>登记时间</th><th>取货人</th><th>部门/客户</th><th>货品名称</th><th>数量</th><th>出库状态</th><th>操作</th>' +
+    var fxBanner = fxStats.over.length
+      ? '<div class="stock-low-banner fx-banner fx-banner-over" style="margin:0 0 12px">❗ <b>已被占超：</b>' +
+        fxStats.over.map(function (r) { return Util.esc(r.name) + "(库存" + r.stock + "/占" + r.frozen + "/可用" + r.avail + ")"; }).join("、") +
+        '<i>这些货品的提单量已超过实际库存，建议尽快安排入库或与客户沟通</i></div>'
+      : (fxStats.tight.length
+        ? '<div class="stock-low-banner fx-banner fx-banner-tight" style="margin:0 0 12px">⚠️ <b>占用后偏紧：</b>' +
+          fxStats.tight.map(function (r) { return Util.esc(r.name) + "(可用" + r.avail + "/预警" + r.warnAt + ")"; }).join("、") +
+          '<i>取走这批后就会低于预警线</i></div>'
+        : '');
+    var html = fxBanner + '<div class="table-wrap"><table class="table freeze-table"><thead><tr>' +
+      '<th>序号</th><th>登记时间</th><th>取货人</th><th>部门/客户</th><th>货品名称</th><th>数量</th><th>占用后可用</th><th>出库状态</th><th>操作</th>' +
       '</tr></thead><tbody>';
     shown.forEach(function (p, i) {
       var items = (p.items || []).map(function (it, idx, arr) {
@@ -445,6 +461,7 @@
         '<td>' + Util.esc(p.dept || "-") + '</td>' +
         '<td class="items-cell">' + items + '</td>' +
         '<td>' + qtys + '</td>' +
+        '<td>' + availLines(p) + '</td>' +
         '<td>' + shippedPill(p) + '</td>' +
         '<td>' +
           ((p.shipped !== true && p.confirmed !== true)
@@ -456,6 +473,21 @@
     });
     html += '</tbody></table></div>';
     listBox.innerHTML = html;
+  }
+
+  /** 「占用后可用」列：该货品扣掉所有未出库待取货（含本单自身）后的剩余数，纯虚拟参考。
+      已出库单显示「—」，因为它的占用随出库已释放。 */
+  function availLines(p) {
+    var Stock = window.App.Stock;
+    return (p.items || []).map(function (it, idx, arr) {
+      var cls0 = arr.length > 1 ? " multi-line" : "";
+      if (p.shipped === true) return '<div class="item-line' + cls0 + '"><span class="fx-none">—</span></div>';
+      var stock = Stock.getStock(it.name);
+      var avail = stock - Freeze.of(it.name);   /* Freeze.of 已把本单数量算在内 */
+      var warn = Freeze.warnAt(it.name);
+      var cls = avail < 0 ? "fx-bad" : (avail < warn ? "fx-tight" : "fx-ok");
+      return '<div class="item-line' + cls0 + '"><b class="' + cls + '">' + avail + '</b><span class="fx-sub">库存 ' + stock + '</span></div>';
+    }).join("");
   }
 
   /** 出库状态徽章：未出库=红（可点击确认出库）；已出库=绿静态 */
