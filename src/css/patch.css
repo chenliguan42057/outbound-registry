@@ -991,3 +991,24 @@ html[data-theme="dark"] .rc-filled-banner button { background: rgba(255, 255, 25
 
 /* 快捷键提示 */
 .rc-kbd { font-size: 12px; color: var(--muted, #8A9995); margin-left: 6px; }
+
+/* ============================================================
+   「最近提交的记录」卡片（落地页出库表单下方，保留 30 分钟）
+   ============================================================ */
+.out-copy-box {
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(111, 160, 138, .09);
+  border: 1px solid rgba(111, 160, 138, .28);
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--text, #3C4845);
+  white-space: pre-wrap;      /* 保留换行 —— 货品逐条分段，粘到聊天框也整齐 */
+  word-break: break-word;
+}
+html[data-theme="dark"] .out-copy-box {
+  background: rgba(111, 160, 138, .16);
+  border-color: rgba(111, 160, 138, .34);
+  color: #E6E2DC;
+}
