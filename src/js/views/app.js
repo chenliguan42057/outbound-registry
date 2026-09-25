@@ -33,6 +33,42 @@
     { id: "ai", icon: "clipboard", label: "自动识别", tone: 11, desc: "粘贴吉客云订单文字，自动填好表单" }
   ];
 
+  /* ================= 侧栏菜单自定义排序（2026-09-26，主理人要求） =================
+     顺序只存本机 localStorage —— 属于个人界面偏好，不涉及任何业务数据、不上云。
+     后加的菜单项会自动补到末尾，不会因为顺序表里没它而消失。 */
+  var NAV_ORDER_KEY = "outbound_nav_order_v1";
+
+  /** 按用户自定义顺序返回菜单项；没排过（或顺序表为空）则用默认顺序 */
+  function navItemsOrdered() {
+    var saved = [];
+    try { saved = JSON.parse(localStorage.getItem(NAV_ORDER_KEY) || "[]"); } catch (e) {}
+    if (!Array.isArray(saved) || !saved.length) return NAV_ITEMS.slice();
+    var byId = {};
+    NAV_ITEMS.forEach(function (x) { byId[x.id] = x; });
+    var out = [];
+    saved.forEach(function (id) {
+      if (byId[id] && out.indexOf(byId[id]) === -1) out.push(byId[id]);
+    });
+    NAV_ITEMS.forEach(function (x) { if (out.indexOf(x) === -1) out.push(x); });   /* 新菜单项补末尾 */
+    return out;
+  }
+
+  /** 把当前 DOM 顺序存下来 */
+  function saveNavOrder() {
+    try {
+      var ids = [];
+      var list = Util.$("winNav").querySelectorAll(".win-sidebar-item");
+      for (var i = 0; i < list.length; i++) ids.push(list[i].getAttribute("data-mod"));
+      localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(ids));
+    } catch (e) {}
+  }
+
+  /** 恢复默认顺序 */
+  function resetNavOrder() {
+    try { localStorage.removeItem(NAV_ORDER_KEY); } catch (e) {}
+    renderNav();
+  }
+
   /* 非侧栏菜单模块（顶栏按钮/提醒路由直达）的页头说明 */
   var EXTRA_INFO = {
     sync: { label: "云端同步", tone: 1, desc: "与云端同步数据，可全量重建、诊断同步状态" },
@@ -140,8 +176,13 @@
               '</ul>' +
             '</div>' +
             '<nav class="win-sidebar-nav" id="winNav"></nav>' +
+            '<div class="nav-sort-bar" id="navSortBar" hidden>' +
+              '<span class="nav-sort-hint">拖动或 ▲▼ 调整</span>' +
+              '<button type="button" id="navSortReset">恢复默认</button>' +
+            '</div>' +
             '<div class="win-sidebar-foot">' +
               '<div class="win-status" id="winStatus">就绪</div>' +
+              '<button type="button" class="win-import-btn" id="winNavSort">⇅ 调整菜单顺序</button>' +
               '<button type="button" class="win-import-btn" id="winImport">导入数据</button>' +
               '<input type="file" id="winImportFile" accept="application/json,.json" hidden />' +
             '</div>' +
@@ -278,21 +319,131 @@
 
   function renderNav() {
     var navEl = Util.$("winNav");
-    navEl.innerHTML = NAV_ITEMS.map(function (item) {
-      return '<a href="#/app/' + item.id + '" class="win-sidebar-item" data-mod="' + item.id + '" data-tone="' + item.tone + '">' +
+    var sorting = navEl.classList.contains("sorting");        /* 重绘时保留排序模式 */
+    navEl.innerHTML = navItemsOrdered().map(function (item) {
+      return '<a href="#/app/' + item.id + '" class="win-sidebar-item" draggable="false" data-mod="' + item.id + '" data-tone="' + item.tone + '">' +
+        '<span class="nav-handle" aria-hidden="true">⠿</span>' +
         '<span class="win-sidebar-item-icon">' + UI.icon(item.icon, 18) + '</span>' +
         '<span class="win-sidebar-item-label">' + item.label + '</span>' +
+        '<span class="nav-move">' +
+          '<button type="button" class="nav-mv" data-mv="-1" title="上移" aria-label="上移">▲</button>' +
+          '<button type="button" class="nav-mv" data-mv="1" title="下移" aria-label="下移">▼</button>' +
+        '</span>' +
       '</a>';
     }).join("");
+    if (sorting) navEl.classList.add("sorting");
+    syncNavDraggable();
+
+    /* 监听器只绑一次（navEl 重绘 innerHTML 不换元素；重复绑定会导致点一次 ▲ 挪多格） */
+    if (navEl.getAttribute("data-nav-wired")) return;
+    navEl.setAttribute("data-nav-wired", "1");
+
     navEl.addEventListener("click", function (e) {
+      /* 排序模式：只有箭头按钮生效，点整条不跳转（避免误触） */
+      var mv = e.target.closest(".nav-mv");
+      if (mv && navEl.classList.contains("sorting")) {
+        e.preventDefault();
+        e.stopPropagation();
+        moveNavItem(mv.closest(".win-sidebar-item"), Number(mv.getAttribute("data-mv")));
+        return;
+      }
       var a = e.target.closest(".win-sidebar-item");
       if (!a) return;
       e.preventDefault();
+      if (navEl.classList.contains("sorting")) return;
       Router.navigate("/app/" + a.getAttribute("data-mod"));
     });
+
+    /* 拖拽排序（PC）：dragover 实时挪位，松手即存 */
+    var dragEl = null;
+    navEl.addEventListener("dragstart", function (e) {
+      var a = e.target.closest(".win-sidebar-item");
+      if (!a || !navEl.classList.contains("sorting")) { e.preventDefault(); return; }
+      dragEl = a;
+      a.classList.add("dragging");
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", a.getAttribute("data-mod"));
+      } catch (er) {}
+    });
+    navEl.addEventListener("dragover", function (e) {
+      if (!dragEl) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "move"; } catch (er) {}
+      var a = e.target.closest(".win-sidebar-item");
+      if (!a || a === dragEl) return;
+      var r = a.getBoundingClientRect();
+      var after = (e.clientY - r.top) > r.height / 2;
+      navEl.insertBefore(dragEl, after ? a.nextSibling : a);
+    });
+    navEl.addEventListener("dragend", function () {
+      if (!dragEl) return;
+      dragEl.classList.remove("dragging");
+      dragEl = null;
+      saveNavOrder();
+    });
+    navEl.addEventListener("drop", function (e) { e.preventDefault(); });
+  }
+
+  /** 只有排序模式下才允许拖动（平时 draggable=false，防止误拖） */
+  function syncNavDraggable() {
+    var navEl = Util.$("winNav");
+    if (!navEl) return;
+    var on = navEl.classList.contains("sorting");
+    var list = navEl.querySelectorAll(".win-sidebar-item");
+    for (var i = 0; i < list.length; i++) list[i].setAttribute("draggable", on ? "true" : "false");
+  }
+
+  /** 上移 / 下移一项（移动端兜底，PC 同样可用） */
+  function moveNavItem(a, dir) {
+    if (!a) return;
+    var navEl = Util.$("winNav");
+    if (dir < 0) {
+      var prev = a.previousElementSibling;
+      if (prev && prev.classList.contains("win-sidebar-item")) {
+        navEl.insertBefore(a, prev);
+        saveNavOrder();
+      }
+    } else {
+      var next = a.nextElementSibling;
+      if (next && next.classList.contains("win-sidebar-item")) {
+        navEl.insertBefore(next, a);
+        saveNavOrder();
+      }
+    }
+  }
+
+  /** 进入 / 退出排序模式 */
+  function setNavSorting(on) {
+    var navEl = Util.$("winNav");
+    if (!navEl) return;
+    navEl.classList.toggle("sorting", !!on);
+    syncNavDraggable();
+    var bar = Util.$("navSortBar");
+    if (bar) bar.hidden = !on;
+    var btn = Util.$("winNavSort");
+    if (btn) btn.textContent = on ? "✓ 完成排序" : "⇅ 调整菜单顺序";
+    if (!on) Util.toast("菜单顺序已保存");
   }
 
   function wireShell() {
+    /* 侧栏菜单排序入口（含恢复默认） */
+    var sortBtn = Util.$("winNavSort");
+    if (sortBtn) {
+      sortBtn.addEventListener("click", function () {
+        setNavSorting(!Util.$("winNav").classList.contains("sorting"));
+      });
+    }
+    var sortReset = Util.$("navSortReset");
+    if (sortReset) {
+      sortReset.addEventListener("click", function () {
+        UI.confirmDialog("把左侧菜单顺序恢复成系统默认？", "恢复默认顺序").then(function (yes) {
+          if (!yes) return;
+          resetNavOrder();
+          Util.toast("已恢复默认顺序");
+        });
+      });
+    }
     Util.$("winClose").addEventListener("click", function () {
       closeDrawer();
       Router.navigate("/");
