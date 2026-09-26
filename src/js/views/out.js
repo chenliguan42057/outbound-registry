@@ -14,6 +14,7 @@
   var Records = window.App.Records;
   var Cloud = window.App.Cloud;
   var Stock = window.App.Stock;
+  var Formkit = window.App.Formkit;
 
   var picker = null;
   var confirming = false;      // 2026-09-24：提交前的「核对清单」弹窗是否开着（防连点弹两次）
@@ -132,6 +133,7 @@
     startLastTicker();     // 每分钟刷新剩余时效，过期自动收起
 
     els = {
+      form: container,                 // 草稿提示条挂点（P2）
       entityChips: Util.$("outEntityChips"),
       dept: Util.$("outDept"),
       time: Util.$("outTime"),
@@ -154,6 +156,8 @@
     picker.attach(Util.$("outProductPicker"));
     photos = new UI.PhotoUpload({});
     photos.attach(Util.$("outPhotoUpload"));
+    // 2026-09-26 P2：拍照上传引导（挂在上传框下面，纯文案，不影响上传逻辑）
+    if (Formkit && Formkit.photoGuide) Formkit.photoGuide(Util.$("outPhotoUpload"));
 
     Util.$("outFillNow").addEventListener("click", function () { els.time.value = Util.nowLocal(); });
     els.time.value = Util.nowLocal();
@@ -244,7 +248,8 @@
     picker.onChange = saveDraft;
     photos.onChange = saveDraft;
 
-    restoreDraft();
+    var _d = restoreDraft();
+    if (_d) showDraftBar(_d);   // 有草稿才提示，没草稿不打扰
 
     // 自动识别回填（2026-09-26）：从「自动识别」页跳转过来时取走待填数据（取一次即清空）
     var _pendOut = window.App.Views.recognize && window.App.Views.recognize.takePending("out");
@@ -398,33 +403,20 @@
       });
       return merged;
     }
-    function render() {
-      var q = inp.value.trim().toLowerCase();
-      if (!q) { sug.style.display = "none"; return; }
-      var matches = getEffectiveHistory().filter(function (v) { return v.toLowerCase().includes(q); });
-      if (!matches.length) { sug.style.display = "none"; return; }
-      sug.innerHTML = "";
-      matches.slice(0, 30).forEach(function (v) {
-        var d = document.createElement("div");
-        d.textContent = v;
-        d.addEventListener("mousedown", function (ev) {
-          ev.preventDefault();
-          inp.value = v;
-          sug.style.display = "none";
-          saveDraft();
-        });
-        sug.appendChild(d);
-      });
-      sug.style.display = "block";
-    }
-    inp.addEventListener("input", render);
-    // 聚焦不显示建议列表（用户只点输入框不显示历史），仅输入文字时由 input 事件触发
-    inp.addEventListener("blur", function () { setTimeout(function () { sug.style.display = "none"; }, 120); });
+    /* 2026-09-26 精修 P2：交给 Formkit —— 支持 ↑↓ 选择 / Enter 确认 / Esc 关闭 + 关键词高亮，
+       聚焦时先给最近用过的 8 个，输入后按「前缀命中优先」排序。选中即存草稿。 */
+    Formkit.bindSuggest(inp, sug, {
+      source: getEffectiveHistory,
+      max: 8,
+      showOnFocus: true,
+      onPick: saveDraft
+    });
   }
 
   function saveDraft() {
     if (editingId) return; // 编辑中不覆盖草稿
     Store.saveDraft("out", {
+      _t: Date.now(),               // 草稿保存时刻，用于提示条显示"多久之前"
       time: els.time.value,
       picker: els.picker.value,
       applicant: els.applicant.value,
@@ -437,9 +429,11 @@
     });
   }
 
+  /** 恢复草稿：回填各字段，并返回草稿对象（调用方据此显示"已恢复草稿"提示条）。
+      2026-09-26 精修 P2：原先是静默回填，用户不知道表单里的内容是哪来的，现在明确提示并可一键清空。 */
   function restoreDraft() {
     var d = Store.loadDraft("out");
-    if (!d) return;
+    if (!d) return null;
     els.time.value = d.time || Util.nowLocal();
     els.picker.value = d.picker || "";
     els.applicant.value = d.applicant || "";
@@ -449,9 +443,36 @@
     if (d.entity) { selectedEntity = d.entity; renderEntityChips(); }      // 结算法人单位同款回填
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
+    return d;
   }
 
-  function clearDraft() { Store.clearDraft("out"); }
+  /** 草稿摘要：给提示条用（货品几项 / 领取人 / 部门） */
+  function draftSummary(d) {
+    if (!d) return "";
+    var n = (d.items || []).length;
+    var who = d.picker || d.dept || "";
+    var parts = [];
+    if (n) parts.push("货品 " + n + " 项");
+    if (who) parts.push(who);
+    if (d.purpose) parts.push(d.purpose);
+    return parts.join(" · ") || "（有内容）";
+  }
+
+  /** 显示/更新草稿提示条（2026-09-26 P2） */
+  function showDraftBar(d) {
+    if (!d || !Formkit || !els || !els.form) return;
+    Formkit.draftBar({
+      host: els.form,
+      savedAt: d._t || 0,
+      summary: draftSummary(d),
+      onClear: function () { clearDraft(); resetForm(); Util.toast("草稿已清空"); }
+    });
+  }
+
+  function clearDraft() {
+    Store.clearDraft("out");
+    if (Formkit && els && els.form) Formkit.clearDraftBar(els.form);   // 草稿没了，提示条一起收掉
+  }
 
   /** 出库单自动编号：ORD-YYYYMMDD-NNN（当日序号；纯追加字段 orderNo，不影响既有 schema） */
   function genOrderNo() {
