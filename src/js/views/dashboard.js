@@ -17,14 +17,16 @@
   var Stock = window.App.Stock;
 
   var container = null;
-  var activeTab = "main";   // "main" 仪表盘（宏观大图） | "report" 报表统计
+  var activeTab = "runtime";   // runtime 运行状况 | overview 库存大图 | diff 差异对比 | report 报表统计
 
   function render(el) {
     container = el;
     el.innerHTML =
       '<div class="card" style="padding:14px 18px">' +
         '<div class="actions" style="margin-bottom:0;gap:8px">' +
-          '<button type="button" class="btn sm active dash-tab" data-tab="main">仪表盘</button>' +
+          '<button type="button" class="btn sm active dash-tab" data-tab="runtime">运行状况</button>' +
+          '<button type="button" class="btn ghost sm dash-tab" data-tab="overview">库存大图</button>' +
+          '<button type="button" class="btn ghost sm dash-tab" data-tab="diff">差异对比</button>' +
           '<button type="button" class="btn ghost sm dash-tab" data-tab="report">报表统计</button>' +
         '</div>' +
       '</div>' +
@@ -51,6 +53,17 @@
       } else {
         body.innerHTML = '<div class="empty">报表模块未加载</div>';
       }
+      return;
+    }
+    if (activeTab === 'runtime') {
+      body.innerHTML = '<div class="dash-note">云端连通与数据体量，一眼看全 · 每 2 秒自动探测，不用刷新</div><div id="dashMt"></div>';
+      mountMaintainPanel();
+      return;
+    }
+    if (activeTab === 'diff') {
+      body.innerHTML = '<div class="dash-note">选一天当基准，看从那天到现在动过哪些 · 条越长，变动越大</div><div id="dashMtDiff"></div>';
+      var M2 = window.App.Views && window.App.Views.maintain;
+      if (M2 && M2.render) M2.render(Util.$("dashMtDiff"), "diff");
       return;
     }
     renderMain(body);
@@ -145,7 +158,7 @@
     var box = Util.$("dashMt");
     if (!box) return;
     var M = window.App.Views && window.App.Views.maintain;
-    if (M && M.render) M.render(box);
+    if (M && M.render) M.render(box, "net");
     else box.innerHTML = "";
   }
 
