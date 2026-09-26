@@ -31,7 +31,7 @@
 /* 卡片：暖白 + 极轻阴影，去掉冷灰边 */
 .card {
   border-color: var(--skin-line);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: 0 4px 18px rgba(60, 72, 69, .06);
 }
 
@@ -71,7 +71,7 @@
 
 /* 表格横向滚动条：细一些、不抢视线 */
 .table-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
-.table-wrap::-webkit-scrollbar-thumb { background: #D3E3DC; border-radius: 999px; }
+.table-wrap::-webkit-scrollbar-thumb { background: #D3E3DC; border-radius: var(--radius-pill); }
 .table-wrap::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------- 暗色模式适配 ----------
