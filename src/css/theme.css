@@ -2289,3 +2289,67 @@ html .rc-total-row td {
 /* ---------- 24. 自动识别页浅色适配 ---------- */
 html[data-theme="light"] .rc-empty-hint { background: #F7F8FA !important; border-color: #E3E5EA !important; }
 html[data-theme="light"] .rc-empty-icon { background: rgba(34, 153, 255, .1); border-color: rgba(20, 114, 204, .2); }
+
+/* ==========================================================================
+   覆盖层 v1.2 增量（2026-09-26）：自动识别页布局修正——对称 + 去双层皮
+   红线不变：只改样式，不动任何文字 / 数字 / DOM / 业务逻辑
+   问题定位：
+     ① 右栏 #rcEmptyCard（白卡片）里套着 .rc-empty-hint（灰面板）→ 双层皮
+     ② v1.1 两列 1fr:1.1fr 不等宽 + align-items:start 不等高 → 不对称
+   ========================================================================== */
+
+/* ---------- 25. 两列等宽等高（仅桌面；手机仍单列） ---------- */
+@media (min-width: 761px) {
+  html .rc-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);  /* 等宽，左右完全对称 */
+    align-items: stretch;                                   /* 两张卡片等高，上下边缘对齐 */
+  }
+}
+
+/* ---------- 26. 空态卡：卡片本体直接当面板，消灭双层皮 ---------- */
+/* 白卡片不再包灰板：卡片自身变灰底虚线面板，圆角/尺寸与左卡完全一致 */
+html .card#rcEmptyCard {
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  background: var(--pp-surface-2) !important;
+  border: 1px dashed var(--pp-line) !important;
+  box-shadow: none !important;
+}
+html .card#rcEmptyCard .rc-empty-hint {
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 40px 30px !important;
+}
+/* 圆环底座图标再稳一点：与卡片垂直节奏对齐 */
+html .card#rcEmptyCard .rc-empty-icon {
+  width: 68px;
+  height: 68px;
+  font-size: 30px;
+}
+
+/* ---------- 27. 结果卡：与左卡等高时内容顶对齐，底部不留怪白 ---------- */
+/* 注：识别前结果卡由内联 display:none 隐藏（内联优先级高于本文件，不会被误打开） */
+html .card#rcResultCard { display: flex; flex-direction: column; }
+html .card#rcResultCard #rcResultBody { flex: 1 1 auto; }
+
+/* ---------- 28. 保险丝：板块页头再压一层（防止任何 tone 色残留） ---------- */
+html body .win-content .mod-head {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 2px !important;
+}
+html body .win-content .mod-head-title { color: var(--pp-text) !important; }
+html body .win-content .mod-head-desc {
+  color: var(--pp-muted) !important;
+  border-left: 1px solid var(--pp-line) !important;
+}
+
+/* ---------- 29. 浅色模式：空态卡与整体底色协调 ---------- */
+html[data-theme="light"] .card#rcEmptyCard {
+  background: #F7F8FA !important;
+  border-color: #DDE0E6 !important;
+}
