@@ -128,7 +128,7 @@ body.bp-lock { overflow: hidden; }
   color: #3C4845; background: var(--bpb, #FFFFFF);
   border: 1.5px solid var(--bpl, #E3E9E6); border-radius: 12px; cursor: pointer;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
-  transition: background .12s ease, border-color .12s ease, transform .12s ease;
+  transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
 .bp-item:active { transform: scale(.985); }
 /* 选中：该分类主色实心 + 白字 + 白底勾 —— 既看得出「已选」，又一眼知道属于哪一类 */

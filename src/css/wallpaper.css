@@ -195,7 +195,7 @@ html.v2 .btn,
 html.v2 .chip,
 html.v2 .win-sidebar-item,
 html.v2 .win-topbar-menu {
-  transition: transform .12s cubic-bezier(.2,0,0,1), background-color .18s ease, box-shadow .18s ease;
+  transition: transform var(--dur-fast) cubic-bezier(.2,0,0,1), background-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
 }
 html.v2 .btn:active,
 html.v2 .chip:active { transform: scale(.965); }

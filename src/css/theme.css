@@ -85,6 +85,11 @@
   /* 鍦嗚锛堝ぇ鍦嗚瀹瑰櫒锛?*/
   --radius-lg: 20px;
   --radius-xl: 24px;
+  /* motion tokens (P1): fast 150ms / base 220ms / slow 320ms + shared ease */
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms;
+  --ease-out-soft: cubic-bezier(.22, 1, .36, 1);
 
   /* 瑕嗙洊鍘?base.css 浠ょ墝锛屼繚鎸佸悜鍚庡吋瀹?*/
   --primary: var(--mint-500);
@@ -303,7 +308,7 @@ input[type=month], select, textarea, .search {
   line-height: 1.5;
   color: var(--ink-900);
   background: var(--input-bg);
-  transition: border-color .18s, box-shadow .18s, background .18s;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast), background var(--dur-fast);
 }
 input:hover, select:hover, textarea:hover, .search:hover { border-color: #B3CFC2; }
 input:focus, textarea:focus, select:focus, .search:focus {
@@ -389,7 +394,7 @@ label .req {
   padding: 7px 14px;
   font-size: 13px;
   cursor: pointer;
-  transition: all .15s;
+  transition: all var(--dur-fast);
 }
 .chip:hover { border-color: var(--mint-400); background: var(--mint-100); color: var(--mint-700); }
 .chip.selected {
@@ -426,7 +431,7 @@ label .req {
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 8px 20px rgba(111, 160, 138, .28);
-  transition: filter .18s, transform .12s, box-shadow .18s, background .18s, border-color .18s;
+  transition: filter var(--dur-fast), transform var(--dur-fast), box-shadow var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast);
 }
 .btn:hover { filter: brightness(1.05); box-shadow: 0 10px 26px rgba(111, 160, 138, .36); }
 .btn:active { transform: translateY(1px); box-shadow: 0 4px 12px rgba(111, 160, 138, .25); }
@@ -508,7 +513,7 @@ label .req {
   font-weight: 500;
   opacity: 0;
   pointer-events: none;
-  transition: .22s;
+  transition: var(--dur-base);
   z-index: 80;
   max-width: 90vw;
   box-shadow: 0 14px 36px rgba(87, 130, 111, .22);
@@ -623,7 +628,7 @@ label .req {
   background: var(--card-soft, #F7FAF7);
   color: var(--ink-800, #2E3A37);
   cursor: pointer;
-  transition: all .15s;
+  transition: all var(--dur-fast);
   user-select: none;
 }
 .src-chip:hover { border-color: var(--ok, #2E8B57); color: var(--ok, #2E8B57); }
@@ -665,7 +670,7 @@ label .req {
   color: #B96A4A;
   border-radius: 999px;
   cursor: pointer;
-  transition: all .15s;
+  transition: all var(--dur-fast);
 }
 .recent-clear:hover { background: #FBE9E2; color: #8E3F1A; border-color: #C8825F; }
 .recent-clear:active { transform: scale(.96); }
@@ -687,7 +692,7 @@ label .req {
   color: var(--ink-500);
   cursor: pointer;
   background: var(--input-bg);
-  transition: .18s;
+  transition: var(--dur-fast);
 }
 .photo-drop:hover { border-color: var(--mint-500); color: var(--mint-600); background: var(--mint-100); }
 .thumbs { gap: 12px; margin-top: 14px; }
@@ -796,7 +801,7 @@ html[data-accent="warm"] {
 
 /* ---------- 寰氦浜掞細鍗＄墖鎮仠寰诞 ---------- */
 .card, .recent-card, .demo-card {
-  transition: transform .18s ease, box-shadow .18s ease;
+  transition: transform var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
 }
 @media (hover: hover) {
   .card:hover, .recent-card:hover {
@@ -812,7 +817,7 @@ html[data-accent="warm"] {
   background: linear-gradient(90deg, #7FB3A5, #A79ED0, #6FA3A8);
   z-index: 200;
   opacity: 0;
-  transition: width .3s ease, opacity .25s ease;
+  transition: width var(--dur-slow) ease, opacity var(--dur-base) ease;
   pointer-events: none;
 }
 .ux-bar.on { opacity: 1; }
@@ -833,7 +838,7 @@ html[data-accent="warm"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background .15s, transform .1s;
+  transition: background var(--dur-fast), transform .1s;
 }
 .voice-btn:hover { background: rgba(111, 160, 138, .22); }
 .voice-btn.rec { background: var(--err, #C9877F); color: #fff; animation: voice-pulse 1s infinite; }
@@ -881,7 +886,7 @@ html[data-accent="warm"] {
   padding: 6px 14px;
   font-size: 13px;
   cursor: pointer;
-  transition: all .15s;
+  transition: all var(--dur-fast);
 }
 .ux-settings-chip.on { background: var(--grad-primary); border-color: transparent; color: #fff; box-shadow: 0 4px 12px rgba(111,160,138,.28); }
 .ux-settings-chip:hover { border-color: var(--mint-400, #93BCA6); }
@@ -902,7 +907,7 @@ body.kiosk .win-shell { height: 100vh; }
   display: flex;
   gap: 8px;
   opacity: .25;
-  transition: opacity .2s;
+  transition: opacity var(--dur-base);
 }
 .kiosk-bar:hover { opacity: 1; }
 .kiosk-bar button {
@@ -1024,7 +1029,7 @@ html[data-theme="dark"] .kiosk-bar button:hover { background: #24332C; }
 .qty-stepper .qty-btn {
   width: 28px; height: 100%; border: none; background: transparent;
   color: var(--ink-700, #55635F); font-size: 16px; font-weight: 700; cursor: pointer;
-  transition: background .15s;
+  transition: background var(--dur-fast);
 }
 .qty-stepper .qty-btn:hover { background: var(--mint-100, #EAF4EF); }
 .qty-stepper .qty-btn:active { background: var(--mint-200, #D9EADF); }
@@ -1044,7 +1049,7 @@ html[data-theme="dark"] .kiosk-bar button:hover { background: #24332C; }
   background: rgba(253, 252, 249, .82);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
-  opacity: 0; transition: opacity .35s; pointer-events: none;
+  opacity: 0; transition: opacity var(--dur-slow); pointer-events: none;
 }
 .fx-success.show { opacity: 1; pointer-events: auto; }
 .fx-success .fx-success-card {
@@ -1055,7 +1060,7 @@ html[data-theme="dark"] .kiosk-bar button:hover { background: #24332C; }
   box-shadow: 0 24px 60px rgba(87, 130, 111, .22);
   text-align: center;
   transform: translateY(20px) scale(.94);
-  transition: transform .35s cubic-bezier(.2, .9, .3, 1.2);
+  transition: transform var(--dur-slow) cubic-bezier(.2, .9, .3, 1.2);
 }
 .fx-success.show .fx-success-card { transform: translateY(0) scale(1); }
 .fx-success .rings { position: relative; width: 120px; height: 120px; margin: 0 auto 14px; }
@@ -1076,7 +1081,7 @@ html[data-theme="dark"] .kiosk-bar button:hover { background: #24332C; }
 .fx-success .check path { stroke: #fff; stroke-width: 4;
   stroke-linecap: round; stroke-linejoin: round; fill: none;
   stroke-dasharray: 50; stroke-dashoffset: 50; }
-.fx-success.show .check path { animation: fx-draw .55s ease-out .15s forwards; }
+.fx-success.show .check path { animation: fx-draw .55s ease-out var(--dur-fast) forwards; }
 @keyframes fx-draw { to { stroke-dashoffset: 0; } }
 .fx-success h3 { font-size: 22px; color: var(--ink-900, #3C4845); margin: 4px 0 10px; font-weight: 700; }
 .fx-success .order-no {
@@ -1093,7 +1098,7 @@ html[data-theme="dark"] .kiosk-bar button:hover { background: #24332C; }
   border: 1px solid var(--line-soft, #DCE6E0);
   background: var(--input-bg, #FBFCFA); color: var(--ink-700, #55635F);
   border-radius: 999px; padding: 9px 22px; font-size: 14px; cursor: pointer;
-  transition: all .15s;
+  transition: all var(--dur-fast);
 }
 .fx-success .actions button:hover { background: #fff; }
 .fx-success .actions button.primary {
@@ -1151,7 +1156,7 @@ html[data-theme="dark"] .fx-success .actions button {
   color: var(--danger, #F04438);
   font-size: 12px;
   line-height: 1.5;
-  animation: patch-err-in .18s ease-out;
+  animation: patch-err-in var(--dur-fast) ease-out;
 }
 .field-error::before { content: "鈿?; flex: 0 0 auto; }
 @keyframes patch-err-in {

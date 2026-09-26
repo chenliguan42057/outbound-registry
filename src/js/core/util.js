@@ -106,21 +106,23 @@
   function b64enc(str) { return btoa(unescape(encodeURIComponent(str))); }
   function b64dec(b64) { return decodeURIComponent(escape(atob(String(b64).replace(/\s/g, "")))); }
 
-  /** Toast 提示（复用 #toast-root 容器） */
-  var toastTimer = null;
+  /** Toast queue: up to 3 stacked; err 3.5s / normal 2.2s (P2.2) */
   function toast(msg, isErr) {
     var root = $("toast-root");
     if (!root) return;
-    var el = root.querySelector(".toast");
-    if (!el) {
-      el = document.createElement("div");
-      el.className = "toast";
-      root.appendChild(el);
-    }
+    var shown = root.querySelectorAll(".toast.show");
+    if (shown.length >= 3) shown[0].classList.remove("show");   // over quota: fade oldest
+    var el = document.createElement("div");
+    el.className = "toast" + (isErr ? " err" : "");
     el.textContent = msg;
-    el.className = "toast show" + (isErr ? " err" : "");
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.className = "toast"; }, 2200);
+    el.style.bottom = (34 + root.querySelectorAll(".toast.show").length * 54) + "px";
+    root.appendChild(el);
+    void el.offsetWidth;  /* force reflow so entry transition runs */
+    el.classList.add("show");
+    setTimeout(function () {
+      el.classList.remove("show");
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 400);
+    }, isErr ? 3500 : 2200);
   }
 
   /* 底部可操作提示条（snackbar）：独立于 .toast。

@@ -31,7 +31,7 @@
   justify-content: center;
   background: var(--m2);
   color: var(--m1);
-  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
 }
 .win-sidebar-item[data-tone] .win-sidebar-item-icon svg { display: block; }
 
