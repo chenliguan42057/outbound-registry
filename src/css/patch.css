@@ -1577,3 +1577,21 @@ html[data-theme="dark"] .mt-fold summary b { background: #2A3A34; color: #9FD9C2
   .mt-ring-spin, .mt-ring-bg, .mt-pulse { animation: none; }
   .mt-anim { animation: none; }
 }
+
+/* ============================================================
+   2026-09-26 仪表盘动画（数字滚动 / 曲线生长 / 环形入场）+ 数据维护板块嵌入
+   ============================================================ */
+.dash-mt { margin-top: 16px; }
+@keyframes dh-pop { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.dh-pop { animation: dh-pop .55s cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes dh-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.dh-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: dh-draw 1.4s ease-out both; }
+@keyframes dh-fade { from { opacity: 0; } to { opacity: 1; } }
+.dh-fade { opacity: 0; animation: dh-fade .9s ease-out both; }
+@keyframes dh-ring { from { opacity: 0; transform: rotate(-90deg) scale(.86); } to { opacity: 1; transform: rotate(-90deg) scale(1); } }
+.dh-ring-in { transform-box: view-box; transform-origin: 70px 70px; animation: dh-ring .9s cubic-bezier(.22, 1, .36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .dh-pop, .dh-draw, .dh-fade, .dh-ring-in { animation: none; }
+  .dh-fade { opacity: 1; }
+  .dh-draw { stroke-dashoffset: 0; }
+}
