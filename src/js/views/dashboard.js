@@ -1,9 +1,10 @@
 /**
- * dashboard.js — 仪表盘（2026-09-26 深度重构：宏观可视化大图）
+ * dashboard.js — 仪表盘（2026-09-26 深度重构：宏观可视化大图 + 运行状况）
  * 主理人要求：去掉 KPI 小卡与文字堆，融合成「一张华丽的宏观大图」：
- *   深色渐变巨卡 = 超大数字带（总库存/今日出/今日入/低库存）
- *               + 近30天出入库流量双曲线面积图（SVG 手绘，零依赖）
- *               + 库存分布环形 + 30天出库热力（下半区）
+ *   深色渐变巨卡 = 超大数字带（总库存/今日出/今日入/低库存，数字滚动）
+ *               + 近30天出入库流量双曲线面积图（SVG 手绘，曲线生长动画）
+ *               + 库存分布环形（入场动画）+ 30天出库热力
+ *   下半区嵌入「运行状况 / 数据维护」板块（网络延迟动画 + 概览动卡 + 差异动画条）
  * 纯前端计算，数据源 State.list + Stock.summarize()/Stock.trend()，与报表同源同数字。
  * ⚠️ 只读展示层：不写任何数据。
  */
@@ -11,7 +12,6 @@
   'use strict';
 
   var Util = window.App.Util;
-  var UI = window.App.UI;
   var Config = window.App.Config;
   var State = window.App.State;
   var Stock = window.App.Stock;
@@ -24,8 +24,8 @@
     el.innerHTML =
       '<div class="card" style="padding:14px 18px">' +
         '<div class="actions" style="margin-bottom:0;gap:8px">' +
-          '<button type="button" class="btn sm active dash-tab" data-tab="main">📊 仪表盘</button>' +
-          '<button type="button" class="btn ghost sm dash-tab" data-tab="report">📈 报表统计</button>' +
+          '<button type="button" class="btn sm active dash-tab" data-tab="main">仪表盘</button>' +
+          '<button type="button" class="btn ghost sm dash-tab" data-tab="report">报表统计</button>' +
         '</div>' +
       '</div>' +
       '<div id="dashTabBody"></div>';
@@ -63,6 +63,25 @@
       return;
     }
     renderTab();
+  }
+
+  /* ================= 动画小工具 ================= */
+
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  /** 数字滚动：0 → 目标 */
+  function countUp(el, target, dur) {
+    if (!el) return;
+    dur = dur || 900;
+    var t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    function step(now) {
+      if (!document.body.contains(el)) return;
+      var p = clamp(((now || Date.now()) - t0) / dur, 0, 1);
+      var e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * e).toLocaleString("zh-CN");
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
   }
 
   /* ================= 聚合（单遍 O(n)） ================= */
@@ -103,11 +122,10 @@
       if (String(r.time || "").slice(0, 10) !== today) return;
       if ((r.type || "out") === "in") todayIn += q; else todayOut += q;
     });
-    var trend30 = Stock.trend(list, 30);
     return {
       summary: summary, low: low, totalStock: totalStock,
       todayOut: todayOut, todayIn: todayIn,
-      trend30: trend30,
+      trend30: Stock.trend(list, 30),
       catMap: catAggregate(summary, Config.CATEGORY_MAP || {})
     };
   }
@@ -115,8 +133,20 @@
   /* ================= 宏观大图 ================= */
 
   function renderMain(el) {
-    el.innerHTML = '<div class="dash-hero" id="dashHero">加载中…</div>';
+    el.innerHTML =
+      '<div class="dash-hero" id="dashHero">加载中…</div>' +
+      '<div class="dash-mt" id="dashMt"></div>';
     renderHero(aggregate(State.list));
+    mountMaintainPanel();
+  }
+
+  /** 把「运行状况 / 数据维护」板块（网络动画 + 概览动卡 + 差异动画条）嵌进仪表盘 */
+  function mountMaintainPanel() {
+    var box = Util.$("dashMt");
+    if (!box) return;
+    var M = window.App.Views && window.App.Views.maintain;
+    if (M && M.render) M.render(box);
+    else box.innerHTML = "";
   }
 
   function renderHero(agg) {
@@ -124,20 +154,28 @@
     if (!el) return;
     el.innerHTML =
       '<div class="dh-kpis">' +
-        '<div class="dh-kpi"><b>' + agg.totalStock + '</b><span>总库存</span></div>' +
-        '<div class="dh-kpi"><b>' + agg.todayOut + '</b><span>今日出库</span></div>' +
-        '<div class="dh-kpi"><b>' + agg.todayIn + '</b><span>今日入库</span></div>' +
-        '<div class="dh-kpi' + (agg.low.length ? ' warn' : '') + '"><b>' + agg.low.length + '</b><span>低库存</span></div>' +
+        '<div class="dh-kpi dh-pop" style="animation-delay:0ms"><b data-v="' + agg.totalStock + '">0</b><span>总库存</span></div>' +
+        '<div class="dh-kpi dh-pop" style="animation-delay:70ms"><b data-v="' + agg.todayOut + '">0</b><span>今日出库</span></div>' +
+        '<div class="dh-kpi dh-pop" style="animation-delay:140ms"><b data-v="' + agg.todayIn + '">0</b><span>今日入库</span></div>' +
+        '<div class="dh-kpi dh-pop' + (agg.low.length ? ' warn' : '') + '" style="animation-delay:210ms"><b data-v="' + agg.low.length + '">0</b><span>低库存</span></div>' +
       '</div>' +
       '<div class="dh-chart-head">' +
         '<span class="dh-chart-title">近 30 天出入库流量</span>' +
-        '<span class="dh-legend"><i class="dh-dot out"></i>出库<i class="dh-dot in"></i>入库</span>' +
+        '<span class="dh-legend"><i class="dh-dot out"></i><i class="dh-dot in"></i></span>' +
       '</div>' +
       '<div class="dh-chart">' + flowChartSvg(agg.trend30) + '</div>' +
       '<div class="dh-bottom">' +
-        '<div class="dh-donut">' + donutSvg(agg.catMap) + '</div>' +
-        '<div class="dh-heat">' + heatHtml(agg.trend30) + '</div>' +
+        '<div class="dh-donut dh-pop" style="animation-delay:260ms">' + donutSvg(agg.catMap) + '</div>' +
+        '<div class="dh-heat dh-pop" style="animation-delay:320ms">' + heatHtml(agg.trend30) + '</div>' +
       '</div>';
+
+    // 数字滚动
+    Array.prototype.forEach.call(el.querySelectorAll(".dh-kpi b"), function (b, i) {
+      setTimeout(function () { countUp(b, Number(b.getAttribute("data-v")) || 0, 1000); }, i * 80);
+    });
+    // 环形中心总数滚动
+    var dn = el.querySelector(".dh-donut-num");
+    if (dn) countUp(dn, agg.totalStock, 1100);
   }
 
   /** 平滑曲线（中点法三次贝塞尔） */
@@ -152,7 +190,7 @@
     return d;
   }
 
-  /** 近30天双系列面积图（SVG viewBox 720×250，宽度自适应容器） */
+  /** 近30天双系列面积图（SVG viewBox 720×250，宽度自适应容器，曲线带生长动画） */
   function flowChartSvg(trend30) {
     var data = trend30 || [];
     var W = 720, H = 250, padL = 10, padR = 10, padT = 16, padB = 28;
@@ -172,13 +210,11 @@
     var base = (H - padB).toFixed(1);
     var areaOut = lineOut ? lineOut + " L" + pOut[pOut.length - 1].x.toFixed(1) + " " + base + " L" + pOut[0].x.toFixed(1) + " " + base + " Z" : "";
     var areaIn = lineIn ? lineIn + " L" + pIn[pIn.length - 1].x.toFixed(1) + " " + base + " L" + pIn[0].x.toFixed(1) + " " + base + " Z" : "";
-    /* 网格 3 条 */
     var grid = "";
     for (var g = 1; g <= 3; g++) {
       var gy = (padT + ih * g / 4).toFixed(1);
       grid += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '" stroke="rgba(255,255,255,.07)" stroke-width="1"/>';
     }
-    /* x 轴日期：首 / 1/3 / 2/3 / 末 */
     var labels = "";
     var idxs = data.length > 3 ? [0, Math.round((data.length - 1) / 3), Math.round((data.length - 1) * 2 / 3), data.length - 1] : data.map(function (_, i) { return i; });
     idxs.forEach(function (i) {
@@ -187,7 +223,6 @@
       labels += '<text x="' + x.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" class="dh-x-label">' +
         Util.esc(String(data[i].date).slice(5).replace("-", "/")) + '</text>';
     });
-    /* hover 捕获列 */
     var hover = "";
     var step = iw / (data.length || 1);
     data.forEach(function (d, i) {
@@ -205,10 +240,10 @@
         '</linearGradient>' +
       '</defs>' +
       grid +
-      (areaOut ? '<path d="' + areaOut + '" fill="url(#dhgOut)"/>' : '') +
-      (areaIn ? '<path d="' + areaIn + '" fill="url(#dhgIn)"/>' : '') +
-      (lineOut ? '<path d="' + lineOut + '" fill="none" stroke="#C9BFEC" stroke-width="2.2" stroke-linecap="round"/>' : '') +
-      (lineIn ? '<path d="' + lineIn + '" fill="none" stroke="#8AD4BC" stroke-width="2.2" stroke-linecap="round"/>' : '') +
+      (areaOut ? '<path class="dh-fade" style="animation-delay:400ms" d="' + areaOut + '" fill="url(#dhgOut)"/>' : '') +
+      (areaIn ? '<path class="dh-fade" style="animation-delay:520ms" d="' + areaIn + '" fill="url(#dhgIn)"/>' : '') +
+      (lineOut ? '<path class="dh-draw" style="animation-delay:300ms" pathLength="1" d="' + lineOut + '" fill="none" stroke="#C9BFEC" stroke-width="2.2" stroke-linecap="round"/>' : '') +
+      (lineIn ? '<path class="dh-draw" style="animation-delay:420ms" pathLength="1" d="' + lineIn + '" fill="none" stroke="#8AD4BC" stroke-width="2.2" stroke-linecap="round"/>' : '') +
       labels + hover +
     '</svg>';
   }
@@ -234,8 +269,8 @@
     return '<div class="dh-donut-wrap">' +
       '<svg viewBox="0 0 140 140" style="width:150px;height:150px;display:block">' +
         '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="17"/>' +
-        '<g transform="rotate(-90 70 70)">' + segs.map(function (s) { return s.html; }).join("") + '</g>' +
-        '<text x="70" y="66" text-anchor="middle" class="dh-donut-num">' + total + '</text>' +
+        '<g class="dh-ring-in" transform="rotate(-90 70 70)">' + segs.map(function (s) { return s.html; }).join("") + '</g>' +
+        '<text x="70" y="66" text-anchor="middle" class="dh-donut-num" data-v="' + total + '">0</text>' +
         '<text x="70" y="82" text-anchor="middle" class="dh-donut-cap">总库存</text>' +
       '</svg>' +
       '<div class="dh-donut-legend">' + segs.map(function (s) {
@@ -265,8 +300,7 @@
     return '<div class="dh-heat-head"><span>近 30 天出库热力</span><span class="dh-heat-scale">' +
       '<i class="dh-hcell t0"></i><i class="dh-hcell t1"></i><i class="dh-hcell t2"></i><i class="dh-hcell t3"></i><i class="dh-hcell t4"></i>' +
       '</span></div>' +
-      '<div class="dh-hgrid">' + cells + '</div>' +
-      '<div class="dh-heat-foot">颜色越深 = 当日出库越多 · 悬停看每天</div>';
+      '<div class="dh-hgrid">' + cells + '</div>';
   }
 
   window.App = window.App || {};
