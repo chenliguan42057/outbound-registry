@@ -548,9 +548,11 @@
         // 盘点校准行：不进库存推算（affectsStock 无关），直接展示 账面→实存 与差异
         if (r.kind === "stocktake") {
           var d0 = it ? (Number(it.diff) || 0) : 0;
-          return '<tr class="flow-row" data-kind="stocktake" title="盘点校准记录，没有登记详情页">' +
+          return '<tr class="flow-row" data-kind="stocktake" data-id="' + Util.esc(r.id || "") + '" title="盘点校准记录；点「撤销」可撤回本次盘点">' +
             '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
-            '<td><span class="tag" style="background:#F0E7D2;color:#8a6d3b">盘点</span></td>' +
+            '<td><span class="tag" style="background:#F0E7D2;color:#8a6d3b">盘点</span>' +
+              (r.id ? ' <button type="button" class="btn mini" data-stk-undo="' + Util.esc(r.id) + '" style="padding:2px 8px;font-size:12px">撤销</button>' : '') +
+            '</td>' +
             '<td>—</td>' +
             '<td>盘点校准</td>' +
             '<td>' + (d0 > 0 ? "+" : "") + d0 + '</td>' +
@@ -584,7 +586,9 @@
     // 事件统一用委托挂在 .modal-body 上（这个元素本身不会被 innerHTML 替换，比绑子元素稳）
     mBody.addEventListener("click", function (e) {
       var b = e.target && e.target.closest ? e.target.closest('[data-act="export"]') : null;
-      if (b) exportProductCSV(name);
+      if (b) { exportProductCSV(name); return; }
+      var u = e.target && e.target.closest ? e.target.closest('[data-stk-undo]') : null;
+      if (u) { undoStocktake(u.getAttribute("data-stk-undo"), name); }
     });
     // 2026-09-24 第 13 轮：双击流水行 → 就地展开该笔的登记详情
     // （不用 UI.Modal.show 再开一层：Modal 是单例，会把流水列表整个换掉，体验割裂）
@@ -673,17 +677,41 @@
         // 由 Stock 并入库存时间轴参与计算；不再改写 catalog.inventory 基准。
         // 原因：旧实现改基准 → 该货品全部历史流水的「当时库存」被整体平移（"一盘点全部库存都变了"）。
         // 现在：真实出入库流水的快照保持原样，盘点只在盘点那一刻加/减差额，库存随订单增删正常变化。
-        var ok = await UI.confirmDialog(
-          "差异汇总：实存比账面多 +" + inSum + "、少 -" + outSum + "。\n将记录一条盘点差额进库存流水（不改库存基准、不动已有流水的当时库存），同时推送钉钉群（不进金山台账）。确认执行？", "盘点确认");
-        if (!ok) { UI.Modal.hide(); return; }
-        // 2026-09-05：确认后立即收起盘点弹窗——云端保存在后台进行（15s 超时 + 3 次重试），
-        // 弱网/移动端下用户不再看到“弹窗卡住 / 保存按钮点了没反应”，结果统一用 toast 呈现。
-        UI.Modal.hide();
         // 盘点差额事件：book=盘点前的实时库存（账面）、actual=实存、diff=差额。
         // 不再取 catalog.inventory 基准，也不再写回 —— 库存基准保持不动。
         var affected = diffs.map(function (d) {
           return { name: d.name, book: d.stock, actual: d.stock + d.diff, diff: d.diff };
         });
+        // 2026-09-26 A2：确认前必须让用户逐项看清「哪一项差多少」，只给汇总数字等于让人盲签。
+        var diffRows = affected.map(function (a) {
+          var col = a.diff > 0 ? "#1E8E3E" : "#C0392B";
+          return '<tr>' +
+            '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0)">' + Util.esc(a.name) + '</td>' +
+            '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right">' + a.book + '</td>' +
+            '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;font-weight:600">' + a.actual + '</td>' +
+            '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;font-weight:700;color:' + col + '">' +
+              (a.diff > 0 ? "+" : "") + a.diff + '</td>' +
+          '</tr>';
+        }).join("");
+        var ok = await UI.confirmHtml(
+          '<div style="margin-bottom:8px">共 <b>' + affected.length + '</b> 项货品与账面不一致：' +
+            '实存比账面多 <b style="color:#1E8E3E">+' + inSum + '</b>、少 <b style="color:#C0392B">-' + outSum + '</b>。请逐项核对后再确认。</div>' +
+          '<div style="max-height:32vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+            '<thead><tr style="color:var(--muted,#6B7B74);font-size:12px">' +
+              '<th style="padding:6px 8px;text-align:left">货品</th>' +
+              '<th style="padding:6px 8px;text-align:right">账面</th>' +
+              '<th style="padding:6px 8px;text-align:right">实存</th>' +
+              '<th style="padding:6px 8px;text-align:right">差异</th>' +
+            '</tr></thead><tbody>' + diffRows + '</tbody></table></div>' +
+          '<div style="margin-top:10px;font-size:12.5px;color:var(--muted,#6B7B74)">' +
+            '确认后记录一条盘点差额进库存流水（不改库存基准、不动已有流水的当时库存），同时推送钉钉群（不进金山台账）。' +
+            '<br/>保存后可在「库存流水」里点 <b>撤销</b> 撤回本次盘点，撤销记录进回收站可还原。' +
+          '</div>',
+          "盘点确认 · 逐项核对", { okText: "确认盘点", width: "560px" });
+        if (!ok) { UI.Modal.hide(); return; }
+        // 2026-09-05：确认后立即收起盘点弹窗——云端保存在后台进行（15s 超时 + 3 次重试），
+        // 弱网/移动端下用户不再看到“弹窗卡住 / 保存按钮点了没反应”，结果统一用 toast 呈现。
+        UI.Modal.hide();
         if (window.App.Stock) window.App.Stock.markDirty();
           Util.toast("盘点已记录：库存按实存数调整");
           var stkTime = Util.nowLocal ? Util.nowLocal() : new Date().toISOString();
@@ -730,6 +758,45 @@
         stBtn.disabled = false;
       }
     });
+  }
+
+  /** 撤销一次盘点（2026-09-26 A2）。
+      盘点此前是全系统唯一不可撤销的写操作——点错了只能人工反向再盘一次，还会在别的设备上继续生效。
+      现在：删云端盘点事件 + 写墓碑（含原事件完整快照，回收站可一键还原），
+      本地同步移除并重算库存；墓碑会被别的设备同步时读取，把该笔盘点一并移除。 */
+  async function undoStocktake(id, name) {
+    var arr = State.stocktakes || [];
+    var stk = arr.filter(function (s) { return s && s.id === id; })[0];
+    if (!stk) { Util.toast("找不到这笔盘点记录"); return; }
+    var cnt = (stk.items || []).length;
+    var ok = await UI.confirmDialog(
+      "撤销后本次盘点（涉及 " + cnt + " 项货品）的差额会从库存中移除，库存数字回到盘点前。\n" +
+      "撤销记录会进入回收站，随时可还原。确定撤销吗？", "撤销这次盘点");
+    if (!ok) return;
+    Util.toast("正在撤销盘点…");
+    try {
+      if (Cloud && Cloud.delStocktakeWithTombstone) await Cloud.delStocktakeWithTombstone(stk, "撤销盘点");
+      State.stocktakes = (State.stocktakes || []).filter(function (s) { return !s || s.id !== id; });
+      try { if (window.App.Store && window.App.Store.saveStocktakes) window.App.Store.saveStocktakes(State.stocktakes); } catch (e) {}
+      try { if (window.App.Stock && window.App.Stock.markDirty) window.App.Stock.markDirty(); } catch (e) {}
+      UI.Modal.hide();
+      Util.toast("盘点已撤销，库存回到盘点前");
+      refresh();
+      try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
+      try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
+      // 撤销也留痕：钉钉群同步说明，避免别人看到库存变了却不知道为什么
+      try {
+        if (Cloud && Cloud.pushNotifyFile) {
+          Cloud.pushNotifyFile("stocktake", {
+            type: "stocktake-undo",
+            time: (Util.nowLocal ? Util.nowLocal() : new Date().toISOString()),
+            items: stk.items || []
+          }).catch(function () {});
+        }
+      } catch (e) {}
+    } catch (err) {
+      Util.toast("撤销失败：" + ((err && err.message) || err), true);
+    }
   }
 
   /* ================= ＋ 新增货品（2026-08-14） =================

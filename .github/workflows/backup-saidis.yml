@@ -1,0 +1,26 @@
+name: Daily Backup (Saidis)
+on:
+  schedule:
+    # 与深圳仓快照错开 30 分钟，避免两个备份任务同时 push 互相 reject
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-backup-saidis
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Create daily snapshot (data-saidis)
+        env:
+          # 双仓数据前缀：快照写入 data-saidis/backups/（deploy.yml paths-ignore 已含 data-saidis/**，不会触发整站重建）
+          DATA_PREFIX: data-saidis
+        run: python3 .github/scripts/daily_backup.py

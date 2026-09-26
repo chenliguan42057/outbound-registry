@@ -29,7 +29,9 @@ TZ = timezone(timedelta(hours=8))
 KEEP_DAYS = 7          # 常规快照只留最近 7 天；每月 1 号的快照永久保留（清理逻辑里单独豁免）
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA = os.path.join(ROOT, "data")
+# 2026-09-26 修复：DATA/BACKUP_DIR 此前硬编码 "data/"，导致赛迪斯（DATA_PREFIX=data-saidis）
+# 的备份实际写进深圳目录。现在真正跟随 DATA_ROOT，双仓各备各的。
+DATA = os.path.join(ROOT, DATA_ROOT)
 BACKUP_DIR = os.path.join(DATA, "backups")
 
 # 目录名 -> 快照里的键名

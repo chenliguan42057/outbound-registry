@@ -647,6 +647,92 @@
     });
   }
 
+  /* ================= 盘点事件撤销（2026-09-26 A2） =================
+     盘点平账此前是全系统唯一「无 undo、无墓碑」的写操作：一旦保存，差额就永久并入
+     库存时间轴，点错了只能靠人工再盘一次反向冲，且别的设备同步后照样生效。
+     现在补齐完整闭环：撤销 = 先删云端盘点事件 → 成功后写墓碑（含原事件快照）
+     → 墓碑进 data/stocktakes-deleted/ → 回收站可一键还原 → 别的设备同步时按墓碑过滤。 */
+
+  /** 写盘点撤销墓碑：data/stocktakes-deleted/<id>.json（含原盘点事件完整快照） */
+  async function pushStocktakeTombstone(stk, reason) {
+    if (!stk || !stk.id) return;
+    // 双仓物理隔离：只给归属当前仓的盘点写墓碑
+    var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    if (stk.warehouse && stk.warehouse !== wid) { console.warn("[cloud] 跳过跨仓盘点墓碑:", stk.id); return; }
+    var path = Config.Sys.dir("stocktakes-deleted") + "/" + stk.id + ".json";
+    var tomb = { type: "stocktake-tombstone", id: stk.id, deletedAt: Util.serverNow(), reason: String(reason || ""), rec: stk };
+    var content = Util.b64enc(JSON.stringify(tomb));
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+    var body = sha
+      ? { message: "stocktake tombstone " + stk.id, content: content, sha: sha, branch: Config.GH.branch }
+      : { message: "stocktake tombstone " + stk.id, content: content, branch: Config.GH.branch };
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
+    });
+  }
+
+  /** 删除云端盘点事件文件（data/stocktakes/<id>.json）；云端本来就没有 → 视为成功 */
+  async function delStocktake(id) {
+    if (!id) return false;
+    var path = Config.Sys.dir("stocktakes") + "/" + id + ".json";
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return true; }
+    try {
+      await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+        method: "DELETE", headers: ghHeaders(),
+        body: JSON.stringify({ message: "undo stocktake " + id, sha: sha, branch: Config.GH.branch })
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /** 撤销盘点：先删事件、删成功才写墓碑。
+      顺序绝不能颠倒——先写墓碑再删事件，删失败就留下「事件 + 墓碑并存」的矛盾态，
+      别的设备会同时看到事件和墓碑，库存口径直接乱掉。删不掉就抛错，交给上层提示用户重试。 */
+  async function delStocktakeWithTombstone(stk, reason) {
+    if (!stk || !stk.id) return false;
+    var ok = false;
+    for (var i = 0; i < 3 && !ok; i++) {
+      ok = await delStocktake(stk.id);
+      if (!ok && i < 2) await new Promise(function (res) { setTimeout(res, 400 * (i + 1)); });
+    }
+    if (!ok) throw new Error("云端盘点事件删除失败:" + stk.id);
+    await pushStocktakeTombstone(stk, reason);
+    return true;
+  }
+
+  /** 移除盘点墓碑（回收站还原用）：必须先删墓碑再写回事件，否则下一轮同步会用残留墓碑再删一次 */
+  async function delStocktakeTombstone(id) {
+    var path = Config.Sys.dir("stocktakes-deleted") + "/" + id + ".json";
+    var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
+    var sha;
+    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { return; }
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
+      method: "DELETE", headers: ghHeaders(),
+      body: JSON.stringify({ message: "restore stocktake " + id, sha: sha, branch: Config.GH.branch })
+    });
+  }
+
+  /** 拉取盘点墓碑列表（目录 404 视为空；无 token 直接空，不浪费请求） */
+  async function pullStocktakeTombstones() {
+    if (!hasToken()) return [];
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + Config.Sys.dir("stocktakes-deleted") + "?ref=" + Config.GH.branch;
+    var arr;
+    try { arr = await apiJson(url); }
+    catch (e) { if (String(e.message).indexOf("404") === 0) return []; throw e; }
+    if (!Array.isArray(arr)) return [];
+    var toms = [];
+    for (var i = 0; i < arr.length; i++) {
+      var f = arr[i];
+      if (!f.name.endsWith(".json") || f.size >= 5 * 1024 * 1024) continue;
+      try { var j = await apiJson(f.url); toms.push(JSON.parse(Util.b64dec(j.content))); } catch (e) {}
+    }
+    return toms;
+  }
+
   /** 清空全部并写一条汇总墓碑（data/deleted/__clear-all__.json） */
   async function clearAllWithReason(reason) {
     var path = Config.Sys.dir("deleted") + "/__clear-all__.json";
@@ -1474,7 +1560,15 @@
       window.App.State.memos = window.App.Memos.mergeAndSort(window.App.State.memos, mms);
       Store.saveMemos(window.App.State.memos);
       // 盘点记录合并（同 id 较新者胜）+ 冲刷本地未推送成功的盘点记录
-      window.App.State.stocktakes = window.App.Records.mergeAndSort(window.App.State.stocktakes, stkCloud);
+      // 2026-09-26 A2：mergeAndSort 是并集，别的设备撤销掉的盘点不会从本地自动消失，
+      // 必须用「盘点墓碑目录」过滤一遍，否则撤销只在本机生效、别的手机照样按盘后库存算。
+      var stkToms = [];
+      try { stkToms = await pullStocktakeTombstones(); } catch (e) { stkToms = []; }
+      window.App.State.stkTombstones = stkToms || [];
+      var stkDead = {};
+      (stkToms || []).forEach(function (t) { if (t && t.id) stkDead[t.id] = 1; });
+      window.App.State.stocktakes = window.App.Records.mergeAndSort(window.App.State.stocktakes, stkCloud)
+        .filter(function (s) { return !(s && s.id && stkDead[s.id]); });
       Store.saveStocktakes(window.App.State.stocktakes);
       try { await flushStocktakesPending(); } catch (e) {}
       // 冲刷本地墓碑队列（删除云端失败的补推，成功才出队）
@@ -1539,6 +1633,11 @@
     pushTombstone: pushTombstone,
     delWithTombstone: delWithTombstone,
     delTombstone: delTombstone,
+    pushStocktakeTombstone: pushStocktakeTombstone,
+    delStocktake: delStocktake,
+    delStocktakeWithTombstone: delStocktakeWithTombstone,
+    delStocktakeTombstone: delStocktakeTombstone,
+    pullStocktakeTombstones: pullStocktakeTombstones,
     clearAllWithReason: clearAllWithReason,
     pullTombstones: pullTombstones,
     pushPhoto: pushPhoto,

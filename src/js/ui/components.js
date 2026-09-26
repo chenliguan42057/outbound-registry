@@ -132,6 +132,33 @@
     });
   }
 
+  /** 带 HTML 正文的确认弹窗（2026-09-26 A2）。
+      confirmDialog 会把正文 Util.esc 掉，承载不了表格和彩色差异数字；
+      盘点「逐项差异核对」这类必须先看清「哪一项、账面多少、实存多少、差多少」再下手的场景，
+      必须用这个版本。返回 Promise<boolean>，用法与 confirmDialog 一致。 */
+  function confirmHtml(html, title, opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var body =
+        '<div class="confirm-msg">' + html + '</div>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn ghost sm" data-act="cancel">' + Util.esc(opts.cancelText || "取消") + '</button>' +
+          '<button type="button" class="btn sm" data-act="ok">' + Util.esc(opts.okText || "确认") + '</button>' +
+        '</div>';
+      Modal.show(title || "请确认", body, { width: opts.width || "520px" });
+      var mBody = Modal.body();
+      var okBtn = mBody && mBody.querySelector('[data-act="ok"]');
+      var noBtn = mBody && mBody.querySelector('[data-act="cancel"]');
+      function close(v) {
+        try { Modal.hide(); } catch (e) {}
+        resolve(v);
+      }
+      if (okBtn) okBtn.addEventListener('click', function () { close(true); });
+      if (noBtn) noBtn.addEventListener('click', function () { close(false); });
+      try { setTimeout(function () { if (okBtn && document.contains(okBtn)) okBtn.focus(); }, 60); } catch (e) {}
+    });
+  }
+
   /** 提交前「核对清单」弹窗（2026-09-24）→ Promise<boolean>。
       四个登记视图（出库 / 入库 / 待取货 / 调拨）共用，确保「确认后才写库」的口径一致。
       data: {
@@ -1508,6 +1535,7 @@
     Modal: Modal,
     confirmSubmit: confirmSubmit,
     confirmDialog: confirmDialog,
+    confirmHtml: confirmHtml,
     promptDialog: promptDialog,
     showLoginDialog: showLoginDialog,
     collapseSection: collapseSection,
