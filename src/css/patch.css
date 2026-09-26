@@ -1651,3 +1651,36 @@ html[data-theme="dark"] .rc-empty-hint { background: linear-gradient(165deg, #21
 @media (prefers-reduced-motion: reduce) {
   .rc-empty-icon, .rc-step-arrow, .rc-empty-steps .rc-step, .stock-ring .sr-fg { animation: none; }
 }
+
+/* ============================================================
+   2026-09-26 报表统计深度图表化：流向双向条 / 趋势柱生长 / 明细折叠
+   ============================================================ */
+.fl-wrap { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
+.fl-row { display: flex; align-items: center; gap: 12px; padding: 4px 0; }
+.fl-name {
+  width: 150px; flex-shrink: 0; font-size: 13px; color: #3C4845;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fl-bars { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.fl-bars i {
+  height: 8px; width: 0; border-radius: 4px;
+  transition: width .9s cubic-bezier(.22, 1, .36, 1);
+}
+.fl-bars i.out { background: linear-gradient(90deg, #DE8168, #B4472E); }
+.fl-bars i.in { background: linear-gradient(90deg, #7FD9B8, #2F8F5B); }
+.fl-val {
+  width: 132px; flex-shrink: 0; text-align: right; font-size: 12.5px;
+  color: #6E8079; font-variant-numeric: tabular-nums;
+}
+.fl-legend { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; }
+.fl-legend i { width: 14px; height: 6px; border-radius: 3px; display: inline-block; }
+.fl-legend i.out { background: #C0563E; }
+.fl-legend i.in { background: #2F8F5B; }
+.trend-bar { transition: height .8s cubic-bezier(.22, 1, .36, 1); }
+.report-table td { padding-top: 10px; padding-bottom: 10px; }
+.report-table tbody tr:nth-child(even) td { background: rgba(242, 247, 244, .55); }
+html[data-theme="dark"] .fl-val { color: #9FB0A9; }
+html[data-theme="dark"] .fl-name { color: #C8D3CE; }
+@media (prefers-reduced-motion: reduce) {
+  .fl-bars i, .trend-bar { transition: none; }
+}
