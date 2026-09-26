@@ -95,17 +95,6 @@
     return (!isNaN(w) && w >= 0) ? w : Config.LOW_STOCK_THRESHOLD;
   }
 
-  /** 库存健康环形：一圈 = 预警线的 3 倍量，越满越充裕；低=陶土红、偏紧=琥珀、充裕=薄荷绿 */
-  function ringSvg(stock, warn) {
-    var cap = Math.max(1, (warn || 95) * 3);
-    var pct = Math.max(0.05, Math.min(1, stock / cap));
-    var color = stock < warn ? "#C0563E" : (stock < warn * 1.6 ? "#C08A2E" : "#2F8F5B");
-    var C = 2 * Math.PI * 9;
-    return '<svg class="stock-ring" viewBox="0 0 24 24" aria-hidden="true">' +
-      '<circle class="sr-bg" cx="12" cy="12" r="9"/>' +
-      '<circle class="sr-fg" cx="12" cy="12" r="9" stroke="' + color + '" stroke-dasharray="' + (pct * C).toFixed(1) + ' ' + C.toFixed(1) + '"/>' +
-      '</svg>';
-  }
 
   function renderTable() {
     if (!tableBox) return;
@@ -170,11 +159,11 @@
       var st = freezeStateCell(low, over, tight);
       html += '<tr class="' + (over ? "freeze-over" : (low ? "low-stock" : (frozen ? "freeze-row" : ""))) + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + Util.esc(s.name) + '</td>' +
-        '<td class="stock-num num-strong" data-name="' + Util.esc(s.name) + '">' + ringSvg(s.stock, warn) + '<span class="stock-num-txt">' + s.stock + '</span></td>' +
+        '<td class="stock-num num num-strong" data-name="' + Util.esc(s.name) + '">' + '<span class="stock-num-txt">' + s.stock + '</span></td>' +
         '<td class="num fx-freeze' + (frozen ? " has-fx" : "") + '" data-name="' + Util.esc(s.name) + '" title="点一下看是哪几单待取货占用">' + (frozen ? '<span class="fx-neg">−' + frozen + '</span>' : '<span class="fx-none">—</span>') + '</td>' +
         '<td class="num num-strong fx-avail' + (over ? " fx-bad" : (tight ? " fx-tight" : (avail < warn ? " fx-low" : " fx-ok"))) + '">' + avail + '</td>' +
-        '<td>' + s.inQty + '</td>' +
-        '<td>' + s.outQty + '</td>' +
+        "<td class=\"num\">" + s.inQty + "</td>" +
+        "<td class=\"num\">" + s.outQty + "</td>" +
         '<td>' + st + '</td>' +
         '<td><button type="button" class="btn ghost sm flow-btn" data-name="' + Util.esc(s.name) + '">📊 流水</button></td>' +
       '</tr>';
@@ -312,7 +301,7 @@
       html += '<tr class="' + (low ? "low-stock" : "") + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + (i + 1) + '</td>' +
         '<td>' + Util.esc(s.name) + '</td>' +
-        '<td class="stock-num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '">' + ringSvg(s.stock, warn) + '<span class="stock-num-txt">' + s.stock + '</span></td>' +
+        '<td class="stock-num num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '">' + '<span class="stock-num-txt">' + s.stock + '</span></td>' +
         '<td class="num fx-freeze' + (frozen ? " has-fx" : "") + '" data-name="' + Util.esc(s.name) + '" title="点一下看是哪几单待取货占用">' + (frozen ? '<span class="fx-neg">−' + frozen + '</span>' : '<span class="fx-none">—</span>') + '</td>' +
         '<td class="num num-strong fx-avail' + (avail < 0 ? " fx-bad" : (avail < warn && s.stock >= warn ? " fx-tight" : (avail < warn ? " fx-low" : " fx-ok"))) + '">' + avail + '</td>' +
         '<td>' + (avail < 0 ? '<span class="tag danger-tag" title="可用库存为负：提单占用已超过实际库存">超预占</span>' : (low ? '<span class="tag danger-tag" title="库存低于该货品预警线">低库存</span>' : (avail < warn ? '<span class="tag warn-tag" title="扣掉待取货占用后低于预警线">偏低</span>' : '<span class="tag ok-tag">正常</span>'))) + '</td>' +
