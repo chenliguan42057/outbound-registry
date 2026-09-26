@@ -37,6 +37,8 @@
           '</div>' +
         '</div>' +
         '<div class="report-cards" id="reportCards"></div>' +
+        '<div class="card"><h2>区间货品流向 <span class="fl-legend"><i class="out"></i><i class="in"></i></span></h2>' +
+          '<div id="reportFlow"></div></div>' +
         '<div class="grid2">' +
           '<div class="card">' +
             '<h2>库存排行 TOP10</h2>' +
@@ -52,8 +54,9 @@
           '</div>' +
         '</div>' +
         '<div class="card">' +
-          '<h2>区间出入库明细 <span class="badge" id="reportRangeLabel"></span></h2>' +
-          '<div id="reportTable"></div>' +
+          '<h2>区间出入库明细</h2>' +
+          '<details class="mt-fold" id="reportFold"><summary>展开看记录<b id="reportRangeLabel"></b></summary>' +
+            '<div id="reportTable"></div></details>' +
         '</div>' +
       '</div>';
 
@@ -165,6 +168,7 @@
     if (!container) return;
     renderCards();
     renderRank();
+    renderFlow();
     renderTable();
     var active = container.querySelector(".trend-tabs .btn.active");
     renderTrend(active ? Number(active.getAttribute("data-days")) : 7);
@@ -186,13 +190,31 @@
       { label: "货品种类数", value: summary.length, icon: "box" },
       { label: "低库存数", value: lowCount, icon: "stock" }
     ];
-    container.querySelector("#reportCards").innerHTML = cards.map(function (c) {
-      return '<div class="report-card">' +
+    var maxCard = Math.max.apply(null, cards.map(function (c) { return c.value; }).concat([1]));
+    container.querySelector("#reportCards").innerHTML = cards.map(function (c, i) {
+      return '<div class="report-card mt-anim" style="animation-delay:' + (i * 70) + 'ms">' +
         '<div class="report-card-icon">' + UI.icon(c.icon, 22) + '</div>' +
-        '<div class="report-card-value">' + c.value + '</div>' +
+        '<div class="report-card-value" data-v="' + c.value + '">0</div>' +
         '<div class="report-card-label">' + c.label + '</div>' +
+        '<div class="mt-bar-mini"><i data-pct="' + Math.max(6, Math.round(c.value / maxCard * 100)) + '"></i></div>' +
       '</div>';
     }).join("");
+    var box = container.querySelector("#reportCards");
+    Array.prototype.forEach.call(box.querySelectorAll(".report-card"), function (card, i) {
+      var v = card.querySelector(".report-card-value");
+      var target = Number(v.getAttribute("data-v")) || 0;
+      var t0 = performance.now();
+      (function tick(now) {
+        var p = Math.min(1, ((now || Date.now()) - t0) / 900);
+        var e = 1 - Math.pow(1 - p, 3);
+        v.textContent = Math.round(target * e).toLocaleString("zh-CN");
+        if (p < 1) requestAnimationFrame(tick);
+      })(t0);
+      setTimeout(function () {
+        var bar = card.querySelector(".mt-bar-mini i");
+        if (bar) bar.style.width = bar.getAttribute("data-pct") + "%";
+      }, 120 + i * 70);
+    });
   }
 
   function renderRank() {
@@ -210,6 +232,46 @@
     container.querySelector("#reportRank").innerHTML = html || '<div class="empty"><b>还没有数据</b><i>先登记出入库，报表会自动汇总</i></div>';
   }
 
+  /** 区间货品流向：每个货品的出库 / 入库两条对比条（条形代替文字表） */
+  function renderFlow() {
+    var list = filteredRecords();
+    var map = {};
+    list.forEach(function (r) {
+      if (r.affectsStock !== true) return;
+      (r.items || []).forEach(function (it) {
+        var n = it.name || ""; if (!n) return;
+        var q = Number(it.qty) || 0;
+        if (!map[n]) map[n] = { name: n, out: 0, in: 0 };
+        if (r.type === "in") map[n].in += q; else map[n].out += q;
+      });
+    });
+    var arr = Object.keys(map).map(function (k) { return map[k]; })
+      .sort(function (a, b) { return (b.out + b.in) - (a.out + a.in); }).slice(0, 8);
+    var box = container.querySelector("#reportFlow");
+    if (!box) return;
+    if (!arr.length) {
+      box.innerHTML = '<div class="empty"><b>这个区间还没有出入库</b><i>换个区间，或先登记几单</i></div>';
+      return;
+    }
+    var max = Math.max.apply(null, arr.map(function (x) { return Math.max(x.out, x.in); }).concat([1]));
+    box.innerHTML = '<div class="fl-wrap">' + arr.map(function (x, i) {
+      return '<div class="fl-row mt-anim" style="animation-delay:' + (i * 50) + 'ms">' +
+        '<span class="fl-name" title="' + Util.esc(x.name) + '">' + Util.esc(x.name) + '</span>' +
+        '<div class="fl-bars">' +
+          '<i class="out" data-pct="' + Math.max(2, Math.round(x.out / max * 100)) + '"></i>' +
+          '<i class="in" data-pct="' + Math.max(2, Math.round(x.in / max * 100)) + '"></i>' +
+        '</div>' +
+        '<span class="fl-val">出 ' + x.out + ' · 入 ' + x.in + '</span>' +
+      '</div>';
+    }).join("") + '</div>';
+    var bars = box.querySelectorAll(".fl-bars i");
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        for (var i = 0; i < bars.length; i++) bars[i].style.width = bars[i].getAttribute("data-pct") + "%";
+      });
+    });
+  }
+
   function renderTrend(days) {
     var data = Stock.trend(State.list, days);
     var max = data.reduce(function (m, d) { return Math.max(m, d.outQty, d.inQty); }, 0) || 1;
@@ -219,8 +281,8 @@
       var label = d.date.slice(5);
       return '<div class="trend-col">' +
         '<div class="trend-bars">' +
-          '<div class="trend-bar out" style="height:' + (outH || 1) + '%" title="出库 ' + d.outQty + '"></div>' +
-          '<div class="trend-bar in" style="height:' + (inH || 1) + '%" title="入库 ' + d.inQty + '"></div>' +
+          '<div class="trend-bar out" style="height:0" data-h="' + (outH || 1) + '" title="出库 ' + d.outQty + '"></div>' +
+          '<div class="trend-bar in" style="height:0" data-h="' + (inH || 1) + '" title="入库 ' + d.inQty + '"></div>' +
         '</div>' +
         '<div class="trend-label">' + label + '</div>' +
         '<div class="trend-total">' + (d.outQty + d.inQty) + '</div>' +
@@ -228,6 +290,12 @@
     }).join("") + '</div>';
     html += '<div class="trend-legend"><span class="legend-dot out"></span>出库 <span class="legend-dot in"></span>入库</div>';
     container.querySelector("#reportTrend").innerHTML = html;
+    var tbars = container.querySelectorAll("#reportTrend .trend-bar");
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        for (var i = 0; i < tbars.length; i++) tbars[i].style.height = tbars[i].getAttribute("data-h") + "%";
+      });
+    });
   }
 
   /** 区间出入库明细表（筛选区间内的记录，最新在前） */
@@ -257,7 +325,7 @@
       '</tr>';
     }).join("");
     container.querySelector("#reportTable").innerHTML =
-      '<div class="table-wrap"><table class="table"><thead><tr>' +
+      '<div class="table-wrap"><table class="table report-table"><thead><tr>' +
       '<th>时间</th><th>类型</th><th>来源</th><th>领取人</th><th>用途</th><th>货品</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
