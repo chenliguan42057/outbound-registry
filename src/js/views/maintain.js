@@ -239,7 +239,8 @@
 
   /* ================= 渲染 ================= */
 
-  function render(container) {
+  function render(container, mode) {
+    mode = mode || "full";
     stopAll();
     host = container;
     container.innerHTML =
@@ -291,6 +292,12 @@
           '<div id="mtDiff"></div>' +
         '</div>' +
       '</div>';
+
+    if (mode === "net") { var _s = container.querySelector(".mt-sec"); if (_s) _s.style.display = "none"; }
+    if (mode === "diff") {
+      var _n = container.querySelector(".mt-net"); if (_n) _n.style.display = "none";
+      var _c = container.querySelector(".mt-cards"); if (_c) _c.style.display = "none";
+    }
 
     renderCards();
     Util.$("mtDiffBtn").addEventListener("click", runDiff);
