@@ -1595,3 +1595,59 @@ html[data-theme="dark"] .mt-fold summary b { background: #2A3A34; color: #9FD9C2
   .dh-fade { opacity: 1; }
   .dh-draw { stroke-dashoffset: 0; }
 }
+
+/* ============================================================
+   2026-09-26 视感精修第二批：库存环形仪表 / 表头对齐 / 识别页动画 / 分区说明
+   ============================================================ */
+.stock-table.freeze-table th { font-style: normal; }
+.stock-table.freeze-table th.num, .stock-table.freeze-table td.num { text-align: right; padding-right: 22px; }
+.stock-table.freeze-table th:first-child, .stock-table.freeze-table td:first-child,
+.stock-table.freeze-table td.items-cell { text-align: left; padding-left: 16px; }
+.rank-table.freeze-table th:nth-child(2), .rank-table.freeze-table td:nth-child(2) { text-align: left; padding-left: 12px; }
+.stock-table.freeze-table thead th {
+  background: #F2F7F4; color: #3C4845; font-weight: 500;
+  border-bottom: 1px solid #DCE9E2; padding-top: 12px; padding-bottom: 12px;
+}
+.stock-table.freeze-table tbody td { padding-top: 13px; padding-bottom: 13px; }
+.stock-table.freeze-table tbody tr:nth-child(even) td { background: rgba(242, 247, 244, .55); }
+.stock-table.freeze-table tbody tr:hover td { background: #EDF6F1; }
+.stock-ring { width: 27px; height: 27px; vertical-align: middle; margin-right: 9px; }
+.stock-ring .sr-bg { fill: none; stroke: #E3EDE8; stroke-width: 3.5; }
+.stock-ring .sr-fg {
+  fill: none; stroke-width: 3.5; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 12px 12px;
+  animation: sr-grow 1s cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes sr-grow { from { stroke-dasharray: 0 56.5; } }
+.stock-num { white-space: nowrap; }
+.stock-num-txt { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .2px; }
+.stock-table.freeze-table td:nth-child(5), .stock-table.freeze-table td:nth-child(6) { font-size: 13px; }
+
+html[data-theme="dark"] .stock-table.freeze-table thead th { background: #212A27; color: #C8D3CE; border-bottom-color: #2F3A36; }
+html[data-theme="dark"] .stock-table.freeze-table tbody tr:nth-child(even) td { background: rgba(33, 42, 39, .5); }
+html[data-theme="dark"] .stock-ring .sr-bg { stroke: #2F3A36; }
+
+.dash-note { font-size: 12.5px; color: #7C8A85; margin: 0 0 12px 2px; }
+
+.rc-empty-hint {
+  background: linear-gradient(165deg, #F2F8F5 0%, #FBFDFC 70%);
+  border: 1px solid #E3EDE8; border-radius: 16px; padding: 46px 30px; text-align: center;
+}
+.rc-empty-icon { font-size: 48px; line-height: 1; display: inline-block; animation: rc-breathe 2.8s ease-in-out infinite; }
+@keyframes rc-breathe {
+  0%, 100% { transform: translateY(0) scale(1); opacity: .85; }
+  50% { transform: translateY(-6px) scale(1.06); opacity: 1; }
+}
+.rc-empty-steps .rc-step { animation: rc-rise .55s cubic-bezier(.22, 1, .36, 1) both; }
+.rc-empty-steps .rc-step:nth-child(1) { animation-delay: .1s; }
+.rc-empty-steps .rc-step:nth-child(3) { animation-delay: .25s; }
+.rc-empty-steps .rc-step:nth-child(5) { animation-delay: .4s; }
+@keyframes rc-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.rc-step-arrow { display: inline-block; color: #9FB0A9; animation: rc-nudge 1.6s ease-in-out infinite; }
+@keyframes rc-nudge { 0%, 100% { transform: translateX(0); opacity: .55; } 50% { transform: translateX(4px); opacity: 1; } }
+.rc-layout .card { box-shadow: 0 4px 16px rgba(30, 50, 44, .06); }
+html[data-theme="dark"] .rc-empty-hint { background: linear-gradient(165deg, #212A27, #1A211E); border-color: #2F3A36; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-empty-icon, .rc-step-arrow, .rc-empty-steps .rc-step, .stock-ring .sr-fg { animation: none; }
+}
