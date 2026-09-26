@@ -2366,11 +2366,99 @@ html[data-theme="light"] .card#rcEmptyCard {
 .bulk-undo-bar .btn{margin:0}
 @keyframes pp-undo-in{from{opacity:0;transform:translateX(-50%) translateY(10px)}
   to{opacity:1;transform:translateX(-50%) translateY(0)}}
-html[data-theme="light"] .bulk-undo-bar,html:not([data-theme="dark"]) .bulk-undo-bar{
+html[data-theme="light"] .bulk-undo-bar{
   background:#FFFFFF;border-color:#DCE6E0;color:#2C3A34;box-shadow:0 8px 28px rgba(0,0,0,.12)}
 @media (max-width:560px){
   .bulk-undo-bar{left:12px;right:12px;bottom:calc(64px + env(safe-area-inset-bottom,0px));
     transform:none;max-width:none;justify-content:space-between}
   @keyframes pp-undo-in{from{opacity:0;transform:translateY(10px)}
     to{opacity:1;transform:translateY(0)}}
+}
+
+/* ============================================================
+   D 全站统一「亮框框」soft-pill（2026-09-26）—— 纯样式，不动任何业务数据
+   目标样式：浅色底 + 同色小圆点 + 同色文字 的全圆角胶囊。
+   v1.0 覆盖层把 .tag/.status-pill 做成了「实心纯色 + 线性图标」，
+   而 .status-pill 内部本来就带 <span class="dot">，两层叠加就成了「一个胶囊两个点」。
+   这里统一回退 soft-pill：点就是点，底色是浅的，字是同色深一档，一眼分清好/坏/注意。
+   ============================================================ */
+html:not([data-theme="light"]) {
+  --pp-ok-bg: rgba(54,208,96,.15);
+  --pp-err-bg: rgba(255,34,85,.15);
+  --pp-warn-bg: rgba(255,187,34,.16);
+  --pp-info-bg: rgba(34,153,255,.15);
+  --pp-cyan-bg: rgba(34,204,238,.15);
+  --pp-purple-bg: rgba(153,85,255,.18);
+}
+html[data-theme="light"] {
+  --pp-ok-bg: #E8F7EE;
+  --pp-err-bg: #FFF0F0;
+  --pp-warn-bg: #FFF7E6;
+  --pp-info-bg: #EAF4FF;
+  --pp-cyan-bg: #E6F9FC;
+  --pp-purple-bg: #F3ECFF;
+}
+
+/* ① 统一底座：浅底 + 同色字 + 全圆角，不再实心 */
+html .tag, html .badge, html .chip, html .src-chip, html .tf-tag, html .in-tag,
+html .tag.ok-tag, html .tag.warn-tag, html .tag.danger-tag,
+html .status-pill, html .status-pill.pending, html .status-pill.submitted {
+  background: var(--pp-info-bg) !important;
+  color: var(--pp-info) !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--pp-pill) !important;
+  font-weight: 600;
+  letter-spacing: .2px;
+  box-shadow: none !important;
+}
+/* ② 图标槽改成「一个 7px 圆点」，与 .status-pill 自带 .dot 同款尺寸 */
+html .tag::before, html .badge::before, html .chip::before, html .src-chip::before,
+html .tf-tag::before, html .in-tag::before,
+html .tag.ok-tag::before, html .tag.warn-tag::before, html .tag.danger-tag::before {
+  content: "";
+  width: 7px; height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background-image: none !important;
+  background-color: currentColor;
+  opacity: .95;
+}
+/* ③ status-pill 内部已有 <span class="dot">，::before 再画一个就是「两个点」→ 关掉 */
+html .status-pill::before { content: none !important; display: none !important; }
+html .status-pill .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor !important;
+  flex: 0 0 auto;
+}
+/* ④ 语义色：绿=好 / 红=坏 / 黄=注意，底浅字实 */
+html .tag.ok-tag, html .status-pill.submitted { background: var(--pp-ok-bg) !important; color: var(--pp-ok) !important; }
+html .tag.warn-tag { background: var(--pp-warn-bg) !important; color: var(--pp-warn) !important; }
+html .tag.danger-tag, html .status-pill.pending { background: var(--pp-err-bg) !important; color: var(--pp-err) !important; }
+/* ⑤ 卡片标题后的小胶囊（「实时计算」/「全量」）：青色辅助色，同样走 soft */
+html .card h2 .tag, html .card h2 > .tag {
+  background: var(--pp-cyan-bg) !important;
+  color: var(--pp-cyan) !important;
+}
+html .card h2 .tag::before { background-image: none !important; background-color: currentColor; }
+/* ⑥ 浅色模式下同色字在浅底上偏淡，加深一档保证对比度 */
+html[data-theme="light"] .tag, html[data-theme="light"] .badge, html[data-theme="light"] .chip,
+html[data-theme="light"] .src-chip, html[data-theme="light"] .tf-tag, html[data-theme="light"] .in-tag {
+  color: #1B6FC4 !important;
+}
+html[data-theme="light"] .card h2 .tag, html[data-theme="light"] .card h2 > .tag { color: #0E7C93 !important; }
+html[data-theme="light"] .tag.ok-tag, html[data-theme="light"] .status-pill.submitted { color: #12833A !important; }
+html[data-theme="light"] .tag.warn-tag { color: #96650A !important; }
+html[data-theme="light"] .tag.danger-tag, html[data-theme="light"] .status-pill.pending { color: #B3233F !important; }
+
+/* ============================================================
+   C1 移动端表格横滑（2026-09-26）—— 只为窄屏放开，桌面不动
+   上面 .table-wrap 为了裁圆角设了 overflow:hidden，手机上表格横向就滑不动了。
+   ============================================================ */
+@media (max-width: 900px) {
+  html .table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  html .table-wrap > .table { min-width: max-content; }
 }

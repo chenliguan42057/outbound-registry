@@ -326,6 +326,36 @@
     this.panelQ = "";                 // 面板内搜索词（保留原大小写）
   }
 
+  /** 扫码内容 → 货品名（2026-09-26 B2「扫码一次过」）。
+      扫码枪打进来的是一串条码，而搜索池里全是货品名；没有这张表，扫完条码搜索框
+      查不到任何东西，用户还得再手动点一下货品——这就是「扫一次过不了」的根因。
+      解析顺序：① 精确条码（catalog 的 barcode 字段）② 精确货品名（忽略大小写）
+      ③ 别名表 NAME_MAP。都不中返回 null，退回原来的模糊搜索行为，绝不猜。 */
+  function resolveScan(code) {
+    var q = String(code || "").trim();
+    if (!q) return null;
+    var low = q.toLowerCase();
+    var cat = null;
+    try { cat = (window.App.Catalog && window.App.Catalog.get) ? window.App.Catalog.get() : null; } catch (e) { cat = null; }
+    var prods = (cat && cat.products) || [];
+    var i, p;
+    for (i = 0; i < prods.length; i++) {                       // ① 精确条码
+      p = prods[i];
+      if (p && p.barcode && String(p.barcode).trim().toLowerCase() === low) return p.name;
+    }
+    for (i = 0; i < prods.length; i++) {                       // ② 精确货品名
+      p = prods[i];
+      if (p && p.name && String(p.name).trim().toLowerCase() === low) return p.name;
+    }
+    var nm = (window.App.Config && window.App.Config.NAME_MAP) || {};
+    var keys = Object.keys(nm);                                // ③ 别名表
+    for (i = 0; i < keys.length; i++) {
+      if (String(keys[i]).toLowerCase() === low) return nm[keys[i]] || keys[i];
+      if (String(nm[keys[i]] || "").toLowerCase() === low) return keys[i];
+    }
+    return null;
+  }
+
   ProductPicker.prototype.attach = function (container) {
     var self = this;
     this.container = container;
@@ -363,6 +393,19 @@
         return;
       }
       if (key === "Enter") {
+        // 2026-09-26 B2「扫码一次过」：先按条码/全名精确解析，命中立刻入选并清空，
+        // 焦点留在输入框，下一枪直接接着扫
+        var scanned = resolveScan(self.searchEl.value);
+        if (scanned) {
+          e.preventDefault();
+          e.stopPropagation();
+          var dup = self.selected.some(function (s) { return s.name === scanned; });
+          self.addProduct(scanned);
+          self.searchEl.value = "";
+          try { self.searchEl.focus(); } catch (e2) {}
+          Util.toast(dup ? "已选过：" + scanned : "已加入：" + scanned);
+          return;
+        }
         // 候选列表打开时一律拦截 Enter，避免冒泡到表单层触发其他行为
         if (open && opts.length) {
           e.preventDefault();
@@ -567,6 +610,33 @@
       if (box) { self.panelQ = box.value; self.renderGroups(); return; }   // 只重绘分组，保住输入焦点
       var num = e.target.closest(".bp-q");
       if (num) self.draft[Number(num.getAttribute("data-i"))].qty = num.value;
+    });
+    // 扫码枪专用（2026-09-26 B2「扫码一次过」）：枪打完条码会自己补一个 Enter。
+    // 这里把「一枪」直接变成「一次入选」——命中即加入草稿、清空输入框、焦点留在搜索框，
+    // 下一枪接着扫，中间不需要任何手动点击。
+    el.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      var box = e.target && e.target.closest ? e.target.closest(".bp-search") : null;
+      if (!box) return;
+      var raw = box.value;
+      if (!String(raw || "").trim()) return;
+      var hit = resolveScan(raw);
+      // 条码/全名都没中，就看是不是只剩唯一一个模糊匹配——唯一就不犹豫，直接入选
+      if (!hit) {
+        var flat = [];
+        self.buildGroups(raw).forEach(function (g) { flat = flat.concat(g.items); });
+        if (flat.length === 1) hit = flat[0];
+      }
+      if (!hit) return;                                        // 多个候选 → 交回给用户点，绝不乱猜
+      e.preventDefault();
+      e.stopPropagation();
+      var already = self.draft.some(function (d) { return d.name === hit; });
+      if (!already) self.toggleDraft(hit);                     // 重复扫同一件不会把它取消掉
+      box.value = "";
+      self.panelQ = "";
+      self.renderGroups();
+      try { box.focus(); } catch (e2) {}
+      Util.toast(already ? "已选过：" + hit : "已加入：" + hit);
     });
     // 数量取整：与表单内口径一致（支/盒/袋按整件计）
     el.addEventListener("change", function (e) {
