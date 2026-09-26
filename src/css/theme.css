@@ -2085,3 +2085,207 @@ html[data-theme="light"] ::-webkit-scrollbar-track { background: #F4F5F7; }
   html .module-view, html .mod-head, html .modal-card, html .toast, html .fx-success.show { animation: none !important; }
   html .btn.loading::before { animation-duration: .9s; }
 }
+
+/* ==========================================================================
+   覆盖层 v1.1 增量（2026-09-26）：自动识别页（recognize）专修 + 板块页头统一
+   红线不变：只改样式，不动任何文字 / 数字 / DOM / 业务逻辑
+   ========================================================================== */
+
+/* ---------- 20. 板块页头统一：去掉各页杂色药丸底，统一大标题 ---------- */
+/* （v1.0 的 html .mod-head 特异性不够，被 modules.css 的 [data-tone] 板块色压住了，这里抬一级） */
+html .win-content .mod-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 2px !important;
+  margin: 0 0 16px !important;
+}
+html .win-content .mod-head-title {
+  font-size: var(--pp-fs-h1);
+  font-weight: 700;
+  color: var(--pp-text);
+  letter-spacing: -.01em;
+}
+
+/* ---------- 21. 自动识别页：左右布局与间距 ---------- */
+html .rc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  html .rc-layout { grid-template-columns: 1fr; }
+}
+
+/* ---------- 22. 自动识别页：右侧空态面板（原来是一片空白很寡淡） ---------- */
+html .rc-empty-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  min-height: 320px;
+  padding: 36px 28px;
+  background: var(--pp-surface-2) !important;
+  border: 1px dashed var(--pp-line) !important;
+  border-radius: var(--pp-radius) !important;
+  color: var(--pp-muted);
+  font-size: var(--pp-fs-body);
+}
+html .rc-empty-hint > b {
+  font-size: var(--pp-fs-h2);
+  font-weight: 700;
+  color: var(--pp-text);
+}
+/* 📋 图标收进圆形底座：不再是一颗孤零零的大 emoji */
+html .rc-empty-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 1;
+  background: rgba(34, 153, 255, .12);
+  border: 1px solid rgba(34, 153, 255, .25);
+  border-radius: 50%;
+  animation: none !important;          /* 呼吸动画保持关闭 */
+}
+/* 三步引导：编号圆点 + 胶囊 */
+html .rc-empty-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+html .rc-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px 7px 8px;
+  background: var(--pp-surface) !important;
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-pill);
+  color: var(--pp-muted);
+  font-size: var(--pp-fs-cap);
+  line-height: 1.4;
+}
+html .rc-step i {
+  font-style: normal;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pp-primary);
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 11px;
+  border-radius: 50%;
+}
+html .rc-step-arrow { color: var(--pp-faint); font-size: 14px; animation: none !important; }
+
+/* ---------- 23. 自动识别页：左栏「怎么用」帮助块 / 快捷键 / 目标胶囊 ---------- */
+html details.rc-help {
+  background: var(--pp-surface-2);
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+html details.rc-help summary {
+  cursor: pointer;
+  color: var(--pp-muted);
+  font-size: var(--pp-fs-cap);
+  font-weight: 500;
+}
+html details.rc-help[open] summary { color: var(--pp-text); margin-bottom: 6px; }
+html .rc-help-body {
+  color: var(--pp-muted);
+  font-size: var(--pp-fs-cap);
+  line-height: 1.8;
+}
+html .rc-kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--pp-surface-3);
+  border: 1px solid var(--pp-line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  color: var(--pp-text-2);
+  font-size: 11px;
+  font-family: var(--pp-font-num);
+}
+/* 粘贴目标切换（待取货 / 出库 / 入库）：选中态用主色实心胶囊 */
+html .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+html .chip-group .chip {
+  padding: 7px 16px;
+  border-radius: var(--pp-pill);
+  background: var(--pp-surface-2);
+  border: 1px solid var(--pp-line);
+  color: var(--pp-muted);
+  font-size: var(--pp-fs-cap);
+  cursor: pointer;
+  transition: background-color var(--pp-dur-fast) var(--pp-ease),
+              border-color var(--pp-dur-fast) var(--pp-ease),
+              color var(--pp-dur-fast) var(--pp-ease);
+}
+html .chip-group .chip:hover { background: var(--pp-surface-3); }
+html .chip-group .chip.selected {
+  background: var(--pp-primary) !important;
+  border-color: var(--pp-primary) !important;
+  color: #FFFFFF !important;
+  box-shadow: none !important;
+}
+/* 明细行：待办行淡黄提示底；对照下拉与删除按钮统一 */
+html .rc-row-todo td { background: rgba(255, 187, 34, .06) !important; }
+html select.rc-sys {
+  width: 100%;
+  min-width: 96px;
+  padding: 8px 10px;
+  background: var(--pp-surface-3) !important;
+  border: 1px solid var(--pp-line) !important;
+  border-radius: var(--pp-radius-xs) !important;
+  color: var(--pp-text-2) !important;
+}
+html .btn-clear {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--pp-pill);
+  background: var(--pp-surface-2);
+  color: var(--pp-muted);
+  cursor: pointer;
+  transition: background-color var(--pp-dur-fast) var(--pp-ease),
+              color var(--pp-dur-fast) var(--pp-ease);
+}
+html .btn-clear:hover { background: rgba(255, 34, 85, .15); color: var(--pp-err); }
+html .rc-inline-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-pill);
+  background: var(--pp-surface-2);
+  color: var(--pp-text-2);
+  font-size: var(--pp-fs-cap);
+  cursor: pointer;
+}
+html .rc-inline-btn:hover { background: var(--pp-surface-3); }
+/* 汇总行：加粗白字 */
+html .rc-total-row td {
+  color: var(--pp-text) !important;
+  font-weight: 700 !important;
+  border-top: 1px solid var(--pp-line) !important;
+}
+
+/* ---------- 24. 自动识别页浅色适配 ---------- */
+html[data-theme="light"] .rc-empty-hint { background: #F7F8FA !important; border-color: #E3E5EA !important; }
+html[data-theme="light"] .rc-empty-icon { background: rgba(34, 153, 255, .1); border-color: rgba(20, 114, 204, .2); }
