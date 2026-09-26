@@ -823,7 +823,7 @@
     var file = input.files && input.files[0];
     if (!file) return;
     var reader = new FileReader();
-    reader.onload = function () {
+    reader.onload = async function () {
       try {
         var data = JSON.parse(reader.result);
         var arr = Array.isArray(data) ? data : (data && Array.isArray(data.records) ? data.records : null);
@@ -832,6 +832,25 @@
           return r && typeof r === "object" && (r.id || r.time) && Array.isArray(r.items);
         });
         if (!valid.length) { Util.toast("未识别到有效记录", true); return; }
+        // 2026-09-26 A3：导入会一次改掉成百上千条，先看清新影响面，再自动留一份回滚快照
+        var stt = Util.bulkStat(State.list, valid);
+        var okImp = await UI.confirmHtml(
+          '<div style="margin-bottom:8px">将导入 <b>' + valid.length + '</b> 条记录' +
+            '（文件共 ' + arr.length + ' 条，已过滤掉 ' + (arr.length - valid.length) + ' 条无效项）：</div>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>' +
+            '<tr><td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0)">新增（本地没有的）</td>' +
+              '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#1E8E3E;font-weight:700">' + stt.add + '</td></tr>' +
+            '<tr><td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0)">覆盖（同 id，以文件为准）</td>' +
+              '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#B26A00;font-weight:700">' + stt.upd + '</td></tr>' +
+            '<tr><td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0)">内容相同，不会变动</td>' +
+              '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#6B7B74">' + stt.same + '</td></tr>' +
+          '</tbody></table>' +
+          '<div style="margin-top:10px;font-size:12.5px;color:var(--muted,#6B7B74)">' +
+            '确认后系统会先自动下载一份当前数据快照，导错了用那份快照恢复即可回到现在。</div>',
+          "导入预览", { okText: "确认导入", width: "500px" });
+        if (!okImp) { input.value = ""; return; }
+        var snapOk = Util.snapshotBeforeBulk("导入前");
+        Util.toast(snapOk ? "已先保存一份回滚快照（下载目录）" : "快照保存失败，建议先手动备份一次", !snapOk);
         State.list = Records.mergeAndSort(State.list, valid);
         State.save();
         Util.toast("已导入 " + valid.length + " 条记录");

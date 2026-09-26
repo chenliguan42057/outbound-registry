@@ -191,6 +191,43 @@
   }
 
   window.App = window.App || {};
+  /** 批量写入影响面统计（2026-09-26 A3）：{add 新增 / upd 被覆盖 / same 无变化}
+      导入、恢复备份这类操作会一次性改掉成百上千条，动手前必须让用户看清「会动到多少条」。 */
+  function bulkStat(localArr, incoming) {
+    var have = {};
+    (localArr || []).forEach(function (r) { if (r && r.id) have[r.id] = r; });
+    var add = 0, upd = 0, same = 0;
+    (incoming || []).forEach(function (r) {
+      if (!r || !r.id) { add++; return; }
+      if (!have[r.id]) { add++; return; }
+      if (JSON.stringify(have[r.id]) === JSON.stringify(r)) { same++; } else { upd++; }
+    });
+    return { add: add, upd: upd, same: same };
+  }
+
+  /** 批量写入前的自动快照（2026-09-26 A3）。
+      导入/恢复一旦执行就覆盖成百上千条，选错文件只能干瞪眼。现在动手前先自动把当前
+      全量数据下载到「下载」目录（文件名带操作名 + 时间戳），真出事拿这份文件再走一次
+      「恢复备份」就能原地回滚。下载失败不阻断主流程，但会明确提示用户。 */
+  function snapshotBeforeBulk(label) {
+    try {
+      var St = (window.App && window.App.State) || {};
+      var pkg = {
+        exportedAt: new Date().toISOString(),
+        _snapshot: String(label || "bulk"),
+        records: St.list || [],
+        pickups: St.pickups || [],
+        memos: St.memos || [],
+        catalog: (window.App.Catalog && window.App.Catalog.get()) || null
+      };
+      var d = new Date();
+      var ts = todayLocal() + "_" + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+      download("回滚快照_" + String(label || "bulk") + "_" + ts + ".json",
+        JSON.stringify(pkg, null, 1), "application/json;charset=utf-8");
+      return true;
+    } catch (e) { return false; }
+  }
+
   window.App.Util = {
     $: $,
     esc: esc,
@@ -206,6 +243,8 @@
     snackbar: snackbar,
     feature: feature,
     download: download,
+    bulkStat: bulkStat,
+    snapshotBeforeBulk: snapshotBeforeBulk,
     safeUrl: safeUrl,
     observeServerTime: observeServerTime,
     serverNow: serverNow

@@ -645,6 +645,73 @@
     }
 
     /** 批量删除：一次填理由、一次确认，逐条走与单条删除相同的墓碑队列 */
+    /* ================= A4 批量删除撤销条（2026-09-26） =================
+       批量删除一次动辄几十条，误选一批就只能去回收站一条条捞。现在删完弹一条悬浮条，
+       12 秒内点「撤销」整批原样回来：本地墓碑队列出队 → 云端墓碑删掉 → 记录重新写回云端
+       → 本地列表放回 → 库存重算。顺序必须是「先删墓碑再写回记录」，否则下一轮同步
+       会用残留墓碑把刚恢复的记录再删一次。 */
+
+    var lastBulk = null;      // 最近一次批量删除的记录快照
+    var undoBarEl = null;
+    var undoTimer = null;
+
+    function hideUndoBar() {
+      if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+      if (undoBarEl && undoBarEl.parentNode) { undoBarEl.parentNode.removeChild(undoBarEl); }
+      undoBarEl = null;
+    }
+
+    function showUndoBar(recs, reason) {
+      if (!recs || !recs.length) return;
+      lastBulk = { recs: recs.slice(0), reason: reason };
+      hideUndoBar();
+      undoBarEl = document.createElement("div");
+      undoBarEl.className = "bulk-undo-bar";
+      undoBarEl.setAttribute("role", "alert");
+      undoBarEl.innerHTML =
+        '<span>已删除 <b>' + recs.length + '</b> 条记录</span>' +
+        '<button type="button" class="btn mini" data-act="undo">撤销</button>' +
+        '<button type="button" class="btn ghost mini" data-act="close" aria-label="关闭">×</button>';
+      // 事件绑在条本身（每次都是新元素），不用委托，避免和页面其它监听器互相吞事件
+      undoBarEl.addEventListener("click", function (e) {
+        var b = e.target && e.target.closest ? e.target.closest("[data-act]") : null;
+        if (!b) return;
+        var act = b.getAttribute("data-act");
+        if (act === "close") { hideUndoBar(); return; }
+        if (act === "undo") { undoBulkDel(); }
+      });
+      document.body.appendChild(undoBarEl);
+      undoTimer = setTimeout(hideUndoBar, 12000);
+    }
+
+    async function undoBulkDel() {
+      if (!lastBulk || !lastBulk.recs.length) return;
+      var recs = lastBulk.recs;
+      hideUndoBar();
+      Util.toast("正在撤销删除…");
+      var failed = 0;
+      for (var i = 0; i < recs.length; i++) {
+        var r = recs[i];
+        if (!r || !r.id) continue;
+        try { Cloud.dequeueTomb(r.id); } catch (e) {}
+        if (Cloud.hasToken()) {
+          try { await Cloud.delTombstone(r.id); } catch (e) {}          // 先删墓碑
+          try { await Cloud.push(r); } catch (e) { failed++; }          // 再写回记录
+        }
+        try { Records.restore(r); } catch (e) {}                        // 本地放回，保留原 id/_ts
+      }
+      State.tombstones = (State.tombstones || []).filter(function (t) {
+        return !recs.some(function (r) { return r && r.id === t.id; });
+      });
+      lastBulk = null;
+      selected = {};
+      renderList();
+      Util.toast(failed
+        ? ("已撤销；有 " + failed + " 条写回云端失败（本地已恢复，下次同步自动补推）")
+        : ("已撤销，恢复 " + recs.length + " 条记录"), failed > 0);
+      try { if (window.App.Views.app && window.App.Views.app.updateStatusBar) window.App.Views.app.updateStatusBar(); } catch (e) {}
+    }
+
     async function doBulkDel() {
       var recs = selectedRecords();
       if (!recs.length) return;
@@ -676,6 +743,8 @@
           window.App.Views.app.setSyncStatus(failed + " 条云端删除失败（已存本地墓碑，下次同步自动补推）", true);
         }
       }
+      // A4：云端这一轮删完（不再有并发写）才弹撤销条，避免撤销与删除互相踩
+      showUndoBar(recs, res.value);
     }
 
     /** 详情内容 HTML。withActions=true 带底部操作按钮（详情弹窗用，需绑定事件）；

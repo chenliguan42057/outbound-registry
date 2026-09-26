@@ -2353,3 +2353,24 @@ html[data-theme="light"] .card#rcEmptyCard {
   background: #F7F8FA !important;
   border-color: #DDE0E6 !important;
 }
+
+/* ============================================================
+   A4 批量删除撤销条（2026-09-26）—— 纯样式，不动任何业务数据
+   ============================================================ */
+.bulk-undo-bar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;
+  display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;
+  background:var(--pp-surface-2,#1E1E1E);border:1px solid var(--pp-line,#2C2C2C);
+  box-shadow:0 8px 28px rgba(0,0,0,.35);color:var(--pp-text,#E8EAED);font-size:13.5px;
+  max-width:calc(100vw - 32px);animation:pp-undo-in .22s ease-out both}
+.bulk-undo-bar b{color:var(--pp-warn,#FFBB22)}
+.bulk-undo-bar .btn{margin:0}
+@keyframes pp-undo-in{from{opacity:0;transform:translateX(-50%) translateY(10px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}}
+html[data-theme="light"] .bulk-undo-bar,html:not([data-theme="dark"]) .bulk-undo-bar{
+  background:#FFFFFF;border-color:#DCE6E0;color:#2C3A34;box-shadow:0 8px 28px rgba(0,0,0,.12)}
+@media (max-width:560px){
+  .bulk-undo-bar{left:12px;right:12px;bottom:calc(64px + env(safe-area-inset-bottom,0px));
+    transform:none;max-width:none;justify-content:space-between}
+  @keyframes pp-undo-in{from{opacity:0;transform:translateY(10px)}
+    to{opacity:1;transform:translateY(0)}}
+}

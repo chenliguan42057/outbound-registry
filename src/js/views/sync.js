@@ -414,10 +414,35 @@
       var hasPickups = Array.isArray(data.pickups);
       var hasMemos = Array.isArray(data.memos);
       if (!hasRecords && !hasPickups && !hasMemos) { Util.toast("未识别到备份数据（需含 records/pickups/memos 数组）", true); return; }
-      var ok = await UI.confirmDialog(
-        "将合并导入备份：记录 " + (data.records || []).length + " 条、待取货 " + (data.pickups || []).length +
-        " 条、备忘录 " + (data.memos || []).length + " 条。同 id 以备份覆盖本地。继续？", "恢复备份");
+      // 2026-09-26 A3：恢复备份会整片覆盖，先看清「新增多少 / 覆盖多少」再动手，并自动留一份回滚快照
+      function rowOf(name, s) {
+        if (!s) return '';
+        return '<tr>' +
+          '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0)">' + name + '</td>' +
+          '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#1E8E3E;font-weight:700">' + s.add + '</td>' +
+          '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#B26A00;font-weight:700">' + s.upd + '</td>' +
+          '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#6B7B74">' + s.same + '</td>' +
+        '</tr>';
+      }
+      var rs = hasRecords ? Util.bulkStat(State.list, data.records) : null;
+      var ps = hasPickups ? Util.bulkStat(State.pickups, data.pickups) : null;
+      var ms = hasMemos ? Util.bulkStat(State.memos, data.memos) : null;
+      var ok = await UI.confirmHtml(
+        '<div style="margin-bottom:8px">这份备份包含：记录 <b>' + (data.records || []).length +
+          '</b> 条、待取货 <b>' + (data.pickups || []).length + '</b> 条、备忘录 <b>' + (data.memos || []).length + '</b> 条。合并影响如下：</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+          '<thead><tr style="color:var(--muted,#6B7B74);font-size:12px">' +
+            '<th style="padding:6px 8px;text-align:left">数据</th>' +
+            '<th style="padding:6px 8px;text-align:right">新增</th>' +
+            '<th style="padding:6px 8px;text-align:right">被覆盖</th>' +
+            '<th style="padding:6px 8px;text-align:right">无变化</th>' +
+          '</tr></thead><tbody>' + rowOf("记录", rs) + rowOf("待取货", ps) + rowOf("备忘录", ms) + '</tbody></table>' +
+        '<div style="margin-top:10px;font-size:12.5px;color:var(--muted,#6B7B74)">' +
+          '同 id 以备份为准覆盖本地。点确认后系统会 <b>先自动下载一份当前数据快照</b>；万一恢复错了，用那份快照再恢复一次就能回到现在。</div>',
+        "恢复备份 · 影响预览", { okText: "确认恢复", width: "520px" });
       if (!ok) return;
+      var snapOk = Util.snapshotBeforeBulk("恢复备份前");
+      Util.toast(snapOk ? "已先保存一份回滚快照（下载目录）" : "快照保存失败，建议先手动备份一次", !snapOk);
       if (hasRecords) {
         State.list = window.App.Records.mergeAndSort(State.list, data.records);
         Store.saveRecords(State.list);
