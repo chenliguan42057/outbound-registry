@@ -12,6 +12,7 @@
   var State = window.App.State;
   var Records = window.App.Records;
   var Cloud = window.App.Cloud;
+  var Formkit = window.App.Formkit;
 
   var picker = null;
   var confirming = false;      // 2026-09-24：提交前「核对清单」弹窗是否开着（防连点弹两次）
@@ -49,6 +50,7 @@
         '<div class="field">' +
           '<label for="inHandler">经办人<span class="req">*</span></label>' +
           '<input type="text" id="inHandler" placeholder="谁经手的入库（默认带出上次）" maxlength="20" autocomplete="off" inputmode="text" enterkeyhint="next" />' +
+          '<div class="suggest" id="inHandlerSuggest"></div>' +
         '</div>' +
         '<div class="field">' +
           '<label>现场照片（留存）</label>' +
@@ -63,6 +65,7 @@
       '</div>';
 
     els = {
+      form: container,                 // 草稿提示条挂点（P2）
       purpose: Util.$("inPurpose"),
       handler: Util.$("inHandler"),
       submit: Util.$("inSubmit"),
@@ -86,6 +89,30 @@
     picker.attach(Util.$("inProductPicker"));
     photos = new UI.PhotoUpload({});
     photos.attach(Util.$("inPhotoUpload"));
+    // 2026-09-26 P2：拍照上传引导
+    if (Formkit && Formkit.photoGuide) Formkit.photoGuide(Util.$("inPhotoUpload"));
+
+    // 2026-09-26 P2：经办人历史补全（全部入库记录里填过的人，键盘可选）
+    if (Formkit && Formkit.bindSuggest) {
+      var _inpH = Util.$("inHandler"), _sugH = Util.$("inHandlerSuggest");
+      Formkit.bindSuggest(_inpH, _sugH, {
+        source: function () {
+          var seen = {}, out = [];
+          (State.list || []).forEach(function (r) {
+            var v = r && (r.handler || r.picker);
+            if (typeof v === "string" && v.trim() && !seen[v]) { seen[v] = 1; out.push(v.trim()); }
+          });
+          try {
+            var lh = localStorage.getItem("outbound_in_last_handler");
+            if (lh && !seen[lh]) out.unshift(lh);
+          } catch (e) {}
+          return out;
+        },
+        max: 8,
+        showOnFocus: true,
+        onPick: saveDraft
+      });
+    }
 
     Util.$("inReset").addEventListener("click", resetForm);
     Util.$("inCancelEdit").addEventListener("click", function () { resetForm(); Util.toast("已取消编辑"); });
@@ -101,7 +128,8 @@
     });
     renderSourceChips();
     renderPreview();
-    restoreDraft();
+    var _d = restoreDraft();
+    if (_d) showDraftBar(_d);
 
     // 自动识别回填（2026-09-26）：从「自动识别」页跳转过来时取走待填数据（取一次即清空）
     var _pendIn = window.App.Views.recognize && window.App.Views.recognize.takePending("in");
@@ -203,6 +231,7 @@
   function saveDraft() {
     if (editingId) return;
     Store.saveDraft("in", {
+      _t: Date.now(),               // 草稿保存时刻（P2 提示条用）
       purpose: els.purpose.value,
       source: sourceVal,
       items: picker.selected,
@@ -210,18 +239,45 @@
     });
   }
 
+  /** 恢复草稿（P2：返回草稿对象，供调用方显示提示条） */
   function restoreDraft() {
     var d = Store.loadDraft("in");
-    if (!d) return;
+    if (!d) return null;
     els.purpose.value = d.purpose || "";
     sourceVal = d.source || "";
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
     renderPreview();
     renderSourceChips();
+    return d;
   }
 
-  function clearDraft() { Store.clearDraft("in"); }
+  /** 草稿摘要（P2 提示条） */
+  function draftSummary(d) {
+    if (!d) return "";
+    var n = (d.items || []).length;
+    var parts = [];
+    if (n) parts.push("货品 " + n + " 项");
+    if (d.source) parts.push(d.source);
+    if (d.purpose) parts.push(d.purpose);
+    return parts.join(" · ") || "（有内容）";
+  }
+
+  /** 显示草稿提示条（P2） */
+  function showDraftBar(d) {
+    if (!d || !Formkit || !els || !els.form) return;
+    Formkit.draftBar({
+      host: els.form,
+      savedAt: d._t || 0,
+      summary: draftSummary(d),
+      onClear: function () { clearDraft(); resetForm(); Util.toast("草稿已清空"); }
+    });
+  }
+
+  function clearDraft() {
+    Store.clearDraft("in");
+    if (Formkit && els && els.form) Formkit.clearDraftBar(els.form);
+  }
 
   /** 切换提交按钮的加载态。不改 textContent——resetForm()/edit() 会重写它 */
   function setSubmitting(on) {
