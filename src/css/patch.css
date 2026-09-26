@@ -1600,7 +1600,10 @@ html[data-theme="dark"] .mt-fold summary b { background: #2A3A34; color: #9FD9C2
    2026-09-26 视感精修第二批：库存环形仪表 / 表头对齐 / 识别页动画 / 分区说明
    ============================================================ */
 .stock-table.freeze-table th { font-style: normal; }
+.stock-table.freeze-table:not(.rank-table) th.num, .stock-table.freeze-table:not(.rank-table) td.num,
 .stock-table.freeze-table th.num, .stock-table.freeze-table td.num { text-align: right; padding-right: 22px; }
+/* 状态列：表头与内容同为居中（td 居中来自上方的 nth-child(n+2) 规则） */
+.stock-table.freeze-table:not(.rank-table) th:nth-child(7), .stock-table.rank-table th:nth-child(6) { text-align: center; }
 .stock-table.freeze-table th:first-child, .stock-table.freeze-table td:first-child,
 .stock-table.freeze-table td.items-cell { text-align: left; padding-left: 16px; }
 .rank-table.freeze-table th:nth-child(2), .rank-table.freeze-table td:nth-child(2) { text-align: left; padding-left: 12px; }
