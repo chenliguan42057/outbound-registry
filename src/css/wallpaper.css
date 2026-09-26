@@ -142,7 +142,7 @@ html.v2 .card {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border: .5px solid rgba(60,72,69,.07);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow:
     0 4px 12px rgba(60,72,69,.11),
     0 1px 2px rgba(60,72,69,.06),
@@ -157,7 +157,7 @@ html.v2 .landing .container {
   background: rgba(251,249,243,.94);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   box-shadow:
     0 18px 44px rgba(60,72,69,.16),
     0 4px 10px rgba(60,72,69,.08),
@@ -167,10 +167,10 @@ html.v2 .landing .container {
 /* 圆角体系：外大内小（卡片16 / 控件10 / 小标8）—— 统一尺度是去廉价感的关键 */
 html.v2 .btn,
 html.v2 .chip,
-html.v2 .win-import-btn { border-radius: 10px; }
+html.v2 .win-import-btn { border-radius: var(--radius); }
 html.v2 .badge,
 html.v2 .tag,
-html.v2 .status-pill { border-radius: 8px; }
+html.v2 .status-pill { border-radius: var(--radius-sm); }
 
 /* 替换后的 SVG 图标：尺寸跟随字号（1em），基线对齐文字，不撑破行高 */
 html.v2 .v2-ico {
