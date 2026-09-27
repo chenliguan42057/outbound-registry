@@ -884,6 +884,10 @@
       0 视为未填被过滤；0.0001 这类误填仍按 |qty| < MIN_QTY 丢弃） */
   ProductPicker.MIN_QTY = 0.001;
   ProductPicker.MAX_QTY = 999999;
+  /** 异常数量熔断线（2026-09-27 P1「防手抖」）：单行数量绝对值超过此值时，不静默通过，
+      必须由用户在确认弹窗里显式点「确认」才提交。防的是多打一个 0（100 → 1000）这类
+      人眼在核对清单里一扫而过的错误。不阻断正常业务：正常量级（≤999）零打扰。 */
+  ProductPicker.BIG_QTY = 999;
   ProductPicker.prototype.getItems = function () {
     return this.selected
       .map(function (s) { return { name: s.name, qty: s.qty === "" ? 0 : Number(s.qty) }; })
@@ -918,6 +922,17 @@
       else if (Math.abs(n) > ProductPicker.MAX_QTY) problems.push(s.name + " 数量超上限");
     });
     return problems;
+  };
+
+  /** 异常数量体检（2026-09-27 P1「防手抖」）：返回绝对值超过 BIG_QTY 的货品清单。
+      只做提示，不做拦截——由调用方弹确认框，用户点「确认」即放行。 */
+  ProductPicker.prototype.bigQtyItems = function () {
+    var big = [];
+    this.selected.forEach(function (s) {
+      var n = Math.abs(Number(s.qty) || 0);
+      if (n > ProductPicker.BIG_QTY) big.push({ name: s.name, qty: s.qty });
+    });
+    return big;
   };
 
   ProductPicker.prototype.setSelected = function (arr) {
