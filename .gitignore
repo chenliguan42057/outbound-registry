@@ -4,3 +4,8 @@ qr_b64.txt
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# 本地临时/校验脚本目录（2026-09-27：内含调试脚本与临时令牌文件，绝不入库）
+.qa-tmp/
+_shot*.png
+_verify*.js
