@@ -190,6 +190,20 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   }
 
+  /** 数量千分位（2026-09-27 P1）：1234 → 1,234；-5 → -5；非数字原样返回。
+      主理人偏好的「千分位」必须在数量列也生效——原来只有库存列有，同一张表数字口径不一致。
+      注意：不做小数补位、不做四舍五入，纯加分隔符，避免改变任何数值本身。 */
+  function numFmt(n) {
+    if (n === null || n === undefined || n === "") return "-";
+    var v = Number(n);
+    if (!isFinite(v)) return String(n);
+    var neg = v < 0;
+    var s = String(Math.abs(v));
+    var parts = s.split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return (neg ? "-" : "") + parts.join(".");
+  }
+
   window.App = window.App || {};
   /** 批量写入影响面统计（2026-09-26 A3）：{add 新增 / upd 被覆盖 / same 无变化}
       导入、恢复备份这类操作会一次性改掉成百上千条，动手前必须让用户看清「会动到多少条」。 */
@@ -237,6 +251,7 @@
     todayLocal: todayLocal,
     monthLocal: monthLocal,
     fmtDateTime: fmtDateTime,
+    numFmt: numFmt,
     b64enc: b64enc,
     b64dec: b64dec,
     toast: toast,
