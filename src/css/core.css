@@ -3,7 +3,7 @@
    现代 SaaS 多彩质感：主渐变按钮、柔和阴影卡片聚焦彩glow、红绿状态胶
    ============================================================ */
 
-/* ---------- 璁捐浠ょ墝 ---------- */
+/* ---------- 设令牌 ---------- */
 :root {
   --primary: #6FA08A;
   --primary-2: #A79ED0;
@@ -52,7 +52,7 @@ a { color: var(--primary); text-decoration: none; }
   flex: 0 0 auto;
 }
 
-/* ---------- 鍗＄墖 ---------- */
+/* ---------- 卡片 ---------- */
 .card {
   background: #fff;
   border: 1px solid rgba(127, 179, 165, .16);
@@ -78,7 +78,7 @@ a { color: var(--primary); text-decoration: none; }
   border-radius: var(--radius-pill);
 }
 
-/* ---------- 琛ㄥ崟 ---------- */
+/* ---------- 表单 ---------- */
 label { display: block; font-size: var(--fs-body); color: var(--muted); margin-bottom: 6px; }
 label .req { color: var(--danger); margin-left: 2px; }
 input[type=text], input[type=datetime-local], input[type=number],
@@ -95,7 +95,7 @@ input[type=password], input[type=date], input[type=search], select, textarea, .s
 input:focus, textarea:focus, select:focus, .search:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(127, 179, 165, .34);   /* 鑱氱劍褰╄壊 glow */
+  box-shadow: 0 0 0 3px rgba(127, 179, 165, .34);   /* 聚焦彩色 glow */
 }
 .field { margin-bottom: 14px; }
 .hint { font-size: var(--fs-caption); color: var(--muted); margin-top: 4px; }
@@ -141,7 +141,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
 .sel-item .x { cursor: pointer; color: var(--muted); font-size: var(--fs-h1); line-height: 1; padding: 0 4px; }
 .sel-item .x:hover { color: var(--danger); }
 
-/* 鐓х墖 */
+/* 照片 */
 .photo-drop {
   border: 1.5px dashed var(--border);
   border-radius: var(--radius);
@@ -220,7 +220,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
 }
 .btn.danger:hover, .btn-danger:hover { background: var(--danger-dark); filter: none; }
 
-/* 娓呯┖鎸夐挳 */
+/* 清空按钮 */
 .btn-clear {
   background: var(--danger);
   border: 1px solid var(--danger);
@@ -248,7 +248,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
 /* 手指点得到：原生 checkbox 在手机上默 13px，太小易点*/
 .rec-check, #recCheckAll { width: 18px; height: 18px; cursor: pointer; }
 
-/* ---------- 琛ㄦ牸 ---------- */
+/* ---------- 表格 ---------- */
 .table-wrap {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
@@ -330,7 +330,7 @@ input:focus, textarea:focus, select:focus, .search:focus {
 }
 .detail-btn { padding: 2px 7px; font-size: var(--fs-caption); margin-top: 5px; }
 
-/* ---------- 鏍囩 / 寰界珷 ---------- */
+/* ---------- 标 / 徽章 ---------- */
 .badge {
   display: inline-block;
   font-size: var(--fs-caption);
@@ -496,7 +496,7 @@ body.modal-open { overflow: hidden; }
 }
 .login-sub { color: var(--muted); font-size: var(--fs-body); margin-bottom: 16px; }
 
-/* ---------- 搴撳瓨鍙鍖栧浘渚?---------- */
+/* ---------- 库存?化图---------- */
 .chart-legend {
   display: flex;
   gap: 18px;
@@ -516,7 +516,7 @@ body.modal-open { overflow: hidden; }
 .chart-legend .legend-dot.low { background: #e74c3c; }
 .chart-legend .legend-dot.ok { background: #2ecc71; }
 
-/* ---------- 鍝嶅簲寮?---------- */
+/* ---------- 响应---------- */
 @media (max-width: 560px) {
   .grid2 { grid-template-columns: 1fr; }
   input[type=text], input[type=datetime-local], input[type=number],
@@ -541,7 +541,7 @@ body.modal-open { overflow: hidden; }
   background: #fff;
 }
 
-/* ---------- 绐楀彛鏍囬鏍?---------- */
+/* ---------- 窗口标---------- */
 .win-titlebar {
   height: 38px;
   display: flex;
@@ -570,10 +570,10 @@ body.modal-open { overflow: hidden; }
 .win-titlebar-btn:hover { background: rgba(0, 0, 0, .06); color: var(--text); }
 .win-titlebar-btn.close:hover { background: var(--danger); color: #fff; }
 
-/* ---------- 娓愬彉椤舵爮 ---------- */
+/* ---------- 渐变顶栏 ---------- */
 .win-topbar {
   height: 50px;
-  background: var(--grad-main);   /* 闈涜摑鈫掔传缃楀叞娓愬彉 */
+  background: var(--grad-main);   /* 靛蓝→紫罗兰渐变 */
   color: #fff;
   display: flex;
   align-items: center;
@@ -602,7 +602,7 @@ body.modal-open { overflow: hidden; }
 .win-topbar-search input::placeholder { color: #999; }
 .win-topbar-search input:focus { box-shadow: 0 0 0 2px rgba(255,255,255,.5); }
 
-/* 绉诲姩绔細鎼滅储妗嗘敹绐?*/
+/* 移动搜索框收*/
 @media (max-width: 720px) {
   .win-topbar-search { max-width: none; margin: 0 10px; }
   .win-topbar-search input { font-size: var(--fs-caption); padding: 0 12px; }
@@ -708,10 +708,10 @@ body.modal-open { overflow: hidden; }
 }
 .win-import-btn:hover { background: rgba(255, 255, 255, .16); color: #fff; }
 
-/* 鍐呭鍖?*/
+/* 内*/
 .win-content {
   flex: 1;
-  background: var(--bg);   /* 鏌斿拰澶氬僵娓愬彉 */
+  background: var(--bg);   /* 柔和多彩渐变 */
   overflow-y: auto;
   padding: 20px;
   min-width: 0;
@@ -750,7 +750,7 @@ body.modal-open { overflow: hidden; }
   .win-content { padding: 12px; }
 }
 /* ============================================================
-   views.css 鈥?钀藉湴椤?+ 浠〃鐩?+ 璁板綍妯″潡 + 搴撳瓨/鎶ヨ〃/鍏ュ簱 椤甸潰绾ф牱寮?
+   views.css 落地+ + 记录模块 + 库存/报表/入库 页面级样
    现代 SaaS 多彩质感：柔和渐变背?彩虹顶栏渐变统计卡、彩趋势图
    ============================================================ */
 
@@ -958,7 +958,7 @@ body.modal-open { overflow: hidden; }
 }
 
 /* ============================================================
-   浠〃鐩?
+   
    ============================================================ */
 .dash-cards {
   display: grid;
@@ -1022,7 +1022,7 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 520px) { .rec-filters { grid-template-columns: 1fr; } }
 
 /* ============================================================
-   搴撳瓨鏌ヨ
+   库存查
    ============================================================ */
 .stock-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .stock-table th:nth-child(1) { min-width: 260px; }
@@ -1030,7 +1030,7 @@ body.modal-open { overflow: hidden; }
 .badge.low { color: var(--danger); background: #FFF0F0; }
 
 /* ============================================================
-   鍏ュ簱搴撳瓨鍙樺寲棰勮
+   入库库存变化预
    ============================================================ */
 .inventory-preview {
   display: none;
@@ -1061,7 +1061,7 @@ body.modal-open { overflow: hidden; }
 .preview-after { font-weight: 600; color: var(--green); }
 
 /* ============================================================
-   鎶ヨ〃缁熻
+   报表统
    ============================================================ */
 .report-cards {
   display: grid;
@@ -1164,7 +1164,7 @@ body.modal-open { overflow: hidden; }
 .legend-dot.in { background: #6FA08A; }
 
 /* ============================================================
-   浜戠鍚屾妯″潡
+   云同模块
    ============================================================ */
 .sync-panel {
   border: 1px solid var(--border);
@@ -1188,7 +1188,7 @@ body.modal-open { overflow: hidden; }
 .sync-err { color: var(--danger); font-size: var(--fs-caption); margin-top: 10px; min-height: 14px; }
 
 /* ============================================================
-   鎶樺彔鍖哄潡
+   折叠区块
    ============================================================ */
 .collapse {
   border: 1px solid var(--border);
@@ -1216,7 +1216,7 @@ body.modal-open { overflow: hidden; }
    全部库存排名 + 盘可视化图表（纯 CSS/SVG，零方依赖）
    ============================================================ */
 
-/* ---------- 鍏ㄩ儴搴撳瓨鎺掑悕 ---------- */
+/* ---------- 全部库存排名 ---------- */
 .rank-sort {
   display: flex;
   align-items: center;
@@ -1239,7 +1239,7 @@ body.modal-open { overflow: hidden; }
 .rank-table th:nth-child(4) { width: 96px; }
 .rank-table td.stock-num.danger-text { color: var(--danger); }
 
-/* ---------- 浠〃鐩樺浘琛ㄥ尯甯冨眬 ---------- */
+/* ---------- 盘图表区布局 ---------- */
 .chart-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1258,7 +1258,7 @@ body.modal-open { overflow: hidden; }
 .chart-card h3 { font-size: var(--fs-body); font-weight: 600; margin: 0 0 12px; }
 .chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-/* ---------- P0-1 鍑哄叆搴撳姣旀煴鐘跺浘 ---------- */
+/* ---------- P0-1 出入库比柱状图 ---------- */
 .compare-bar {
   display: flex;
   align-items: flex-end;
@@ -1304,7 +1304,7 @@ body.modal-open { overflow: hidden; }
 .donut-legend-name { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .donut-legend-val { color: var(--muted); flex: 0 0 auto; }
 
-/* ---------- P0-3 杩?0澶╁嚭搴撶儹鍔涳紙6鍒椕?琛?grid + 5 妗ｈ壊闃讹級 ---------- */
+/* ---------- P0-3 0天出库热力（6列grid + 5 档色阶） ---------- */
 .heatmap-head { font-size: var(--fs-caption); color: var(--muted); margin-bottom: 8px; }
 .heatmap-grid {
   display: grid;
@@ -1340,7 +1340,7 @@ body.modal-open { overflow: hidden; }
 /* ---------- P0-4 低库存横向条红色渐变---------- */
 .low-fill { background: linear-gradient(90deg, #F87171, #F04438); }
 
-/* ---------- P1 杩戞湡娲诲姩鏃堕棿杞?---------- */
+/* ---------- P1 近期活动时间---------- */
 .timeline-item {
   display: flex;
   gap: 10px;
@@ -1524,7 +1524,7 @@ body.modal-open { overflow: hidden; }
 }
 /* ============================================================
    ai.css AI 助手模块样式（四轮增量
-   娴姩鑱婂ぉ闈㈡澘 / 鍐呭祵闈㈡澘 / 娑堟伅姘旀场 / 蹇嵎 chips / AI 琛ㄦ牸 / 钀藉湴椤?FAB / 绉诲姩绔?sheet
+   聊天面板 / 内嵌面板 / 消息气泡 /  chips / AI 表格 / 落地FAB / 移动sheet
    全部沿用 base.css 设令牌-primary / --grad-main / --border / --shadow 等）
    ============================================================ */
 
@@ -1556,7 +1556,7 @@ body.modal-open { overflow: hidden; }
   border-color: var(--border);
 }
 
-/* ---------- 闈㈡澘澶撮儴 ---------- */
+/* ---------- 面板头部 ---------- */
 .ai-header {
   display: flex;
   align-items: center;
@@ -1586,10 +1586,10 @@ body.modal-open { overflow: hidden; }
 .ai-hbtn:hover { background: rgba(255, 255, 255, .32); }
 .ai-hbtn:active { transform: scale(.94); }
 
-/* 鍐呭祵妯″紡闅愯棌鍏抽棴鎸夐挳 */
+/* 内嵌模式隐藏关闭按钮 */
 .ai-panel.embedded .ai-hbtn[data-act="close"] { display: none; }
 
-/* ---------- 娑堟伅鍖?---------- */
+/* ---------- 消息---------- */
 .ai-msgs {
   flex: 1;
   overflow-y: auto;
@@ -1655,7 +1655,7 @@ body.modal-open { overflow: hidden; }
 }
 .ai-chip:hover { background: #F2F9F6; }
 
-/* ---------- AI 琛ㄦ牸 ---------- */
+/* ---------- AI 表格 ---------- */
 .ai-table-wrap { overflow-x: auto; margin-top: 6px; }
 .ai-table { width: 100%; border-collapse: collapse; font-size: var(--fs-caption); }
 .ai-table th, .ai-table td {
@@ -1665,14 +1665,14 @@ body.modal-open { overflow: hidden; }
   white-space: nowrap;
 }
 .ai-table th { background: #F7FBF9; color: var(--muted); font-weight: 600; }
-/* 浣庡簱瀛樿绾㈣壊楂樹寒 */
+/* 低库存红色高亮 */
 .ai-table tr.low td {
   background: #FFF0F0;
   color: var(--danger);
   font-weight: 600;
 }
 
-/* ---------- 杈撳叆鍖?---------- */
+/* ---------- 输入---------- */
 .ai-inputbar {
   display: flex;
   gap: 8px;
@@ -1699,7 +1699,7 @@ body.modal-open { overflow: hidden; }
 .ai-send:active { transform: translateY(1px); }
 .ai-send:disabled { opacity: .6; cursor: default; filter: none; }
 
-/* ---------- AI 璁剧疆寮圭獥 ---------- */
+/* ---------- AI 设置弹窗 ---------- */
 .ai-settings .field { margin-bottom: 12px; }
 .ai-mode-hint {
   font-size: var(--fs-body);
@@ -1770,14 +1770,14 @@ body.modal-open { overflow: hidden; }
 
 /* ============================================================
    ai.css ?量（全部追加，不改动既有样式
-   宸ュ叿缁撴灉鍗?/ 浜岀淮鐮佸崱 / 澶╂皵鍗?/ 鐧剧鍗?/ 鏂伴椈鍒楄〃 / 娆＄骇 chips / 澶嶅埗鎸夐挳 / 璁剧疆鑱旂綉鍖哄潡
+   工具结果/ 二维码卡 / 天气/ 百/ 新闻列表 / 次级 chips / 复制按钮 / 设置联网区块
    ============================================================ */
 
 /* ---------- 工具结果卡（常识/计算/换算/日期/模板/??金---------- */
 .ai-type-tool .ai-title { color: var(--primary); }
 .ai-type-tool .ai-text { white-space: pre-wrap; }
 
-/* ---------- 浜岀淮鐮佸崱 ---------- */
+/* ---------- 二维码卡 ---------- */
 .ai-qr-card {
   display: flex;
   flex-direction: column;
@@ -1804,7 +1804,7 @@ body.modal-open { overflow: hidden; }
   text-align: center;
 }
 
-/* ---------- 澶╂皵鍗?---------- */
+/* ---------- 天气---------- */
 .ai-type-weather { background: linear-gradient(135deg, #F0F7FF, #E8F1FE) !important; }
 .ai-weather-card .ai-title { color: #1E6FD9; }
 .ai-weather-main {
@@ -1817,7 +1817,7 @@ body.modal-open { overflow: hidden; }
 .ai-weather-desc { font-size: var(--fs-body); color: #334155; }
 .ai-weather-meta { font-size: var(--fs-caption); color: var(--muted); }
 
-/* ---------- 鐧剧鍗?---------- */
+/* ---------- 百---------- */
 .ai-type-wiki { background: #FFFBEB !important; }
 .ai-wiki-card .ai-title { color: #B45309; }
 .ai-wiki-thumb {
@@ -1839,7 +1839,7 @@ body.modal-open { overflow: hidden; }
 }
 .ai-wiki-link:hover { text-decoration: underline; }
 
-/* ---------- 鏂伴椈鍒楄〃 ---------- */
+/* ---------- 新闻列表 ---------- */
 .ai-type-news { background: #F8FAFC !important; }
 .ai-news-card .ai-title { color: #0F766E; }
 .ai-news-list { margin: 4px 0 0; padding: 0; list-style: none; }
@@ -1869,7 +1869,7 @@ body.modal-open { overflow: hidden; }
 }
 .ai-chips-sub .ai-chip:hover { background: #DCFCE7; }
 
-/* ---------- 澶嶅埗鎸夐挳 ---------- */
+/* ---------- 复制按钮 ---------- */
 .ai-copy {
   display: inline-block;
   margin-top: 6px;
@@ -1928,7 +1928,7 @@ body.modal-open { overflow: hidden; }
 
 /* ============================================================
    ai.css ?量（全部追加，不改动既有样式
-   搴撳瓨鏍稿鎸夐挳 / 鏍稿寮圭獥 / 鏍稿缁撴灉鍗★紙5 绫荤潃鑹诧級
+   库存核按钮 / 核弹窗 / 核结果卡（5 类着色）
    ============================================================ */
 
 /* ---------- 输入📷 库存核按钮（发送按侧） ---------- */
@@ -1951,7 +1951,7 @@ body.modal-open { overflow: hidden; }
 .ai-check-btn:hover { background: #F2F9F6; }
 .ai-check-btn:active { transform: scale(.94); }
 
-/* ---------- 搴撳瓨鏍稿寮圭獥 ---------- */
+/* ---------- 库存核弹窗 ---------- */
 .ai-check-modal { font-size: var(--fs-body); color: var(--text); }
 .ai-check-guide {
   background: #F2F9F6;
@@ -1989,7 +1989,7 @@ body.modal-open { overflow: hidden; }
 .ai-check-hint.err { color: var(--danger); }
 .ai-check-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 
-/* ---------- 鏍稿缁撴灉鍗?---------- */
+/* ---------- 核结果---------- */
 .ck-summary {
   display: block;
   font-size: var(--fs-caption);
