@@ -160,7 +160,7 @@
     }
     var preview =
       '<div class="hint" style="margin:0 0 10px">将推送到 <b>' + Util.esc(curName()) + '</b> 钉钉群（约 <b>30~60 秒</b>送达）：</div>' +
-      '<div style="max-height:46vh;overflow:auto;padding:10px 12px;border:1px solid var(--line-soft,#DCE6E0);border-radius:10px;background:var(--input-bg,#FBFCFA);white-space:pre-wrap;word-break:break-all;font-size:13px;line-height:1.75">' +
+      '<div class="fs-md" style="max-height:46vh;overflow:auto;padding:10px 12px;border:1px solid var(--line-soft,#DCE6E0);border-radius:10px;background:var(--input-bg,#FBFCFA);white-space:pre-wrap;word-break:break-all;line-height:1.75">' +
       Util.esc(text) + '</div>' +
       '<div class="modal-actions">' +
         '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
@@ -201,7 +201,7 @@
 
   function presetBtn(id, icon, label, tip) {
     return '<button type="button" class="btn ghost sm" id="' + id + '" style="justify-content:flex-start;padding:9px 12px;height:auto;line-height:1.5">' +
-      icon + ' ' + Util.esc(label) + '<br><span class="hint" style="margin:0;font-size:12px">' + Util.esc(tip) + '</span></button>';
+      icon + ' ' + Util.esc(label) + '<br><span class="hint fs-sm" style="margin:0">' + Util.esc(tip) + '</span></button>';
   }
 
   function render(el) {
@@ -223,7 +223,7 @@
           '</div>' +
         '</div>' +
         '<div class="field" style="margin-top:16px"><label for="pmCustom">自定义发送</label>' +
-          '<textarea id="pmCustom" rows="5" maxlength="1500" placeholder="在这里编辑要发送到群里的文字，可自由编写，如：今天下午 2 点盘点，请大家先不要领用。" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA);font-family:inherit;font-size:13.5px;line-height:1.8;resize:vertical"></textarea>' +
+          '<textarea id="pmCustom" rows="5" maxlength="1500" class="fs-md" placeholder="在这里编辑要发送到群里的文字，可自由编写，如：今天下午 2 点盘点，请大家先不要领用。" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA);font-family:inherit;line-height:1.8;resize:vertical"></textarea>' +
           '<div class="actions" style="margin-top:8px">' +
             '<button type="button" class="btn sm" id="pmSend">📣 发送到群</button>' +
             '<span class="hint" style="margin-left:10px">消息首部会自动加「【' + Util.esc(curName()) + '】出入库登记」标识</span>' +

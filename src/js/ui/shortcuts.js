@@ -54,7 +54,7 @@
       "position:fixed;left:50%;bottom:110px;transform:translateX(-50%) translateY(10px);" +
       "z-index:86;background:rgba(253,252,249,.97);border:1px solid rgba(185,214,199,.9);" +
       "border-radius:16px;box-shadow:0 14px 36px rgba(87,130,111,.25);" +
-      "padding:12px 20px;font-size:13px;color:#3C4845;line-height:1.9;max-width:92vw;text-align:center;" +
+      "padding:12px 20px;font-size:13.5px;color:#3C4845;line-height:1.9;max-width:92vw;text-align:center;" +
       "opacity:0;transition:opacity .18s,transform .18s;pointer-events:none;";
     document.body.appendChild(hintEl);
     return hintEl;
@@ -78,7 +78,7 @@
       ["g + 字母", "快速跳转模块（如 g+s 进库存）"],
       ["Ctrl / Cmd + /", "本快捷键面板"]
     ];
-    var html = '<table class="table" style="min-width:0;width:100%;font-size:13px">' +
+    var html = '<table class="table fs-md" style="min-width:0;width:100%">' +
       rows.map(function (r) {
         return '<tr><td style="white-space:nowrap;font-weight:600;color:var(--mint-600,#57826F)">' +
           Util.esc(r[0]) + '</td><td>' + Util.esc(r[1]) + '</td></tr>';

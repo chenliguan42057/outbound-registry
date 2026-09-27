@@ -38,7 +38,7 @@
           '<button type="button" class="btn ghost sm" id="stockCatalogBtn">📋 货品目录</button>' +
           '<button type="button" class="btn ghost sm" id="stockTakeBtn">📊 盘点平账</button>' +
           '<span class="tool-spacer"></span>' +
-          '<button type="button" class="btn ghost sm" id="stockDelBtn" style="color:#c0392b">🗑 删除货品</button>' +
+          '<button type="button" class="btn ghost sm c-err" id="stockDelBtn">🗑 删除货品</button>' +
         '</div>' +
         '<div class="stat-cards" id="stockSummary"></div>' +
         '<div id="stockFreezeBox"></div>' +
@@ -132,7 +132,7 @@
         .map(function (s) { return Util.esc(s.name) + "(剩" + s.stock + "/预警" + getWarnAt(s.name) + ")"; });
       if (lowItems.length) {
         banner.style.display = "block";
-        banner.innerHTML = '<div class="stock-low-banner" style="margin:0 0 12px;padding:10px 14px;border:1px solid #f5c6c0;border-radius:10px;background:#fff1f0;color:#a8071a;font-size:13.5px;line-height:1.7">' +
+        banner.innerHTML = '<div class="stock-low-banner fs-md" style="margin:0 0 12px;padding:10px 14px;line-height:1.7">' +
           '⚠️ <b>低库存预警：</b>' + lowItems.join("、") +
           '</div>';
       } else {
@@ -360,9 +360,9 @@
     if (!summary.length) { Util.toast("暂无货品可删除", true); return; }
     var rows = summary.map(function (s) {
       return '<div class="del-pick-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line-soft,#DCE6E0)">' +
-        '<span style="flex:1;font-size:13.5px">' + Util.esc(s.name) + '</span>' +
+        '<span class="fs-md" style="flex:1">' + Util.esc(s.name) + '</span>' +
         '<span class="hint" style="margin:0;flex:0 0 96px;text-align:right">当前 ' + s.stock + '</span>' +
-        '<button type="button" class="btn ghost sm del-pick-btn" data-name="' + Util.esc(s.name) + '" style="color:#c0392b">🗑 删除</button>' +
+        '<button type="button" class="btn ghost sm del-pick-btn c-err" data-name="' + Util.esc(s.name) + '">🗑 删除</button>' +
       '</div>';
     }).join("");
     var body =
@@ -543,15 +543,15 @@
         var stCell = isIn
           ? '—'
           : (Records.getStatus(r) === "pending"
-              ? '<span class="tag" style="background:#FFF0F0;color:#C0392B">未提单</span>'
+              ? '<span class="tag bg-err">未提单</span>'
               : '<span class="tag ok-tag">已提单</span>');
         // 盘点校准行：不进库存推算（affectsStock 无关），直接展示 账面→实存 与差异
         if (r.kind === "stocktake") {
           var d0 = it ? (Number(it.diff) || 0) : 0;
           return '<tr class="flow-row" data-kind="stocktake" data-id="' + Util.esc(r.id || "") + '" title="盘点校准记录；点「撤销」可撤回本次盘点">' +
             '<td>' + Util.esc(String(r.time || "").replace("T", " ")) + '</td>' +
-            '<td><span class="tag" style="background:#F0E7D2;color:#8a6d3b">盘点</span>' +
-              (r.id ? ' <button type="button" class="btn mini" data-stk-undo="' + Util.esc(r.id) + '" style="padding:2px 8px;font-size:12px">撤销</button>' : '') +
+            '<td><span class="tag bg-warn">盘点</span>' +
+              (r.id ? ' <button type="button" class="btn mini" data-stk-undo="' + Util.esc(r.id) + '" class="fs-sm" style="padding:2px 8px">撤销</button>' : '') +
             '</td>' +
             '<td>—</td>' +
             '<td>盘点校准</td>' +
@@ -574,7 +574,7 @@
       }).join("") +
       '</tbody></table></div>' +
       '<div class="hint">「当时库存」为该笔完成后的快照；当前库存 ' + Util.esc(String(window.App.Stock.getStock(name))) +
-        (pendingCnt ? '　|　<span style="color:#C0392B">本货品有 ' + pendingCnt + ' 笔出库未完成提单</span>' : '') +
+        (pendingCnt ? '　|　<span class="c-err">本货品有 ' + pendingCnt + ' 笔出库未完成提单</span>' : '') +
         '<br>💡 <b>双击任意一行</b>可就地展开这笔的详细信息（申请人、用途、货品明细、照片等）。' +
       '</div>';
     UI.Modal.show("📦 库存流水 · " + Util.esc(name),
@@ -641,7 +641,7 @@
     if (!summary.length) { Util.toast("暂无货品可盘点", true); return; }
     var rows = summary.map(function (s, i) {
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line-soft,#DCE6E0)">' +
-        '<span style="flex:1;font-size:13.5px">' + Util.esc(s.name) + '</span>' +
+        '<span class="fs-md" style="flex:1">' + Util.esc(s.name) + '</span>' +
         '<span class="hint" style="margin:0;flex:0 0 74px;text-align:right">当前 ' + s.stock + '</span>' +
         '<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="' + s.stock + '" data-i="' + i + '" class="st-in" style="width:92px;padding:8px 10px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)" />' +
       '</div>';
@@ -684,7 +684,7 @@
         });
         // 2026-09-26 A2：确认前必须让用户逐项看清「哪一项差多少」，只给汇总数字等于让人盲签。
         var diffRows = affected.map(function (a) {
-          var col = a.diff > 0 ? "#1E8E3E" : "#C0392B";
+          var col = a.diff > 0 ? "var(--pp-ok)" : "var(--pp-err)";
           return '<tr>' +
             '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0)">' + Util.esc(a.name) + '</td>' +
             '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right">' + a.book + '</td>' +
@@ -695,15 +695,15 @@
         }).join("");
         var ok = await UI.confirmHtml(
           '<div style="margin-bottom:8px">共 <b>' + affected.length + '</b> 项货品与账面不一致：' +
-            '实存比账面多 <b style="color:#1E8E3E">+' + inSum + '</b>、少 <b style="color:#C0392B">-' + outSum + '</b>。请逐项核对后再确认。</div>' +
-          '<div style="max-height:32vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
-            '<thead><tr style="color:var(--muted,#6B7B74);font-size:12px">' +
+            '实存比账面多 <b style="color:var(--pp-ok)">+' + inSum + '</b>、少 <b style="color:var(--pp-err)">-' + outSum + '</b>。请逐项核对后再确认。</div>' +
+          '<div style="max-height:32vh;overflow:auto"><table class="fs-md" style="width:100%;border-collapse:collapse">' +
+            '<thead><tr class="c-muted fs-sm">' +
               '<th style="padding:6px 8px;text-align:left">货品</th>' +
               '<th style="padding:6px 8px;text-align:right">账面</th>' +
               '<th style="padding:6px 8px;text-align:right">实存</th>' +
               '<th style="padding:6px 8px;text-align:right">差异</th>' +
             '</tr></thead><tbody>' + diffRows + '</tbody></table></div>' +
-          '<div style="margin-top:10px;font-size:12.5px;color:var(--muted,#6B7B74)">' +
+          '<div class="c-muted fs-sm" style="margin-top:10px">' +
             '确认后记录一条盘点差额进库存流水（不改库存基准、不动已有流水的当时库存），同时推送钉钉群（不进金山台账）。' +
             '<br/>保存后可在「库存流水」里点 <b>撤销</b> 撤回本次盘点，撤销记录进回收站可还原。' +
           '</div>',

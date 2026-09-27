@@ -564,7 +564,7 @@
         var tfMark = tfLabel
           ? '<span class="tf-tag" title="调拨单号：' + Util.esc(r.transferNo || "") + '">⇄ ' + tfLabel + '</span>'
           : "";
-        var pinMark = r.pinned === true ? ' <span title="已置顶" style="color:#BA7517;">📌</span>' : "";
+        var pinMark = r.pinned === true ? ' <span title="已置顶" class="c-warn">📌</span>' : "";
         // 顺捷感三：还在同步队列里 = 云端没确认。本地数据已经生效，转圈只是告诉你"还没上云"，不影响使用
         var isPending = pendingIds.indexOf(r.id) !== -1;
         var spinMark = isPending ? ' <span class="row-spinner" title="已存本地，正在同步云端"></span>' : "";
@@ -797,7 +797,7 @@
       if (withActions) {
         var transferOps = "";
         if (r.transferId && r.transferRole === "out") {
-          transferOps = '<button type="button" class="btn ghost sm" data-detail-act="rollback" style="margin-left:6px;color:#8a6d3b">↶ 撤回调拨</button>';
+          transferOps = '<button type="button" class="btn ghost sm c-warn" data-detail-act="rollback">↶ 撤回调拨</button>';
         }
         rows += '<div class="detail-row" style="display:block;border-bottom:none;padding-top:16px">' +
           '<div class="modal-actions">' +

@@ -336,7 +336,7 @@
         '<td>' + Util.esc(it.name) + '</td>' +
         '<td>' + outQty + '</td>' +
         '<td>' + (ret[it.name] || 0) + '</td>' +
-        '<td style="color:#E11D48;font-weight:600;">' + it.qty + '</td>' +
+        '<td class="c-err fw-600">' + it.qty + '</td>' +
         '<td><input type="number" class="return-input" data-name="' + Util.esc(it.name) + '" min="0" max="' + it.qty + '" step="1" value="0" inputmode="numeric" enterkeyhint="done" aria-label="' + Util.esc(it.name) + ' 本次归还数量（最多 ' + it.qty + '）" style="width:96px;" /></td>' +
       '</tr>';
     }).join("");
@@ -368,7 +368,7 @@
             // 逐格标红，直接告诉用户是哪一行超了，替代笼统的一句 toast
             badNames.push(inp.getAttribute("data-name") + "（最多 " + max + "）");
             inp.setAttribute("aria-invalid", "true");
-            inp.style.borderColor = "#E11D48";
+            inp.style.borderColor = "var(--pp-err)";
             if (!firstBad) firstBad = inp;
             return;
           }

@@ -46,9 +46,9 @@
         '</div>' +
         '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--line-soft,#DCE6E0);border-radius:12px;background:var(--card-soft,#F7FAF7);margin-bottom:14px">' +
           '<span style="font-weight:700">' + Util.esc(curName) + '</span>' +
-          '<span style="color:#B03A2E">出库 −</span>' +
-          '<span style="color:#8a6d3b;font-weight:700">⇄ 调拨 ⇄</span>' +
-          '<span style="color:#1E8449">入库 +</span>' +
+          '<span class="c-err">出库 −</span>' +
+          '<span class="c-warn fw-700">⇄ 调拨 ⇄</span>' +
+          '<span class="c-ok">入库 +</span>' +
           '<span style="font-weight:700">' + Util.esc(dstName) + '</span>' +
         '</div>' +
         '<div class="field" style="margin-bottom:6px"><label>调拨货品<span class="req">*</span></label>' +
@@ -140,7 +140,7 @@
       recs.map(function (r) {
         var isOut = r.transferRole === "out";
         var badge = isOut
-          ? '<span class="tf-tag" style="color:#993C1D;background:#FAECE7;border-color:#F5C4B3">⇄ 调拨出</span>'
+          ? '<span class="tf-tag bg-warn">⇄ 调拨出</span>'
           : '<span class="tf-tag">⇄ 调拨入</span>';
         var itemsHtml = (r.items || []).map(function (it) {
           return Util.esc(it.name) + ' × ' + it.qty;
@@ -349,7 +349,7 @@
       var missingOk = await ensureTargetProducts(items, dst, dstName);
       if (missingOk === false) return;            // ensureTargetProducts 内部已 toast
       if (missingOk.length && statusBox) {
-        statusBox.innerHTML = '<div class="hint" style="padding:8px 12px;border:1px dashed #C8E6C9;border-radius:10px;background:#F0FAF0;color:#1E6B2E">' +
+        statusBox.innerHTML = '<div class="hint bg-ok" style="padding:8px 12px;border:1px dashed var(--pp-ok)">' +
           '⏳ 正在为「' + Util.esc(dstName) + '」添加 ' + missingOk.length + ' 项新货品并建金山列…' +
           '</div>';
       }
@@ -406,7 +406,7 @@
       var box = Util.$("tfResult");
       if (box) {
         var addedMsg = (missingOk && missingOk.length)
-          ? '<br>· <span style="color:#1E6B2E">' + Util.esc(dstName) + ' 首次新增产品：</span>' + missingOk.map(function (n) { return Util.esc(n); }).join('、') + '（目录与金山列已自动创建并生效）'
+          ? '<br>· <span class="c-ok">' + Util.esc(dstName) + ' 首次新增产品：</span>' + missingOk.map(function (n) { return Util.esc(n); }).join('、') + '（目录与金山列已自动创建并生效）'
           : '';
         // 2026-09-06 调拨结果更直观：给出双方云端文件直链 + 「撤回调拨」入口；
         // 解决「赛迪斯侧明明看到入库、感觉没动账」的疑虑——其实那是对方侧的入库、
@@ -416,15 +416,15 @@
         var ghUrl = "https://github.com/" + Config.GH.repo + "/blob/main/";
         var rollbackBtn = '<button type="button" class="btn ghost sm" id="tfUndo" data-tfid="' + Util.esc(transferId) + '" data-tfno="' + Util.esc(transferNo) + '" style="margin-top:8px">↶ 撤回调拨</button>';
         box.innerHTML =
-          '<div style="padding:12px 16px;border:1px solid #C8E6C9;border-radius:12px;background:#F0FAF0;color:#1E6B2E;font-size:13.5px;line-height:1.9">' +
+          '<div class="bg-ok fs-md" style="padding:12px 16px;border:1px solid var(--pp-ok);border-radius:12px;line-height:1.9">' +
           '<b>✅ 调拨成功</b>（调拨单号 ' + Util.esc(transferNo) + '）<br>' +
           '· ' + Util.esc(srcName) + '：出库 ' + items.reduce(function (s, it) { return s + it.qty; }, 0) + '（已扣库存，钉钉/金山稍后自动推送）<br>' +
           '· ' + Util.esc(dstName) + '：入库 +（已写入对方云端，' + Util.esc(dstName) + ' 切换后刷新即看到）' +
           addedMsg +
-          '<br><span class="hint" style="color:#5a6a64">云端凭证：</span>' +
-          '<a href="' + ghUrl + srcPath + '" target="_blank" rel="noopener" style="color:#1E6B2E;margin-right:10px">' + Util.esc(srcName) + '出库</a>' +
-          '<a href="' + ghUrl + dstPath + '" target="_blank" rel="noopener" style="color:#1E6B2E">' + Util.esc(dstName) + '入库</a>' +
-          '<br><span class="hint" style="color:#8a6d3b">若对方侧未立即显示，请点击「云同步」或切换系统一次拉取最新。</span>' +
+          '<br><span class="hint c-muted">云端凭证：</span>' +
+          '<a href="' + ghUrl + srcPath + '" target="_blank" rel="noopener" style="color:inherit;margin-right:10px">' + Util.esc(srcName) + '出库</a>' +
+          '<a href="' + ghUrl + dstPath + '" target="_blank" rel="noopener" style="color:inherit">' + Util.esc(dstName) + '入库</a>' +
+          '<br><span class="hint c-warn">若对方侧未立即显示，请点击「云同步」或切换系统一次拉取最新。</span>' +
           '<br><span class="hint">备注：' + Util.esc(note) + '</span>' +
           '<div style="margin-top:6px">' + rollbackBtn + '</div>' +
           '</div>';
@@ -444,7 +444,7 @@
               if (res && res.ok) {
                 Util.toast("已撤回调拨：双方各写入一笔反向记录");
                 try { renderHistory(); } catch (e2) {}
-                box.innerHTML = '<div style="padding:12px 16px;border:1px solid #E0D7C1;border-radius:12px;background:#FAF6EE;color:#6E5B27;font-size:13.5px">↶ 已撤回调拨「' + Util.esc(tfNo) + '」</div>';
+                box.innerHTML = '<div class="bg-warn fs-md" style="padding:12px 16px;border:1px solid var(--pp-warn);border-radius:12px">↶ 已撤回调拨「' + Util.esc(tfNo) + '」</div>';
               } else {
                 Util.toast("撤销失败：" + (res && res.msg || "未知原因"), true);
                 undoBtn.disabled = false;

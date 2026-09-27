@@ -370,17 +370,17 @@
       '</div>';
     var verdict = "";
     if (d.localCount < d.cloudCount && d.missing.length === 0) {
-      verdict = '<div class="hint" style="padding:8px 12px;border:1px dashed #E0A800;border-radius:10px;background:#FFF9E6;color:#8a6d3b;margin-top:6px">' +
+      verdict = '<div class="hint bg-warn" style="padding:8px 12px;border:1px dashed var(--pp-warn);margin-top:6px">' +
         '⚠️ 本地记录（' + d.localCount + '）少于云端（' + d.cloudCount + '），但缓存认为都已同步——疑似「增量缓存异常」把新记录跳过了。' +
         '请点上方「🔄 全量重建同步」强制重拉。</div>';
     } else if (d.missing.length > 0) {
-      verdict = '<div class="hint" style="padding:8px 12px;border:1px dashed #C8E6C9;border-radius:10px;background:#F0FAF0;color:#1E6B2E;margin-top:6px">' +
+      verdict = '<div class="hint bg-ok" style="padding:8px 12px;border:1px dashed var(--pp-ok);margin-top:6px">' +
         '云端有 ' + d.missing.length + ' 条本地还没有，点「🔄 全量重建同步」拉取即可补齐。' +
         (d.missing.length <= 8
           ? '<br>缺失：' + d.missing.map(function (n) { return Util.esc(String(n).slice(0, 10)); }).join("、")
           : '') + '</div>';
     } else {
-      verdict = '<div class="hint" style="padding:8px 12px;border:1px solid #C8E6C9;border-radius:10px;background:#F0FAF0;color:#1E6B2E;margin-top:6px">' +
+      verdict = '<div class="hint bg-ok" style="padding:8px 12px;border:1px solid var(--pp-ok);margin-top:6px">' +
         '✅ 云端与本地记录数一致，同步状态正常。</div>';
     }
     outEl.innerHTML = rows + verdict;
@@ -419,9 +419,9 @@
         if (!s) return '';
         return '<tr>' +
           '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0)">' + name + '</td>' +
-          '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#1E8E3E;font-weight:700">' + s.add + '</td>' +
-          '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#B26A00;font-weight:700">' + s.upd + '</td>' +
-          '<td style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right;color:#6B7B74">' + s.same + '</td>' +
+          '<td class="c-ok fw-700" style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right">' + s.add + '</td>' +
+          '<td class="c-warn fw-700" style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right">' + s.upd + '</td>' +
+          '<td class="c-muted" style="padding:7px 8px;border-bottom:1px solid var(--line-soft,#DCE6E0);text-align:right">' + s.same + '</td>' +
         '</tr>';
       }
       var rs = hasRecords ? Util.bulkStat(State.list, data.records) : null;
@@ -430,14 +430,14 @@
       var ok = await UI.confirmHtml(
         '<div style="margin-bottom:8px">这份备份包含：记录 <b>' + (data.records || []).length +
           '</b> 条、待取货 <b>' + (data.pickups || []).length + '</b> 条、备忘录 <b>' + (data.memos || []).length + '</b> 条。合并影响如下：</div>' +
-        '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-          '<thead><tr style="color:var(--muted,#6B7B74);font-size:12px">' +
+        '<table class="fs-md" style="width:100%;border-collapse:collapse">' +
+          '<thead><tr class="c-muted fs-sm">' +
             '<th style="padding:6px 8px;text-align:left">数据</th>' +
             '<th style="padding:6px 8px;text-align:right">新增</th>' +
             '<th style="padding:6px 8px;text-align:right">被覆盖</th>' +
             '<th style="padding:6px 8px;text-align:right">无变化</th>' +
           '</tr></thead><tbody>' + rowOf("记录", rs) + rowOf("待取货", ps) + rowOf("备忘录", ms) + '</tbody></table>' +
-        '<div style="margin-top:10px;font-size:12.5px;color:var(--muted,#6B7B74)">' +
+        '<div class="c-muted fs-sm" style="margin-top:10px">' +
           '同 id 以备份为准覆盖本地。点确认后系统会 <b>先自动下载一份当前数据快照</b>；万一恢复错了，用那份快照再恢复一次就能回到现在。</div>',
         "恢复备份 · 影响预览", { okText: "确认恢复", width: "520px" });
       if (!ok) return;
@@ -495,7 +495,7 @@
           (r.items || []).map(function (it) { return it.name + "×" + it.qty; }).join("、");
       };
       return '<div style="border:1px solid var(--line-soft,#DCE6E0);border-radius:12px;padding:10px 12px;margin-bottom:10px">' +
-        '<div style="font-size:13px;font-weight:600;color:var(--err,#C9877F)">' + Util.esc(c.id.slice(0, 12)) + ' · 本地较新却被云端覆盖</div>' +
+        '<div class="fs-md fw-600 c-err">' + Util.esc(c.id.slice(0, 12)) + ' · 本地较新却被云端覆盖</div>' +
         '<div class="hint" style="margin:6px 0">本地：' + Util.esc(fmt(c.local)) + '</div>' +
         '<div class="hint" style="margin-bottom:8px">云端：' + Util.esc(fmt(c.remote)) + '</div>' +
         '<button type="button" class="btn sm" data-restore="' + Util.esc(c.id) + '">恢复本地版本</button>' +
@@ -582,7 +582,7 @@
           (rec.items || []).map(function (x) { return x.name + "×" + x.qty; }).join("、")
         ) + '</div>';
       }
-      return '<div style="border:1px solid var(--line-soft,#DCE6E0);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:13px">' +
+      return '<div class="fs-md" style="border:1px solid var(--line-soft,#DCE6E0);border-radius:10px;padding:8px 10px;margin-bottom:8px">' +
         head + goods + '</div>';
     }).join("");
   }

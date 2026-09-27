@@ -119,7 +119,7 @@
 
     var html = "";
     if (clearAll) {
-      html += '<div class="hint" style="color:#B54708;background:#FFFAEB;border:1px solid #FEDF89;border-radius:8px;padding:8px 10px;margin-bottom:10px;">' +
+      html += '<div class="hint bg-warn" style="border:1px solid var(--pp-warn);border-radius:8px;padding:8px 10px;margin-bottom:10px;">' +
         '⚠️ 存在一次「清空全部」操作（' + fmtTime(clearAll.deletedAt) + '）。' +
         '该操作只清除此时间点之前的记录，之后新建的不受影响。如需找回被清空的数据，请从 data/backups/ 快照恢复。' +
         '</div>';
@@ -164,7 +164,7 @@
       sList.forEach(function (t) {
         html += '<tr>' +
           '<td>' + fmtTime(t.deletedAt) + '</td>' +
-          '<td><span class="tag" style="background:#F0E7D2;color:#8a6d3b">盘点</span></td>' +
+          '<td><span class="tag bg-warn">盘点</span></td>' +
           '<td>' + stkSummary(t.rec) + '</td>' +
           '<td>' + Util.esc(t.reason || "—") + '</td>' +
           '<td><button type="button" class="btn mini" data-restore-stk="' + Util.esc(t.id) + '">还原</button></td>' +
