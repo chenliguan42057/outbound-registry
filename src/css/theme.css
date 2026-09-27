@@ -1833,6 +1833,15 @@ html .table td.stock-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* 表头与数字列同步右对齐（2026-09-27 P1）：数字右对齐而表头左对齐会错位，
+   与 2db9a58「td.num 右对齐被居中规则压制」同源问题，这里用同款高优先级选择器压住。 */
+html .table th.num,
+html .table th.num-strong {
+  text-align: right;
+}
+html .table th:not(.num):not(.num-strong) {
+  text-align: left;
+}
 html .table td.num-strong,
 html .table td.stock-num,
 html .table td .stock-num-txt {
