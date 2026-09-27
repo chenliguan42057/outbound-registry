@@ -511,6 +511,29 @@
   /* 底部状态栏：就绪｜共N条｜已同步HH:MM（含待同步队列计数）
      P2 文案消歧（2026-09-25）：原「本地N条」易被误读成「N条没同步」，
      现改为「共N条」= 本机记录总数；只有真积压时才输出「⚠️待同步N条」并整条变红。 */
+  /** 网络质量采样（2026-09-27 P2「弱网预警」）：
+      navigator.onLine 只反映"网卡有没有连上"，弱网（信号差、丢包、WiFi 假连）时它依然是 true，
+      用户体感却是"扫码/提交转半天、要重试好几次"。这里用连续失败次数做软判据：
+      连续 3 次同步失败 → 判定网络不稳，状态栏明确提示，避免用户以为"系统坏了"而反复重试。
+      只要成功一次即清零，不做梯度评分，逻辑简单、不可能误伤正常网络。 */
+  var netFailStreak = 0;
+  var NET_FAIL_WARN = 3;
+
+  function netMark(ok) {
+    if (ok) {
+      if (netFailStreak >= NET_FAIL_WARN) {
+        // 从"不稳"恢复：给一个明确的安心提示
+        Util.toast("网络已恢复稳定");
+      }
+      netFailStreak = 0;
+    } else {
+      netFailStreak++;
+    }
+    updateStatusBar();
+  }
+
+  function netIsUnstable() { return netFailStreak >= NET_FAIL_WARN; }
+
   function updateStatusBar() {
     var el = Util.$("winStatus");
     if (!el) return;
@@ -523,6 +546,9 @@
     var alarm = "";
     if (q.length) {
       alarm = '<span class="win-status-alarm">⚠️ ' + q.length + ' 条改动未推上云端，请点「立即同步」重试</span>';
+    } else if (netIsUnstable()) {
+      // 弱网优先于泛化"同步异常"提示：告诉用户是网络问题，别反复重试、也别以为系统坏了
+      alarm = '<span class="win-status-alarm">📶 网络不稳（连续 ' + netFailStreak + ' 次同步失败）——提交会暂存本机，联网后自动补推</span>';
     } else if (statusIsErr) {
       alarm = '<span class="win-status-alarm">⚠️ 同步异常，请检查网络或令牌后点「立即同步」</span>';
     }
@@ -592,6 +618,7 @@
     var before = State.list.length;
     Cloud.syncPull({ onStatus: function () {} }).then(function (res) {
       if (res.ok) {
+        netMark(true);
         setSyncStatus("就绪", false);
         var added = State.list.length - before;
         if (added > 0) Util.toast("已同步 " + added + " 条新记录");
@@ -601,6 +628,7 @@
         // 这里做一次对账：云端文件数 > 本地记录数 = 有断点 → 自动全量重建一次补齐。
         checkAndHealGap();
       } else {
+        netMark(false);
         setSyncStatus("同步失败", true);
       }
       // 每次自动同步后顺带冲刷「待补推队列」（空队列无 API 开销）
@@ -608,6 +636,7 @@
         if (fres && fres.ok > 0) Util.toast("已补推 " + fres.ok + " 条记录");
       }).catch(function () {});
     }).catch(function (e) {
+      netMark(false);
       setSyncStatus("同步失败：" + ((e && e.message) || "未知原因"), true);
     }).finally(function () {
       // 复位与排程放在 finally：即便上面的 then 内部抛错，
