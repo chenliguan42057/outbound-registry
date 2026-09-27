@@ -19,6 +19,7 @@
   var picker = null;
   var confirming = false;      // 2026-09-24：提交前的「核对清单」弹窗是否开着（防连点弹两次）
   var confirmedOnce = false;   // 确认通过后二次进入 submit()，跳过弹窗直接写库
+  var bigQtyAcked = false;     // 2026-09-27 P1：异常大数量已确认过，二次进入时不再重复弹
   var photos = null;
   var editingId = null;
   /** 进入编辑时的原始照片（base64 数组）快照：提交时若照片未变则复用已有 photoUrls，避免重复上传 */
@@ -524,6 +525,24 @@
     }
 
     if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) {
+      return;
+    }
+
+    // 2026-09-27 P1「防手抖」熔断：数量超过 BIG_QTY（999）先拦一道确认，防多打一个 0。
+    // 放在核对清单之前，因为这个错更该被单独、醒目地提醒（核对清单里一眼扫过看不出来）。
+    var bigQty = picker.bigQtyItems ? picker.bigQtyItems() : [];
+    if (bigQty.length && !bigQtyAcked) {
+      var bigLines = bigQty.map(function (b) { return "· " + b.name + "：" + Util.numFmt(b.qty); }).join("\n");
+      UI.confirmDialog(
+        "以下货品数量偏大，请确认是否真的这么多：\n\n" + bigLines +
+        "\n\n（若填错了，点「取消」回去改）",
+        "⚠️ 数量异常提醒"
+      ).then(function (ok) {
+        if (!ok) return;
+        bigQtyAcked = true;
+        submit();
+        bigQtyAcked = false;
+      });
       return;
     }
 
