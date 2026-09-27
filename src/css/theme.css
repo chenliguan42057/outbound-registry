@@ -2471,3 +2471,34 @@ html[data-theme="light"] .tag.danger-tag, html[data-theme="light"] .status-pill.
   }
   html .table-wrap > .table { min-width: max-content; }
 }
+
+/* ============================================================
+   C2 移动端触控目标放大（2026-09-27 P3 人体工学）—— 只放开窄屏，桌面零影响
+   现场都是单手拇指操作：桌面版按钮约 42px 高，比拇指舒适下限 44px 差一点，
+   扫码/提交这类高频动作容易点不中而"以为系统没反应"。手机上统一抬到 46px，
+   并给相邻按钮留出间隔，避免误触到旁边那个。
+   ============================================================ */
+@media (max-width: 900px) {
+  html .btn,
+  html button.btn,
+  html .btn.sm {
+    min-height: 46px;
+  }
+  html .btn + .btn,
+  html .btn + button,
+  html button + button.btn {
+    margin-left: 8px;
+  }
+  /* 表格里的行内小按钮（编辑/还原/删除）：不撑高整行，只加宽命中区 */
+  html .table .btn.mini {
+    min-height: 34px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  /* 复选框：拇指点得中（复选是删除/批量的前置动作，点错代价高） */
+  html .rec-check,
+  html input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+}
