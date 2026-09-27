@@ -541,14 +541,14 @@
         '<th>序号</th><th>时间</th><th>' + (isIn ? "经办人" : "领取人") + '</th>' +
         (!isIn ? '<th>状态</th>' : '') +
         (!isIn ? '<th>出货仓库单位</th>' : '') +
-        '<th>' + (isIn ? "来源" : "部门") + '</th><th>用途/项目</th><th>货物名称</th><th>数量</th><th>库存</th><th>照片</th><th>操作</th>' +
+        '<th>' + (isIn ? "来源" : "部门") + '</th><th>用途/项目</th><th>货物名称</th><th class="num">数量</th><th>库存</th><th>照片</th><th>操作</th>' +
         '</tr></thead><tbody>';
       list.forEach(function (r, i) {
         var items = (r.items || []).map(function (it, idx, arr) {
-          return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + Util.esc(it.name) + ' × ' + it.qty + '</div>';
+          return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + Util.esc(it.name) + ' × ' + Util.numFmt(it.qty) + '</div>';
         }).join("");
         var stocks = (r.items || []).map(function (it, idx, arr) {
-          return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + Stock.getRecordStock(it.name, r, it) + '</div>';
+          return '<div class="item-line' + (arr.length > 1 ? " multi-line" : "") + '">' + Util.numFmt(Stock.getRecordStock(it.name, r, it)) + '</div>';
         }).join("");
         var qtySum = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
         var photos = (r.photoUrls && r.photoUrls.length) ? r.photoUrls : (r.photos || []);
@@ -579,7 +579,7 @@
           (isIn ? '<td>' + srcCellHtml(r) + '</td>' : '<td>' + Util.esc(r.dept || "-") + '</td>') +
           '<td>' + Util.esc(r.purpose || "-") + '</td>' +
           '<td class="items-cell">' + items + '</td>' +
-          '<td>' + qtySum + '</td>' +
+          '<td class="num">' + Util.numFmt(qtySum) + '</td>' +
           '<td class="items-cell">' + stocks + '</td>' +
           '<td><div class="photos-cell">' + photoHtml + '</div></td>' +
         '</tr>';
@@ -752,8 +752,8 @@
     function buildDetailRows(r, withActions) {
       var isRecIn = r.type === "in";
       var itemsHtml = (r.items || []).map(function (it) {
-        return '<div class="detail-item"><span>' + Util.esc(it.name) + ' × ' + it.qty + '</span>' +
-          '<span style="color:var(--muted);">库存 ' + Stock.getRecordStock(it.name, r, it) + '</span></div>';
+        return '<div class="detail-item"><span>' + Util.esc(it.name) + ' × ' + Util.numFmt(it.qty) + '</span>' +
+          '<span style="color:var(--muted);">库存 ' + Util.numFmt(Stock.getRecordStock(it.name, r, it)) + '</span></div>';
       }).join("");
       var photosHtml = (r.photoUrls && r.photoUrls.length)
         ? '<div class="detail-photos">' + r.photoUrls.map(function (src, i) {
@@ -889,8 +889,8 @@
       var isRecIn = r.type === "in";
       var kindLabel = isRecIn ? "入库单" : "出库单";
       var itemsHtml = (r.items || []).map(function (it) {
-        return '<tr><td>' + Util.esc(it.name) + '</td><td class="c">' + it.qty + '</td>' +
-          '<td class="c">' + Stock.getRecordStock(it.name, r, it) + '</td></tr>';
+        return '<tr><td>' + Util.esc(it.name) + '</td><td class="c">' + Util.numFmt(it.qty) + '</td>' +
+          '<td class="c">' + Util.numFmt(Stock.getRecordStock(it.name, r, it)) + '</td></tr>';
       }).join("");
       var statusLabel = isRecIn ? "" : (Records.getStatus(r) === "pending" ? "未提单" : "已提单");
       return '<div class="print-sheet">' +
