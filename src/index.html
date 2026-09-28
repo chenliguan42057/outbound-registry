@@ -117,12 +117,85 @@
 
   /* PWA 离线：注册 Service Worker（优化 3）。
      仅部署环境注册（https + 非 file://）；本地直开跳过。
-     注册失败静默（浏览器不支持 / 隐私模式等），不影响页面功能。 */
+     注册失败静默（浏览器不支持 / 隐私模式等），不影响页面功能。
+
+     【2026-09-28 僵尸 SW 自毁开关】
+     现象：发版后老设备仍显示旧数据（SW cache-first 命中旧 bundle），
+     且 Ctrl+F5 / ?nocache= 都无效——因为 SW 缓存优先级高于 HTTP 缓存。
+     做法：SW 激活前先「对账」——读线上 sw.js 的 VERSION，与页面 build-ver 比。
+     不一致 = 本机 SW 是旧版 → 注销 SW + 清空所有缓存 + 强刷一次（带 ?swfix= 防循环）。
+     仅在部署环境生效（build-ver 是 8 位 SHA）；本地直开跳过。 */
   (function () {
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost") return;
+    var cur = (document.querySelector('meta[name="build-ver"]') || {}).getAttribute
+      ? document.querySelector('meta[name="build-ver"]').getAttribute('content')
+      : "";
+    // 本地直开/占位符未替换 → 跳过全部逻辑，行为与改造前一致
+    var deployed = cur && cur.indexOf("__") === -1 && /^[0-9a-f]{8}$/.test(cur);
+
+    // 循环护栏：同一次「发版修复」只强刷一次（URL 带 swfix=<版本> 即视为已刷过）
+    var alreadyFixed = location.search.indexOf("swfix=") !== -1;
+
+    function purgeAndReload(reason) {
+      try { console.warn("[sw-fix] " + reason + " → 注销 SW 并强刷"); } catch (e) {}
+      var jobs = [];
+      try {
+        if (navigator.serviceWorker.getRegistrations) {
+          jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+            return Promise.all(rs.map(function (r) { return r.unregister(); }));
+          }));
+        }
+      } catch (e) {}
+      try {
+        if (window.caches && caches.keys) {
+          jobs.push(caches.keys().then(function (ks) {
+            return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+          }));
+        }
+      } catch (e) {}
+      Promise.all(jobs).catch(function () {}).then(function () {
+        var u = new URL(location.href);
+        u.searchParams.set("swfix", cur || "1");   // 标记已刷，防死循环
+        u.searchParams.set("_", String(Date.now())); // 叠加时间戳，彻底绕过 HTTP 缓存
+        location.replace(u.toString());
+      });
+    }
+
+    // 1) 对账：已有注册的 SW 是否与页面同版本
+    if (deployed && !alreadyFixed && navigator.serviceWorker.getRegistrations) {
+      navigator.serviceWorker.getRegistrations().then(function (rs) {
+        if (!rs || !rs.length) return;                     // 没装过 SW → 无需处理
+        // 拉线上 sw.js 原文，比对 CACHE/VERSION 里的 SHA
+        fetch("sw.js?_=" + Date.now(), { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.text() : ""; })
+          .then(function (txt) {
+            var m = String(txt || "").match(/VERSION\s*=\s*"([^"]+)"/);
+            var live = m ? m[1] : "";
+            if (live && live.indexOf("__") === -1 && live !== cur) {
+              purgeAndReload("页面版本 " + cur + " ≠ 线上 SW 版本 " + live);
+            }
+          })
+          .catch(function () {});
+      }).catch(function () {});
+    }
+
+    // 2) 正常注册（注册后监听 updatefound，新版 SW 接管时也清一次旧缓存兜底）
     window.addEventListener("load", function () {
-      navigator.serviceWorker.register("sw.js").catch(function () {});
+      navigator.serviceWorker.register("sw.js").then(function (reg) {
+        try {
+          reg.addEventListener("updatefound", function () {
+            var nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener("statechange", function () {
+              if (nw.state === "installed" && navigator.serviceWorker.controller) {
+                // 新 SW 已就绪且页面仍由旧 SW 控制 → 清旧缓存并强刷一次
+                if (deployed && !alreadyFixed) purgeAndReload("SW 已更新到新版，接管清理");
+              }
+            });
+          });
+        } catch (e) {}
+      }).catch(function () {});
     });
   })();
 
