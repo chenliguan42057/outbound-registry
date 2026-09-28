@@ -118,3 +118,25 @@ self.addEventListener("fetch", function (event) {
     event.respondWith(handleStatic(event.request));
   }
 });
+
+/* 【2026-09-28 僵尸 SW 自愈】向页面汇报自己的真实版本号。
+   背景：页面无法直接读取「浏览器里实际装的 SW 是哪个版本」，
+   只能靠 SW 自报。页面据此与线上最新版本对账，
+   不一致 = 本机 SW 滞后（僵尸）→ 注销 + 清缓存 + 强刷。
+   支持两种问法：MessageChannel（可回话）与普通 postMessage 广播。 */
+self.addEventListener("message", function (event) {
+  var data = event.data || {};
+  if (data.type !== "GET_VERSION" && data !== "GET_VERSION") return;
+  var payload = { type: "VERSION", version: VERSION, cache: CACHE };
+  try {
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage(payload);          // MessageChannel 精确回话
+    } else if (event.source && event.source.postMessage) {
+      event.source.postMessage(payload);            // 回给发问的客户端
+    } else {
+      (self.clients || []).forEach && self.clients.matchAll().then(function (cs) {
+        cs.forEach(function (c) { c.postMessage(payload); });
+      });
+    }
+  } catch (e) { /* 回话失败静默，不影响页面 */ }
+});

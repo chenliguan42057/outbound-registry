@@ -134,11 +134,19 @@
     // 本地直开/占位符未替换 → 跳过全部逻辑，行为与改造前一致
     var deployed = cur && cur.indexOf("__") === -1 && /^[0-9a-f]{8}$/.test(cur);
 
-    // 循环护栏：同一次「发版修复」只强刷一次（URL 带 swfix=<版本> 即视为已刷过）
-    var alreadyFixed = location.search.indexOf("swfix=") !== -1;
+    // 循环护栏：同一次「发版修复」最多强刷 3 次（递增计数，用完即止，绝不无限刷）
+    // 为什么不是「只刷一次」：unregister() 是异步的，可能没等生效就跳转，
+    // 新页面又被老 SW 接管 → 需要重试；但必须封顶，否则老 SW 顽固时会无限刷新。
+    var SWFIX_MAX = 3;
+    var fixCount = 0;
+    try {
+      var qs = new URLSearchParams(location.search);
+      fixCount = parseInt(qs.get("swfix") || "0", 10) || 0;
+    } catch (e) { fixCount = 0; }
+    var alreadyFixed = fixCount >= SWFIX_MAX;
 
     function purgeAndReload(reason) {
-      try { console.warn("[sw-fix] " + reason + " → 注销 SW 并强刷"); } catch (e) {}
+      try { console.warn("[sw-fix] " + reason + " → 注销 SW 并强刷（第 " + (fixCount + 1) + " 次）"); } catch (e) {}
       var jobs = [];
       try {
         if (navigator.serviceWorker.getRegistrations) {
@@ -156,27 +164,65 @@
       } catch (e) {}
       Promise.all(jobs).catch(function () {}).then(function () {
         var u = new URL(location.href);
-        u.searchParams.set("swfix", cur || "1");   // 标记已刷，防死循环
-        u.searchParams.set("_", String(Date.now())); // 叠加时间戳，彻底绕过 HTTP 缓存
+        u.searchParams.set("swfix", String(fixCount + 1)); // 计数+1，达上限后不再刷
+        u.searchParams.set("_", String(Date.now()));       // 叠加时间戳，彻底绕过 HTTP 缓存
         location.replace(u.toString());
       });
     }
 
-    // 1) 对账：已有注册的 SW 是否与页面同版本
+    // 1) 对账：直接问「当前控制页面的 SW」自报版本，与线上最新版本比。
+    //    ⚠️ 关键：不能拿「线上 sw.js 的版本」跟「页面 build-ver」比 ——
+    //    这两者每次都随部署一起更新，永远一致，**检测不出僵尸 SW**。
+    //    必须问「浏览器里实际跑着的那个 SW」它自己是哪个版本（sw.js 里加了 message 应答）。
+    function askSwVersion() {
+      return new Promise(function (resolve) {
+        var sw = navigator.serviceWorker;
+        if (!sw) return resolve("");
+        var target = sw.controller;
+        if (!target) return resolve("");          // 页面尚未被 SW 接管 → 无需对账
+        var done = false;
+        var ch = null;
+        try { ch = new MessageChannel(); } catch (e) { return resolve(""); }
+        var timer = setTimeout(function () { if (!done) { done = true; resolve(""); } }, 3000);
+        ch.port1.onmessage = function (ev) {
+          if (done) return;
+          done = true; clearTimeout(timer);
+          var d = ev.data || {};
+          resolve(d.type === "VERSION" ? String(d.version || "") : "");
+        };
+        try {
+          target.postMessage({ type: "GET_VERSION" }, [ch.port2]);
+        } catch (e) { done = true; clearTimeout(timer); resolve(""); }
+      });
+    }
+
     if (deployed && !alreadyFixed && navigator.serviceWorker.getRegistrations) {
       navigator.serviceWorker.getRegistrations().then(function (rs) {
         if (!rs || !rs.length) return;                     // 没装过 SW → 无需处理
-        // 拉线上 sw.js 原文，比对 CACHE/VERSION 里的 SHA
-        fetch("sw.js?_=" + Date.now(), { cache: "no-store" })
-          .then(function (r) { return r.ok ? r.text() : ""; })
-          .then(function (txt) {
-            var m = String(txt || "").match(/VERSION\s*=\s*"([^"]+)"/);
-            var live = m ? m[1] : "";
-            if (live && live.indexOf("__") === -1 && live !== cur) {
-              purgeAndReload("页面版本 " + cur + " ≠ 线上 SW 版本 " + live);
-            }
-          })
-          .catch(function () {});
+        var hasController = !!navigator.serviceWorker.controller;
+        askSwVersion().then(function (swVer) {
+          if (!swVer) {
+            // ★ 兜底（最关键的一条）：页面已被 SW 接管，但它**不认识 GET_VERSION**（不应答）
+            //   → 它一定是「2026-09-28 之前」的老 SW，正是导致刷不出来的僵尸。
+            //   此时直接自毁，不再等 updatefound（老 SW 可能永远不更新）。
+            if (hasController) purgeAndReload("本机 SW 无版本应答（老版僵尸 SW）");
+            return;
+          }
+          if (swVer.indexOf("__") !== -1) return;          // 占位符未替换（异常态）→ 交给 updatefound
+          if (swVer !== cur) {
+            purgeAndReload("本机 SW(" + swVer + ") ≠ 页面/线上版本(" + cur + ")");
+            return;
+          }
+          // ★ 版本一致 = 已痊愈 → 清掉 URL 里的 swfix/_ 残留，避免污染后续发版的自愈计数
+          if (fixCount > 0) {
+            try {
+              var uu = new URL(location.href);
+              uu.searchParams.delete("swfix");
+              uu.searchParams.delete("_");
+              history.replaceState(null, "", uu.pathname + (uu.searchParams.toString() ? "?" + uu.searchParams : "") + uu.hash);
+            } catch (e) {}
+          }
+        }).catch(function () {});
       }).catch(function () {});
     }
 
