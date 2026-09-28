@@ -103,15 +103,11 @@ def goods_of(order):
 
 
 def goods_lines_of(order):
-    """货品明细每行一项（缩进 4 空格），避免钉钉对超长单行强制换行堆在一起。"""
-    items = order.get("items") or []
-    if not items:
-        return "    （无明细）"
-    return "\n".join(
-        "    - {n} × {q}".format(n=it.get("name", ""), q=it.get("qty", ""))
-        for it in items
-        if it.get("name")
-    ) or "    （无明细）"
+    """货品明细：统一走 ding_card.goods_block_of（2026-09-28 主理人定稿）。
+    旧实现用 "    - 名称 × 数量"（缩进 4 空格）→ 钉钉 actionCard 把缩进当续行、吞掉换行，
+    所有货品挤成一坨（主理人截图反馈的典型坏例）。现统一为「N 项 + 数字序号 + 合计」样式。"""
+    from ding_card import goods_block_of
+    return goods_block_of(order.get("items") or [])
 
 
 def status_text_of(order):
@@ -249,7 +245,7 @@ def build_pickup_new_markdown(payload):
     ]
     md = "### 📦 出入库登记 · 新待取货登记"
     md += "\n" + "\n".join("- **{}**：{}".format(k, v) for k, v in fields)
-    md += "\n\n**货品明细**：\n" + goods_lines_of(p)
+    md += "\n\n" + goods_lines_of(p)
     note = str((p.get("note") or "")).strip()
     if note:
         md += "\n- **备注**：{}".format(note)
@@ -291,7 +287,6 @@ def build_pickup_confirm_markdown(payload):
         "- **登记时间：** {}".format(reg),
         "- **提单时间：** {}".format(conf + gap),
         "",
-        "**货品明细**：",
         goods_lines,
     ]
     dept = str(p.get("dept") or "").strip()

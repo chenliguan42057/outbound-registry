@@ -86,15 +86,11 @@ def goods_of(data):
 
 
 def goods_lines_of(data):
-    """货品明细每行一项：\"  - 名称 × 数量\"，便于在钉钉群里对齐查看。"""
-    items = data.get("items") or []
-    if not items:
-        return "  （无明细）"
-    return "\n".join(
-        "  - {n} × {q}".format(n=it.get("name", ""), q=it.get("qty", ""))
-        for it in items
-        if it.get("name")
-    )
+    """货品明细：统一走 ding_card.goods_block_of（2026-09-28 主理人定稿）。
+    旧实现用 "  - 名称 × 数量"（带缩进）→ 钉钉 actionCard 把缩进当续行、吞掉换行，
+    所有货品挤成一坨（主理人截图反馈的典型坏例）。现统一为「N 项 + 数字序号 + 合计」样式。"""
+    from ding_card import goods_block_of
+    return goods_block_of(data.get("items") or [])
 
 
 # 低库存阈值（与前端 Config.LOW_STOCK_THRESHOLD 一致）
@@ -181,7 +177,7 @@ def _layout_record(title, fields, data, status_label=None, tail_fields=None):
         md += "\n" + photos
     if fields:
         md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
-    md += "\n\n**货品明细**：\n" + goods_lines_of(data)
+    md += "\n\n" + goods_lines_of(data)
     note = str((data or {}).get("note") or "").strip()
     if note:
         md += "\n- **备注**：{}".format(note)
@@ -336,7 +332,7 @@ def build_tombstone_markdown(data):
     )
     if str(rec.get("type", "")).lower() != "in":
         md += entity_line(rec)
-    md += "- **登记时间**：{}\n\n**货品明细**：\n{}".format(rec.get("time", "") or "-", goods_lines)
+    md += "- **登记时间**：{}\n\n{}".format(rec.get("time", "") or "-", goods_lines)
     return md
 
 
@@ -399,7 +395,7 @@ def build_pickup_new_markdown(data):
     ]
     md = "### 📦 出入库登记 · 新待取货登记"
     md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in fields)
-    md += "\n\n**货品明细**：\n" + goods_lines_of(data)
+    md += "\n\n" + goods_lines_of(data)
     note = str((data.get("note") or "")).strip()
     if note:
         md += "\n- **备注**：{}".format(note)
@@ -423,7 +419,7 @@ def build_pickup_update_markdown(data, old):
     if old.get("confirmed") is not True and data.get("confirmed") is True:
         return None
     # 其他修改
-    return "### 📝 出入库登记 · 待取货信息已更新\n- **取货人**：{}\n- **时间**：{}\n\n**货品明细**：\n{}".format(
+    return "### 📝 出入库登记 · 待取货信息已更新\n- **取货人**：{}\n- **时间**：{}\n\n{}".format(
         data.get("picker", "") or "-", data.get("time", "") or "-", goods_lines
     )
 
