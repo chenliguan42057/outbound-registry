@@ -158,17 +158,22 @@ def entity_line(data):
 
 
 def _layout_record(title, fields, data, status_label=None, tail_fields=None):
-    """统一布局：标题 → 照片（顶部）→ 字段（每行一项）→ 货品明细（每行一项）→ 备注 → 尾部字段（时间/状态，置于明细之后）。
+    """统一布局：标题 → 照片（顶部）→ 字段（每行一项，含 tail 的时间/状态）→ 货品明细 → 备注。
+
+    2026-09-28（主理人要求「清清楚楚，不要杂乱在一起」）：
+    字段区与货品明细**各自成块、之间留空行**，不再让时间/状态跟在「合计」后面，
+    否则读起来像货品明细的尾巴，容易看错归属。tail_fields 现并入字段区末尾。
 
     fields: [(k, v), ...] 顺序即展示顺序。
     status_label: 标题里附加的状态角标（"未提单"/"已提单" 等），可空。
-    tail_fields: [(k, v), ...] 拼在货品明细与备注之后，用于把时间/状态放到明细下方、状态压在最后。
+    tail_fields: [(k, v), ...] 追加到字段区末尾（时间/状态等），不再置于货品明细之后。
     """
     # 调拨单号（两仓调拨业务单号 transferNo，2026-09-05 增量）：置字段区最前，调拨通知单号最醒目；
     # 普通记录无该字段，自然跳过不影响。
     transfer_no = str((data or {}).get("transferNo") or "").strip()
     if transfer_no:
         fields = [("调拨单号", transfer_no)] + list(fields)
+    fields = list(fields) + list(tail_fields or [])   # 时间/状态并入字段区，紧跟用途之后
     photos = photos_markdown(data)
     md = title
     if status_label:
@@ -180,9 +185,7 @@ def _layout_record(title, fields, data, status_label=None, tail_fields=None):
     md += "\n\n" + goods_lines_of(data)
     note = str((data or {}).get("note") or "").strip()
     if note:
-        md += "\n- **备注**：{}".format(note)
-    if tail_fields:
-        md += "\n" + "\n".join("- **{k}**：{v}".format(k=k, v=v) for k, v in tail_fields)
+        md += "\n\n- **备注**：{}".format(note)
     return md
 
 
@@ -398,7 +401,7 @@ def build_pickup_new_markdown(data):
     md += "\n\n" + goods_lines_of(data)
     note = str((data.get("note") or "")).strip()
     if note:
-        md += "\n- **备注**：{}".format(note)
+        md += "\n\n- **备注**：{}".format(note)
     return md
 
 

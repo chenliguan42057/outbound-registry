@@ -53,7 +53,7 @@ def btn_landing():
     return {"title": "🌿 打开出库登记", "url": REG_URL}
 
 
-def goods_block_of(items, heading="货品明细"):
+def goods_block_of(items, heading="货品明细", total_unit="件", line_fmt=None):
     """全群统一的货品明细渲染（2026-09-28 主理人定稿：「清清楚楚，不要杂乱在一起」）。
 
     格式（对齐「出库领取信息」那条标杆卡片）：
@@ -66,10 +66,15 @@ def goods_block_of(items, heading="货品明细"):
 
     ⚠️ 铁律：条目行**绝不能带缩进**（旧版用 "    - x"）。
     钉钉 actionCard 的 markdown 解析器把「缩进 4 空格」当代码块续行处理，
-    会吞掉 \n → 所有货品挤成一坨（本次主理人截图反馈的典型坏例）。
-    必须用「数字. 名称 × 数量」顶格写，钉钉才会逐行渲染。
+    会吞掉换行 → 所有货品挤成一坨（本次主理人截图反馈的典型坏例）。
+    必须用「数字. xxx」顶格写，钉钉才会逐行渲染。
 
-    items: [{name, qty}, ...]；空则返回「（无明细）」。
+    items      : [{name, qty}, ...]
+    heading    : 明细区标题（如「货品明细」「领取货品」「借出货品」）
+    total_unit : 合计单位（默认「件」）
+    line_fmt   : 可选，自定义每行文案 fn(it) -> str（不含序号与缩进）；
+                 借出单要显示「借出｜已还｜剩余」时传入。
+    空明细返回「**heading**：\\n（无明细）」。
     """
     items = [it for it in (items or []) if it.get("name")]
     if not items:
@@ -77,14 +82,19 @@ def goods_block_of(items, heading="货品明细"):
     rows = []
     total = 0
     for i, it in enumerate(items, 1):
+        if line_fmt:
+            rows.append("{}. {}".format(i, line_fmt(it)))
+            continue
+        qty = it.get("qty")
         try:
-            total += int(it.get("qty") or 0)
+            total += int(qty or 0)
         except (TypeError, ValueError):
             pass
-        rows.append("{}. {} × {}".format(i, it.get("name") or "", it.get("qty") if it.get("qty") is not None else ""))
-    return "**{}（{} 项）**\n{}\n\n**合计 {} 件**".format(
-        heading, len(items), "\n".join(rows), total
-    )
+        rows.append("{}. {} × {}".format(i, it.get("name") or "", "" if qty is None else qty))
+    body = "**{}（{} 项）**\n{}".format(heading, len(items), "\n".join(rows))
+    if not line_fmt:
+        body += "\n\n**合计 {} {}**".format(total, total_unit)
+    return body
 
 
 def btn_manage():

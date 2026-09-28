@@ -123,16 +123,15 @@ def photos_lines(o):
 
 
 def borrow_items_of(o):
-    """先借后还借出单：每货品显示 借出｜已还｜剩余（items 为借出量，returned 为已还映射）。"""
+    """[已弃用 2026-09-28] 旧版借出单货品渲染（带 4 空格缩进 → 钉钉吞换行挤成一坨）。
+    现统一由 borrow_goods_block() 走 ding_card.goods_block_of 渲染。
+    保留此函数仅为兼容可能的旧调用方；新代码请勿使用。
+    """
+    from ding_card import goods_block_of
     ret = o.get("returned") or {}
-    items = o.get("items") or []
-    if not items:
-        return "    （无明细）"
-    out_lines = []
-    for it in items:
+
+    def fmt(it):
         n = it.get("name", "")
-        if not n:
-            continue
         try:
             q = float(it.get("qty") or 0)
         except Exception:
@@ -144,18 +143,34 @@ def borrow_items_of(o):
                 bk = float(rv)
             except Exception:
                 bk = 0
-        out_lines.append("    - {n}：借出{q:g}｜已还{bk:g}｜剩余{rem:g}".format(n=n, q=q, bk=bk, rem=max(0, q - bk)))
-    return "\n".join(out_lines) or "    （无明细）"
+        return "{}：借出{:g}｜已还{:g}｜剩余{:g}".format(n, q, bk, max(0, q - bk))
+
+    return goods_block_of(o.get("items") or [], heading="借出货品", line_fmt=fmt)
 
 
-def build_order_lines(payload):
-    """把提醒请求中的订单摘要转成 markdown 行列表；无效订单跳过。货品明细逐项分行。
+def build_order_blocks(payload):
+    """把提醒请求中的订单摘要转成 markdown 块；无效订单跳过。
 
-    特殊订单支持（由借出单/调拨单页面的单条推送带出）：
-      · transferNo 非空（调拨记录）→ 标题标「⇄ 调拨出库 / 调拨入库」+ 调拨单号 + 方向
-      · borrowed=true（先借后还借出单）→ 标题标「借出单」，每货品带 借出｜已还｜剩余
+    2026-09-28 主理人定稿：**全面改为「每单独立成块 + 顶格字段 + 图1样式货品明细」**。
+    旧结构把订单做成 "- **#1 出库** ..." 的单个列表项、货品靠缩进排续行，
+    钉钉 actionCard 会把缩进的续行吞掉换行 → 所有货品挤成一坨（主理人截图的坏例）。
+    新结构不再用列表项嵌套，全部顶格写，钉钉逐行正常渲染。
+
+    每单格式：
+        **#1 出库**　2026-09-28 10:57
+        - 领取人：xxx
+        - 部门/客户：xxx
+        - 用途：xxx
+        - 状态：已提单
+
+        **货品明细（3 项）**
+        1. 精华液 单支装 × 2
+        ...
+        **合计 6 件**
+
+    特殊订单（借出单 / 调拨）同样按此结构，只在标题与字段上区分。
     """
-    lines = []
+    blocks = []
     for i, o in enumerate(payload.get("orders") or [], 1):
         if not isinstance(o, dict) or not o.get("id"):
             continue
@@ -163,69 +178,99 @@ def build_order_lines(payload):
         kind = str(o.get("type") or "").lower()
         tf = str(o.get("transferNo") or "").strip()
         borrowed = o.get("borrowed") is True
-        if kind == "in":
-            goods_lines = goods_lines_of(o)
-            if tf:
-                src = str(o.get("picker") or o.get("dept") or "-")
-                lines.append(
-                    "- **#{} ⇄ 调拨入库**　{}\n  调入自：{}　调拨单号：{}\n  用途/来源：{}\n{}\n{}".format(
-                        i, t, src, tf, o.get("purpose", "") or "-", goods_lines, photos_lines(o)
-                    )
-                )
-            else:
-                lines.append(
-                    "- **#{} 入库**　{}\n  用途/来源：{}\n{}\n{}".format(
-                        i, t, o.get("purpose", "") or "-", goods_lines, photos_lines(o)
-                    )
-                )
-            continue
-        if borrowed:
-            head = "- **#{} 借出单**　{}　领取人：{}　部门/客户：{}".format(
-                i, t, o.get("picker", "") or "-", o.get("dept", "") or "-"
-            )
-            body = "  用途：{}\n{}\n  状态：{}".format(
-                o.get("purpose", "") or "-", borrow_items_of(o), status_text_of(o)
-            )
-            entity = str(o.get("entity") or "").strip()
-            if entity:
-                body += "\n  结算法人单位：{}".format(entity)
-            note = str(o.get("note") or "").strip()
-            if note:
-                body += "\n  备注：{}".format(note)
-            lines.append(head + "\n" + body + photos_lines(o))
-            continue
-        goods_lines = goods_lines_of(o)
-        if tf:
-            head = "- **#{} ⇄ 调拨出库**　{}　领取人：{}".format(
-                i, t, o.get("picker", "") or "-"
-            )
-            body = "  调出至：{}　调拨单号：{}　用途：{}　状态：{}\n{}".format(
-                str(o.get("dept") or "-"), tf, o.get("purpose", "") or "-",
-                status_text_of(o), goods_lines
-            )
-            entity = str(o.get("entity") or "").strip()
-            if entity:
-                body += "\n  结算法人单位：{}".format(entity)
-            note = str(o.get("note") or "").strip()
-            if note:
-                body += "\n  备注：{}".format(note)
-            lines.append(head + "\n" + body + photos_lines(o))
-            continue
-        head = "- **#{} 出库**　{}　领取人：{}　部门/客户：{}".format(
-            i, t, o.get("picker", "") or "-", o.get("dept", "") or "-"
-        )
-        body = "  用途：{}　状态：{}\n{}".format(
-            o.get("purpose", "") or "-", status_text_of(o), goods_lines
-        )
         entity = str(o.get("entity") or "").strip()
-        if entity:
-            body += "\n  结算法人单位：{}".format(entity)
         note = str(o.get("note") or "").strip()
-        if note:
-            body += "\n  备注：{}".format(note)
-        body += ("\n" if body else "") + photos_lines(o)
-        lines.append(head + "\n" + body)
-    return lines
+
+        fields = []          # [(k, v), ...] 顶格列表行
+        items_all = o.get("items") or []
+
+        if borrowed:
+            head = "**#{} 借出单**　{}".format(i, t)
+            fields += [
+                ("领取人", o.get("picker") or "-"),
+                ("部门/客户", o.get("dept") or "-"),
+            ]
+            if entity:
+                fields.append(("结算法人单位", entity))
+            fields += [
+                ("用途", o.get("purpose") or "-"),
+                ("状态", status_text_of(o)),
+            ]
+            if note:
+                fields.append(("备注", note))
+            goods = borrow_goods_block(o)
+        elif tf:
+            if kind == "in":
+                head = "**#{} ⇄ 调拨入库**　{}".format(i, t)
+                fields.append(("调入自", o.get("picker") or o.get("dept") or "-"))
+            else:
+                head = "**#{} ⇄ 调拨出库**　{}".format(i, t)
+                fields.append(("调出至", o.get("dept") or "-"))
+                if o.get("picker"):
+                    fields.append(("领取人", o.get("picker")))
+            fields.append(("调拨单号", tf))
+            if entity:
+                fields.append(("结算法人单位", entity))
+            if kind == "in":
+                fields.append(("用途/来源", o.get("purpose") or "-"))
+            elif o.get("purpose"):
+                fields.append(("用途", o.get("purpose")))
+            if kind != "in":
+                fields.append(("状态", status_text_of(o)))
+            if note:
+                fields.append(("备注", note))
+            goods = goods_lines_of(o)
+        elif kind == "in":
+            head = "**#{} 入库**　{}".format(i, t)
+            fields.append(("用途/来源", o.get("purpose") or "-"))
+            if note:
+                fields.append(("备注", note))
+            goods = goods_lines_of(o)
+        else:
+            head = "**#{} 出库**　{}".format(i, t)
+            fields += [
+                ("申请人", o.get("applicant") or "-"),
+                ("领取人", o.get("picker") or "-"),
+                ("部门/客户", o.get("dept") or "-"),
+            ]
+            if entity:
+                fields.append(("结算法人单位", entity))
+            fields.append(("用途", o.get("purpose") or "-"))
+            fields.append(("状态", status_text_of(o)))
+            if note:
+                fields.append(("备注", note))
+            goods = goods_lines_of(o)
+
+        block = head
+        if fields:
+            block += "\n" + "\n".join("- **{}**：{}".format(k, v) for k, v in fields)
+        block += "\n\n" + goods
+        block += photos_lines(o)
+        blocks.append(block)
+    return blocks
+
+
+def borrow_goods_block(o):
+    """借出单货品明细：复用统一渲染器，每行显示「名称：借出 x｜已还 y｜剩余 z」（顶格，无缩进）。"""
+    from ding_card import goods_block_of
+    ret = o.get("returned") or {}
+
+    def fmt(it):
+        n = it.get("name", "")
+        try:
+            q = float(it.get("qty") or 0)
+        except Exception:
+            q = 0
+        bk = 0
+        rv = ret.get(n)
+        if rv is not None:
+            try:
+                bk = float(rv)
+            except Exception:
+                bk = 0
+        return "{}：借出{:g}｜已还{:g}｜剩余{:g}".format(n, q, bk, max(0, q - bk))
+
+    return goods_block_of(o.get("items") or [], heading="借出货品", line_fmt=fmt)
 
 
 def build_pickup_new_markdown(payload):
@@ -248,7 +293,7 @@ def build_pickup_new_markdown(payload):
     md += "\n\n" + goods_lines_of(p)
     note = str((p.get("note") or "")).strip()
     if note:
-        md += "\n- **备注**：{}".format(note)
+        md += "\n\n- **备注**：{}".format(note)
     return md
 
 
@@ -352,17 +397,9 @@ def build_out_copy_markdown(payload):
         if v:
             lines.append("- **{}**：{}".format(k, v))
 
-    if items:
-        lines += ["", "**领取货品（{} 项）**".format(len(items)), ""]
-        total = 0
-        for i, it in enumerate(items, 1):
-            try:
-                q = int(it.get("qty") or 0)
-            except (TypeError, ValueError):
-                q = 0
-            total += q
-            lines.append("{}. {} × {}".format(i, it.get("name") or "", it.get("qty") or ""))
-        lines += ["", "**合计 {} 件**".format(total)]
+    # 货品明细：统一走共用渲染器（2026-09-28），标题沿用「领取货品」，样式与全群一致
+    from ding_card import goods_block_of
+    lines += ["", goods_block_of(o.get("items") or [], heading="领取货品")]
     return "\n".join(lines)
 
 
@@ -408,15 +445,16 @@ def main():
         print("没有可解析的提醒请求，跳过发送（不报错）")
         return 0
 
-    # 1) 订单提醒
+    # 1) 订单提醒（每单独立成块，块之间用分隔线隔开，避免多单连读混淆）
     blocks = []
-    total = 0
+    count = 0
     for p in payloads:
-        lines = build_order_lines(p)
-        total += len(lines)
-        blocks.extend(lines)
+        blks = build_order_blocks(p)
+        count += len(blks)
+        blocks.extend(blks)
     if blocks:
-        text = "### 🔔 出入库登记 · 订单提醒（共 {} 条）\n\n{}".format(total, "\n".join(blocks))
+        body = "\n\n---\n\n".join(blocks)
+        text = "### 🔔 出入库登记 · 订单提醒（共 {} 条）\n\n---\n\n{}".format(count, body)
         ok, err = send(text, title="出入库登记 · 订单提醒")
         if not ok:
             print("订单提醒发送失败: {}".format(err), file=sys.stderr)
