@@ -197,7 +197,7 @@
         '<div class="stat-card fx-card">' +
           '<span class="stat-num fx-neg">' + st.total + '</span>' +
           '<span class="stat-label">冻结占用</span>' +
-          '<span class="stat-hint">' + st.docs + ' 单待取货未出库</span>' +
+          '<span class="stat-hint">' + st.docs + ' 单占用（待取货 ' + st.pkDocs + ' · 未提单 ' + st.outDocs + '）</span>' +
         '</div>' +
         '<div class="stat-card fx-card">' +
           '<span class="stat-num">' + st.kinds + '</span>' +
@@ -212,37 +212,52 @@
       '</div>' +
       (overText ? '<div class="stock-low-banner fx-banner fx-banner-over" style="margin:0 0 12px">❗ <b>超预占：</b>' + overText + '<i>可用库存已为负，建议催客户取货或先补这批货</i></div>' : '') +
       (tightText ? '<div class="stock-low-banner fx-banner fx-banner-tight" style="margin:0 0 12px">⚠️ <b>预占后偏低：</b>' + tightText + '<i>现在够发，但取走后就会低于预警线</i></div>' : '') +
-      '<div class="hint fx-note">❄️ 「冻结占用」= 已提单但未出库的待取货数量，「可用库存」= 实际库存 − 冻结占用，仅为提前排产的<b>参考数</b>；真实库存始终以「实际库存」列为准，单据出库后自动恢复。</div>';
+      '<div class="hint fx-note">❄️ 「冻结占用」= <b>未提单出库单</b> + <b>待取货未出库</b>的数量之和。' +
+      '未提单的货还没真正出仓，所以<b>不动实际库存</b>，只先占住；' +
+      '「可用库存」= 实际库存 − 冻结占用，代表还能承诺给下一个客户的量。' +
+      '点「确认出库」或把出库单标记「已提单」，对应冻结即释放、转为实际扣减。</div>';
   }
 
-  /** 点冻结数字 → 弹窗列出占用的单据明细 */
+  /** 点冻结数字 → 弹窗列出占用的单据明细（2026-09-28：区分「未提单出库」与「待取货」两路来源） */
   function showFreezeDetail(name) {
     var rows = Freeze.detail(name);
     if (!rows.length) return;
     var stock = Stock.getStock(name);
     var avail = Freeze.available(name);
+    var sp = Freeze.splitOf(name);
     var html = '<div class="fx-detail">' +
       '<div class="fx-detail-head">' +
         '<span>实际库存 <b>' + stock + '</b></span>' +
         '<span class="fx-neg">冻结 <b>−' + (Freeze.of(name)) + '</b></span>' +
         '<span class="' + (avail < 0 ? "fx-bad" : "fx-ok") + '">可用 <b>' + avail + '</b></span>' +
       '</div>' +
+      (sp.out || sp.pickup
+        ? '<div class="hint" style="margin:-4px 0 10px">构成：未提单出库单 <b>' + sp.out + '</b> 件' +
+          (sp.pickup ? ' ＋ 待取货未出库 <b>' + sp.pickup + '</b> 件' : '') + '</div>'
+        : '') +
       '<table class="table" style="width:100%;min-width:0"><thead><tr>' +
-        '<th>登记时间</th><th>取货人</th><th>部门/客户</th><th>占用量</th><th>提单</th>' +
+        '<th>登记时间</th><th>来源</th><th>领取人</th><th>部门/客户</th><th>占用量</th><th>状态</th>' +
       '</tr></thead><tbody>' +
       rows.map(function (r) {
+        var srcTag = r.src === "out"
+          ? '<span class="tag warn-tag" title="出库单还没标记已提单，货未真正出仓">未提单出库</span>'
+          : '<span class="tag ok-tag" title="客户已提单但货还没取走">待取货</span>';
+        var stTag = r.src === "out"
+          ? '<span class="tag warn-tag">待提单</span>'
+          : (r.confirmed ? '<span class="tag ok-tag">已确认</span>' : '<span class="tag warn-tag">未确认</span>');
         return '<tr>' +
           '<td>' + Util.esc(fmtTs(r.ts)) + '</td>' +
+          '<td>' + srcTag + '</td>' +
           '<td>' + Util.esc(r.picker) + '</td>' +
           '<td>' + Util.esc(r.dept) + '</td>' +
           '<td class="num fx-neg">' + r.qty + '</td>' +
-          '<td>' + (r.confirmed ? '<span class="tag ok-tag">已确认</span>' : '<span class="tag warn-tag">未确认</span>') + '</td>' +
+          '<td>' + stTag + '</td>' +
         '</tr>';
       }).join("") +
       '</tbody></table>' +
-      '<div class="hint">到「待取货」页点「确认出库」即可释放这部分冻结量。</div>' +
+      '<div class="hint">释放方式：<b>未提单出库</b> → 到「出库」列表点状态徽标标记「已提单」（转为实际扣减）；<b>待取货</b> → 到「待取货」页点「确认出库」。</div>' +
     '</div>';
-    UI.Modal.show(Util.esc(name) + " 冻结明细", html, { width: "560px" });
+    UI.Modal.show(Util.esc(name) + " 冻结明细", html, { width: "620px" });
   }
 
   /** 时间戳格式化（yyyy-MM-dd HH:mm） */

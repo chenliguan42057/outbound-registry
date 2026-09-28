@@ -7,6 +7,15 @@
  *
  * 2026-09-13 盘点事件化：盘点不再改写 INVENTORY 基准，而是作为一条带 _ts 的增量事件并入时间轴。
  * 这样「当时库存」在盘点时刻正确落位，历史流水的快照不会被后续盘点整体平移。
+ *
+ * 2026-09-28 未提单口径（主理人定稿）：
+ *   **未提弹出库单（status === "pending"）不再扣减实际库存**，改为计入「冻结占用」
+ *   （见 data/freeze.js 的 pendingOut）。语义：
+ *     实际库存 = 基准 + 已提单出入库净额      ← 真正离开仓库的货
+ *     冻结占用 = 未提单出库 + 待取货未出库    ← 已谈定但还没走完手续的货
+ *     可用库存 = 实际库存 − 冻结占用          ← 可自由承诺给下一个客户的量
+ *   待取货（shipped !== true）本来就不进 list，天然不参与；差额单 affectsStock===false 亦天然排除。
+ *   ⚠️ 只影响「实际库存」的展示口径，不改任何一条记录的内容，随时可回退。
  */
 (function () {
   'use strict';
@@ -20,6 +29,17 @@
   function norm(name) {
     var m = Config.NAME_MAP || {};
     return m[name] || name;
+  }
+
+  /** 该记录是否计入「实际库存」口径（2026-09-28 新增，全站唯一判据）。
+      排除两类：
+        ① affectsStock !== true —— 旧快照记录 / 先借后还差额单（已由原借出单扣过）
+        ② 未提弹出库单（type 非 in 且 status === "pending"）—— 改为冻结占用，不扣实际库存
+      入库单没有 status 概念，永不被 ② 命中。 */
+  function countsAsStock(r) {
+    if (!r || r.affectsStock !== true) return false;
+    if ((r.type || "out") !== "in" && r.status === "pending") return false;
+    return true;
   }
 
   /** 库存预计算索引：name → 按时序排序的出入库事件 + 前缀和。
@@ -60,7 +80,7 @@
       idx[name] = { inv: Config.INVENTORY[name] || 0, events: [] };
     });
     (State.list || []).forEach(function (r) {
-      if (r.affectsStock !== true) return; // 旧记录已含在 INVENTORY 快照，不重复计算
+      if (!countsAsStock(r)) return; // 旧快照 / 差额单 / 未提单出库单：均不计入实际库存
       (r.items || []).forEach(function (it) {
         var name = norm(it.name);
         if (!idx[name]) idx[name] = { inv: Config.INVENTORY[name] || 0, events: [] };
@@ -95,7 +115,7 @@
     if (list) { // 即时计算（显式 list：真实出入库记录 + 盘点校准事件）
       var init = Config.INVENTORY[name] || 0, inQty = 0, outQty = 0;
       list.forEach(function (r) {
-        if (r.affectsStock !== true) return;
+        if (!countsAsStock(r)) return;
         (r.items || []).forEach(function (it) {
           if (norm(it.name) !== name) return;
           var q = Number(it.qty) || 0;
@@ -149,7 +169,7 @@
     return Config.PRODUCTS.map(function (name) {
       var inQty = 0, outQty = 0;
       (list || State.list).forEach(function (r) {
-        if (r.affectsStock !== true) return;
+        if (!countsAsStock(r)) return;
         (r.items || []).forEach(function (it) {
           if (norm(it.name) !== name) return;
           var q = Number(it.qty) || 0;
@@ -182,7 +202,7 @@
       });
     }
     (list || State.list).forEach(function (r) {
-      if (r.affectsStock !== true) return;
+      if (!countsAsStock(r)) return;
       var t = String(r.time || "").slice(0, 10);
       var row = null;
       for (var j = 0; j < out.length; j++) {
