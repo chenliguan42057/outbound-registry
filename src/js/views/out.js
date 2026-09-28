@@ -605,6 +605,10 @@
     if (!wasEditing) {
       payload.status = "pending";      // 新建出库记录默认「未提单」；编辑不携带 → 合并保留原值
       payload.orderNo = genOrderNo();   // 出库单自动编号（纯追加字段）
+      // 2026-09-28：新单默认打「冻结占用」标记 —— 未提单期间只占住库存、不扣实际库存
+      // （见 data/freeze.js）。标记「已提单」后库存才真正扣减。
+      // 历史旧单没有这个标记 → 不会被冻结（主理人要求「不翻旧账」）。
+      payload.freezeStock = true;
     }
     var rec;
     if (editingId) {

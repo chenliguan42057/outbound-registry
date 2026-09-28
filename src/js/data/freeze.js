@@ -1,17 +1,23 @@
 /**
- * freeze.js — 「冻结占用 / 可用库存」只读口径（2026-09-26 建立，2026-09-28 扩展）
+ * freeze.js — 「冻结占用 / 可用库存」只读口径（2026-09-26 建立，2026-09-28 定稿）
  *
- * 冻结来源（两路，2026-09-28 主理人要求合并）：
+ * 冻结来源（两路）：
  *   ① 待取货：未出库（shipped !== true）的单据占用 → 客户已提单但货还没拿走
- *   ② 未提单出库：status === "pending" 的出库单占用 → 货已谈定但提单还没走完
+ *   ② 在途出库：显式标记 freezeStock === true 的出库单占用
+ *        · 普通未提弹出库单 → 冻结全额
+ *        · 先借后还借出中（borrowed && borrowDone!==true）→ 只冻结【尚未归还的剩余量】
  * 可用库存 = 实际库存 − 冻结量   ← 虚拟参考数，不写库
  *
- * 2026-09-28 口径升级（主理人定稿）：
- *   未提单出库单从此**不再直接扣减实际库存**，改为计入冻结占用。
- *   → 实际库存 = 基准 + Σ(已提单出入库净额)：Stock.getStock 已按新口径实现，
- *     未提单出库单（status:pending 且 affectsStock===true）被排除在扣减之外。
- *   → 「先借后还」天然吻合：借出即冻结；归还生成 type:in 入库加回；
- *     未还完的差额单 affectsStock===false（已由原借出单扣过）→ 本模块必须排除，否则重复冻结。
+ * 2026-09-28 主理人定稿（重要）：
+ *   **只冻结「活单」，不翻历史账。** 2026-09-23 之前的 15 张历史未提单单据
+ *   虽然状态字段还挂着 pending，但货早已实际出去/已由差额单处理完毕
+ *   （borrowDone=true 的差额单 affectsStock=false 不参与库存）——一律视为真实库存，不冻结。
+ *   因此判据不能靠「status === pending」推断（历史单无法与活单区分），
+ *   改用**显式字段 freezeStock === true**：只有明确标记的活单才冻结。
+ *
+ * 字段写入时机（见 out.js / borrow.js）：
+ *   · out.js 新建出库单 → freezeStock: true
+ *   · borrow.js 转入先借后还 → freezeStock: true
  *
  * 铁律：本模块只读。绝不修改 State.pickups / State.list，绝不参与 buildStockIndex 的库存口径。
  */
@@ -38,34 +44,55 @@
     return (State.pickups || []).filter(function (p) { return p.shipped !== true && owns(p); });
   }
 
-  /** 占用中的未提单出库单（2026-09-28 新增）。
-      判定三条件，缺一不可：
-        · 出库单（type 非 "in"）
-        · status === "pending"（未提单）
-        · affectsStock === true（真正参与库存口径的单；差额单为 false，已由原借出单扣过，绝不能再冻结）
-      排除调拨出库的「已撤销」情形由 affectsStock 天然覆盖。 */
+  /** 在途出库单（2026-09-28 定稿）：**只认显式标记 freezeStock === true**。
+      排除：入库单 / 差额单（affectsStock!==true）/ 非当前仓。
+      历史未提单旧单没有这个标记 → 天然不冻结（主理人要求「不翻旧账」）。 */
   function pendingOut() {
     return (State.list || []).filter(function (r) {
       if (!r) return false;
       if ((r.type || "out") === "in") return false;
-      if (r.status !== "pending") return false;
-      if (r.affectsStock !== true) return false;
+      if (r.affectsStock !== true) return false;   // 差额单/旧快照：已扣过或不参与，绝不冻结
+      if (r.freezeStock !== true) return false;    // ★ 核心：必须是显式标记的活单
       return owns(r);
     });
   }
 
-  /** { name: 冻结数量 } —— 待取货 + 未提单出库 合并 */
+  /** 某在途出库单的**应冻结数量**（按货品计）。
+      先借后还借出中 → 只冻结剩余未还量（借出2还1剩1，只冻1）；
+      普通未提单出库单 → 冻结全额。 */
+  function frozenQtyOf(r, itemName) {
+    var it = (r.items || []).find(function (x) { return norm(x.name) === norm(itemName); });
+    if (!it) return 0;
+    var q = Number(it.qty) || 0;
+    if (q <= 0) return 0;
+    // 先借后还借出中：扣掉已归还部分
+    if (r.borrowed === true && r.borrowDone !== true) {
+      var ret = 0;
+      (r.borrowReturned || []).forEach(function (x) {
+        if (x && norm(x.name) === norm(itemName)) ret += (Number(x.qty) || 0);
+      });
+      q = Math.max(0, q - ret);
+    }
+    return q;
+  }
+
+  /** { name: 冻结数量 } —— 待取货 + 在途出库 合并 */
   function map() {
     var m = {};
-    function add(items, qtyOf) {
-      (items || []).forEach(function (it) {
+    pending().forEach(function (p) {
+      (p.items || []).forEach(function (it) {
         var name = norm(it.name);
-        var q = qtyOf(it);
+        var q = Number(it.qty) || 0;
         if (q > 0) m[name] = (m[name] || 0) + q;
       });
-    }
-    pending().forEach(function (p) { add(p.items, function (it) { return Number(it.qty) || 0; }); });
-    pendingOut().forEach(function (r) { add(r.items, function (it) { return Number(it.qty) || 0; }); });
+    });
+    pendingOut().forEach(function (r) {
+      (r.items || []).forEach(function (it) {
+        var name = norm(it.name);
+        var q = frozenQtyOf(r, name);
+        if (q > 0) m[name] = (m[name] || 0) + q;
+      });
+    });
     return m;
   }
 
@@ -88,13 +115,14 @@
       (p.items || []).forEach(function (it) { if (norm(it.name) === key) res.pickup += Number(it.qty) || 0; });
     });
     pendingOut().forEach(function (r) {
-      (r.items || []).forEach(function (it) { if (norm(it.name) === key) res.out += Number(it.qty) || 0; });
+      (r.items || []).forEach(function (it) { if (norm(it.name) === key) res.out += frozenQtyOf(r, key); });
     });
     return res;
   }
 
-  /** 某货品被哪些单据占用：[{id, picker, dept, qty, ts, src, confirmed}]
-      src: "pickup"（待取货未出库）｜"out"（未提单出库单） */
+  /** 某货品被哪些单据占用：[{id, picker, dept, qty, ts, src, confirmed, borrowed, returned}]
+      src: "pickup"（待取货未出库）｜"out"（在途出库单）
+      qty 为**实际冻结量**（先借后还只算剩余未还部分）。 */
   function detail(name) {
     var key = norm(name);
     var out = [];
@@ -115,11 +143,17 @@
     pendingOut().forEach(function (r) {
       (r.items || []).forEach(function (it) {
         if (norm(it.name) !== key) return;
+        var q = frozenQtyOf(r, key);
+        if (q <= 0) return;                       // 已全部归还 → 不再占用
+        var total = Number(it.qty) || 0;
         out.push({
           id: r.id,
           picker: r.picker || "-",
           dept: r.dept || "-",
-          qty: Number(it.qty) || 0,
+          qty: q,
+          total: total,
+          borrowed: r.borrowed === true && r.borrowDone !== true,
+          returned: Math.max(0, total - q),
           ts: Number(r._ts) || 0,
           src: "out",
           confirmed: false

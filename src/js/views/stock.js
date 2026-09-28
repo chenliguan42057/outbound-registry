@@ -160,7 +160,7 @@
       html += '<tr class="' + (over ? "freeze-over" : (low ? "low-stock" : (frozen ? "freeze-row" : ""))) + '" data-name="' + Util.esc(s.name) + '" title="双击或点📊查看出入库流水" style="cursor:pointer">' +
         '<td>' + Util.esc(s.name) + '</td>' +
         '<td class="stock-num num num-strong" data-name="' + Util.esc(s.name) + '">' + '<span class="stock-num-txt">' + s.stock + '</span></td>' +
-        '<td class="num fx-freeze' + (frozen ? " has-fx" : "") + '" data-name="' + Util.esc(s.name) + '" title="点一下看是哪几单待取货占用">' + (frozen ? '<span class="fx-neg">−' + frozen + '</span>' : '<span class="fx-none">—</span>') + '</td>' +
+        '<td class="num fx-freeze' + (frozen ? " has-fx" : "") + '" data-name="' + Util.esc(s.name) + '" title="点一下看是哪几单占用了">' + (frozen ? '<span class="fx-neg">−' + frozen + '</span>' : '<span class="fx-none">—</span>') + '</td>' +
         '<td class="num num-strong fx-avail' + (over ? " fx-bad" : (tight ? " fx-tight" : (avail < warn ? " fx-low" : " fx-ok"))) + '">' + avail + '</td>' +
         "<td class=\"num\">" + s.inQty + "</td>" +
         "<td class=\"num\">" + s.outQty + "</td>" +
@@ -176,7 +176,7 @@
   function freezeStateCell(low, over, tight) {
     if (over) return '<span class="tag danger-tag" title="可用库存为负：提单占用已超过实际库存">超预占</span>';
     if (low) return '<span class="tag danger-tag" title="库存低于该货品预警线">低库存</span>';
-    if (tight) return '<span class="tag warn-tag" title="实际库存够用，但扣掉待取货占用后低于预警线">偏低</span>';
+    if (tight) return '<span class="tag warn-tag" title="实际库存够用，但扣掉冻结占用后低于预警线">偏低</span>';
     return '<span class="tag ok-tag">正常</span>';
   }
 
@@ -212,10 +212,11 @@
       '</div>' +
       (overText ? '<div class="stock-low-banner fx-banner fx-banner-over" style="margin:0 0 12px">❗ <b>超预占：</b>' + overText + '<i>可用库存已为负，建议催客户取货或先补这批货</i></div>' : '') +
       (tightText ? '<div class="stock-low-banner fx-banner fx-banner-tight" style="margin:0 0 12px">⚠️ <b>预占后偏低：</b>' + tightText + '<i>现在够发，但取走后就会低于预警线</i></div>' : '') +
-      '<div class="hint fx-note">❄️ 「冻结占用」= <b>未提单出库单</b> + <b>待取货未出库</b>的数量之和。' +
+      '<div class="hint fx-note">❄️ 「冻结占用」= <b>未提单出库单</b>（新单） + <b>待取货未出库</b> 的数量之和。' +
       '未提单的货还没真正出仓，所以<b>不动实际库存</b>，只先占住；' +
       '「可用库存」= 实际库存 − 冻结占用，代表还能承诺给下一个客户的量。' +
-      '点「确认出库」或把出库单标记「已提单」，对应冻结即释放、转为实际扣减。</div>';
+      '点「确认出库」或把出库单标记「已提单」，对应冻结即释放、转为实际扣减。' +
+      '<br><b>只冻结活单：</b>2026-09-28 之后新登记的单才纳入冻结；历史旧单按实际库存照算，不翻旧账。</div>';
   }
 
   /** 点冻结数字 → 弹窗列出占用的单据明细（2026-09-28：区分「未提单出库」与「待取货」两路来源） */
@@ -317,9 +318,9 @@
         '<td>' + (i + 1) + '</td>' +
         '<td>' + Util.esc(s.name) + '</td>' +
         '<td class="stock-num num' + (low ? " danger-text" : "") + '" data-name="' + Util.esc(s.name) + '">' + '<span class="stock-num-txt">' + s.stock + '</span></td>' +
-        '<td class="num fx-freeze' + (frozen ? " has-fx" : "") + '" data-name="' + Util.esc(s.name) + '" title="点一下看是哪几单待取货占用">' + (frozen ? '<span class="fx-neg">−' + frozen + '</span>' : '<span class="fx-none">—</span>') + '</td>' +
+        '<td class="num fx-freeze' + (frozen ? " has-fx" : "") + '" data-name="' + Util.esc(s.name) + '" title="点一下看是哪几单占用了">' + (frozen ? '<span class="fx-neg">−' + frozen + '</span>' : '<span class="fx-none">—</span>') + '</td>' +
         '<td class="num num-strong fx-avail' + (avail < 0 ? " fx-bad" : (avail < warn && s.stock >= warn ? " fx-tight" : (avail < warn ? " fx-low" : " fx-ok"))) + '">' + avail + '</td>' +
-        '<td>' + (avail < 0 ? '<span class="tag danger-tag" title="可用库存为负：提单占用已超过实际库存">超预占</span>' : (low ? '<span class="tag danger-tag" title="库存低于该货品预警线">低库存</span>' : (avail < warn ? '<span class="tag warn-tag" title="扣掉待取货占用后低于预警线">偏低</span>' : '<span class="tag ok-tag">正常</span>'))) + '</td>' +
+        '<td>' + (avail < 0 ? '<span class="tag danger-tag" title="可用库存为负：提单占用已超过实际库存">超预占</span>' : (low ? '<span class="tag danger-tag" title="库存低于该货品预警线">低库存</span>' : (avail < warn ? '<span class="tag warn-tag" title="扣掉占用后低于预警线">偏低</span>' : '<span class="tag ok-tag">正常</span>'))) + '</td>' +
         '<td><button type="button" class="btn ghost sm flow-btn fx-act" data-name="' + Util.esc(s.name) + '" title="查看出入库流水">📊 流水</button></td>' +
       '</tr>';
     });
@@ -440,7 +441,7 @@
       // ② 点「当前库存」数字 → 弹窗（兼容旧习惯）
       var el = e.target.closest(".stock-num");
       if (el && el.getAttribute("data-name")) { showHistory(el.getAttribute("data-name")); return; }
-      // ③ 点「冻结占用」数字 → 弹出是哪几单待取货占用
+      // ③ 点「冻结占用」数字 → 弹出是哪几单占用（未提单出库单 / 待取货未出库）
       var fx = e.target.closest(".fx-freeze.has-fx");
       if (fx && fx.getAttribute("data-name")) { e.stopPropagation(); showFreezeDetail(fx.getAttribute("data-name")); }
     });

@@ -297,7 +297,10 @@
         UI.Modal.hide();
         var fail = 0;
         for (var i = 0; i < ids.length; i++) {
-          var rec = Records.update(ids[i], { borrowed: true });
+          // 2026-09-28：转入先借后还 → 打「冻结占用」标记。
+          // 借出中只占住剩余未还量（见 data/freeze.js frozenQtyOf），
+          // 归还后剩余量减少、冻结随之递减；全部还清后冻结归零。
+          var rec = Records.update(ids[i], { borrowed: true, freezeStock: true });
           if (rec) {
             // 借出备注非空时：附加到原 note（保留原备注，不覆盖；空则用「借出备注：xxx」起头）
             if (borrowNote) {
@@ -441,7 +444,9 @@
     else window.App.Views.app.setSyncStatus("已同步", false);
   }
 
-  /** 退回出库记录：仅未归还的借出可退回（有归还会打乱库存账目，禁止）。退回后库存扣减保留、未提单状态照旧。 */
+  /** 退回出库记录：仅未归还的借出可退回（有归还会打乱库存账目，禁止）。
+      退回后库存扣减保留、未提单状态照旧 —— 即回到「普通未提单出库单」形态，
+      因此要补回 freezeStock:true（2026-09-28）让它继续按未提单规则冻结占用。 */
   async function doUnborrow(id) {
     var r = State.list.find(function (x) { return x.id === id; });
     if (!r) return;
@@ -451,7 +456,7 @@
     }
     var ok = await UI.confirmDialog("将这笔借出退回出库记录页？\n退回后恢复显示为出库记录（库存扣减保留，不另行改动）。", "退回出库记录");
     if (!ok) return;
-    var updated = Records.update(id, { borrowed: false, borrowReturned: [], borrowDone: false });
+    var updated = Records.update(id, { borrowed: false, borrowReturned: [], borrowDone: false, freezeStock: r.affectsStock === true });
     if (!updated) { Util.toast("记录不存在", true); return; }
     renderList();
     Util.toast("已退回出库记录页");

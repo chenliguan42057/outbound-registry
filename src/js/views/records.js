@@ -360,7 +360,13 @@
       return '<span class="status-pill static ' + st + '"><span class="dot"></span>' + label + '</span>';
     }
 
-    /** 点击状态徽标：确认后切换 pending↔submitted，本地保存 + 推送云端 */
+    /** 点击状态徽标：确认后切换 pending↔submitted，本地保存 + 推送云端
+        2026-09-28：标记「已提单」时同步清掉 freezeStock 冻结标记 ——
+        货真正出仓了，从「冻结占用」转为「实际扣减」；
+        反切回「未提单」时重新打上 freezeStock（恢复冻结语义）。
+        ⚠️ 只对本来就有 freezeStock 标记的「新单」生效（r.freezeStock === true）。
+        历史旧单（无此字段）切换状态不补标记 —— 主理人要求「不翻旧账」，
+        否则一改状态就会凭空多出一笔冻结。 */
     async function toggleStatus(id) {
       var r = State.list.find(function (x) { return x.id === id; });
       if (!r) return;
@@ -369,7 +375,14 @@
       var label = next === "pending" ? "未提单" : "已提单";
       var ok = await UI.confirmDialog("标记为" + label + "？", "更新状态");
       if (!ok) return;
-      var rec = Records.update(id, { status: next });
+      var patch = { status: next };
+      // 已提单 → 释放冻结（实际扣减）；未提单 → 重新冻结（只占不扣）
+      // 仅限「本身就参与冻结体系」的单（freezeStock 字段已存在才跟随切换），
+      // 历史旧单（无此字段）不补标记 —— 保证「不翻旧账」。
+      if (r.affectsStock === true && typeof r.freezeStock === "boolean") {
+        patch.freezeStock = (next === "pending");
+      }
+      var rec = Records.update(id, patch);
       if (!rec) { Util.toast("记录不存在", true); return; }
       // 先借后还差额单提交后 → 原借出单自动结清
       if (next === "submitted" && Records.tryCloseBorrowFromDiff(rec)) {
