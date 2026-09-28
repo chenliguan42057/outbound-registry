@@ -647,7 +647,7 @@
       '</div>';
     }).join("");
     var body =
-      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量。保存后<b>只记一条盘点差额</b>（盘盈 +N / 盘亏 -N）并入库存流水，<b>不改动库存基准，也不回溯修改已有出入库流水的「当时库存」</b>；差异同时推送钉钉群（不进金山台账）。</div>' +
+      '<div class="hint" style="margin-bottom:10px">盘点模式：把「实存数」改成实际清点数量。保存后<b>只记一条盘点差额</b>（盘盈 +N / 盘亏 -N）并入库存流水，<b>不改动库存基准，也不回溯修改已有出入库流水的「当时库存」</b>；差异<b>只记流水、不推钉钉</b>、不进金山台账。</div>' +
       '<div style="max-height:46vh;overflow:auto">' + rows + '</div>' +
       '<div class="modal-actions" style="margin-top:14px">' +
       '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
@@ -704,7 +704,7 @@
               '<th style="padding:6px 8px;text-align:right">差异</th>' +
             '</tr></thead><tbody>' + diffRows + '</tbody></table></div>' +
           '<div class="c-muted fs-sm" style="margin-top:10px">' +
-            '确认后记录一条盘点差额进库存流水（不改库存基准、不动已有流水的当时库存），同时推送钉钉群（不进金山台账）。' +
+            '确认后记录一条盘点差额进库存流水（不改库存基准、不动已有流水的当时库存），<b>不再推送钉钉群</b>（也不进金山台账）。' +
             '<br/>保存后可在「库存流水」里点 <b>撤销</b> 撤回本次盘点，撤销记录进回收站可还原。' +
           '</div>',
           "盘点确认 · 逐项核对", { okText: "确认盘点", width: "560px" });
@@ -737,19 +737,20 @@
               if (Cloud && Cloud.pushStocktake) { Cloud.pushStocktake(stk); }
             }
           } catch (e) {}
-          // 盘点差异推送钉钉：写 data/notify/stocktake-*.json 由 Actions「DingTalk Remind」消费。
-          // 异步 fire-and-forget，推送失败静默，绝不影响盘点本身结果。
-          try {
-            if (Cloud && Cloud.pushNotifyFile) {
-              Cloud.pushNotifyFile("stocktake", {
-                type: "stocktake",
-                time: stkTime,
-                items: affected
-              }).then(function () {
-                Util.toast("盘点差异已推送钉钉群");
-              }).catch(function () {});
-            }
-          } catch (e) {}
+          // 2026-09-28（主理人要求）：盘点差异「不再推送钉钉群」。
+          // 盘点差额本身照常记录进库存流水（可撤销、可追溯），只是不再发群通知。
+          // 恢复方式：取消下方注释块即可（notify 文件 → Actions「DingTalk Remind」消费）。
+          // try {
+          //   if (Cloud && Cloud.pushNotifyFile) {
+          //     Cloud.pushNotifyFile("stocktake", {
+          //       type: "stocktake",
+          //       time: stkTime,
+          //       items: affected
+          //     }).then(function () {
+          //       Util.toast("盘点差异已推送钉钉群");
+          //     }).catch(function () {});
+          //   }
+          // } catch (e) {}
           refresh();
           try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
           try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
@@ -784,16 +785,16 @@
       refresh();
       try { if (window.App.Views.dashboard && window.App.Views.dashboard.refresh) window.App.Views.dashboard.refresh(); } catch (e) {}
       try { if (window.App.Views.records && window.App.Views.records.refresh) window.App.Views.records.refresh(); } catch (e) {}
-      // 撤销也留痕：钉钉群同步说明，避免别人看到库存变了却不知道为什么
-      try {
-        if (Cloud && Cloud.pushNotifyFile) {
-          Cloud.pushNotifyFile("stocktake", {
-            type: "stocktake-undo",
-            time: (Util.nowLocal ? Util.nowLocal() : new Date().toISOString()),
-            items: stk.items || []
-          }).catch(function () {});
-        }
-      } catch (e) {}
+      // 2026-09-28（主理人要求）：撤销盘点也不再推送钉钉群（与盘点推送同批关闭）。
+      // try {
+      //   if (Cloud && Cloud.pushNotifyFile) {
+      //     Cloud.pushNotifyFile("stocktake", {
+      //       type: "stocktake-undo",
+      //       time: (Util.nowLocal ? Util.nowLocal() : new Date().toISOString()),
+      //       items: stk.items || []
+      //     }).catch(function () {});
+      //   }
+      // } catch (e) {}
     } catch (err) {
       Util.toast("撤销失败：" + ((err && err.message) || err), true);
     }

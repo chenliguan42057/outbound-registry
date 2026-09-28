@@ -5,9 +5,10 @@
 由 GitHub Actions「DingTalk Remind」在 data/notify/*.json 变更时触发。
 消息标题/正文均含关键词「出入库登记」，满足钉钉自定义机器人安全设置（防 errcode 310000）。
 
-支持三种载荷（按 data.type 区分）：
+支持四种载荷（按 data.type 区分）：
   remind          : 勾选订单提醒（orders 数组，紧凑摘要）
   pickup-confirm  : 待取货「确认提单」对比消息（pickup 对象，含登记时间与提单时间）
+  pickup-new      : 自动识别回填待取货的登记通知（pickup 对象，标题「新待取货登记」）
   stocktake       : 库存盘点校准结果（items 数组：name 货品 / book 账面 / actual 实存 / diff 差异）
 
 读取环境变量：
@@ -231,6 +232,30 @@ def build_order_lines(payload):
     return lines
 
 
+def build_pickup_new_markdown(payload):
+    """「自动识别」回填待取货时的登记通知（2026-09-28 新增）。
+    与 dingtalk_notify.build_pickup_new_markdown 的输出格式保持一致（标题/字段/货品明细同款），
+    区别只在数据来源：那个由 data/pickups/*.json 触发，这个由识别页写 data/notify/ 触发，
+    避免往真实待取货数据目录写脏数据。"""
+    p = payload.get("pickup") or {}
+    items = p.get("items") or []
+    if not items:
+        return None
+    fields = [
+        ("取货人", p.get("picker", "") or "-"),
+        ("部门/客户", p.get("dept", "") or "-"),
+        ("用途", p.get("purpose", "") or "-"),
+        ("预计取货时间", p.get("time", "") or "-"),
+    ]
+    md = "### 📦 出入库登记 · 新待取货登记"
+    md += "\n" + "\n".join("- **{}**：{}".format(k, v) for k, v in fields)
+    md += "\n\n**货品明细**：\n" + goods_lines_of(p)
+    note = str((p.get("note") or "")).strip()
+    if note:
+        md += "\n- **备注**：{}".format(note)
+    return md
+
+
 def build_pickup_confirm_markdown(payload):
     """「确认提单」对比消息：登记时间 vs 提单时间 + 间隔。返回 markdown 文本。"""
     p = payload.get("pickup") or {}
@@ -361,6 +386,7 @@ def main():
             payloads.append(data)
 
     pickup_confirm = []
+    pickup_news = []
     stocktakes = []
     out_copies = []
     for line in (FILES or "").splitlines():
@@ -376,12 +402,14 @@ def main():
             continue
         if data.get("type") == "pickup-confirm":
             pickup_confirm.append(data)
+        elif data.get("type") == "pickup-new":
+            pickup_news.append(data)
         elif data.get("type") == "stocktake":
             stocktakes.append(data)
         elif data.get("type") == "out-copy":
             out_copies.append(data)
 
-    if not payloads and not pickup_confirm and not stocktakes and not out_copies:
+    if not payloads and not pickup_confirm and not pickup_news and not stocktakes and not out_copies:
         print("没有可解析的提醒请求，跳过发送（不报错）")
         return 0
 
@@ -399,7 +427,20 @@ def main():
             print("订单提醒发送失败: {}".format(err), file=sys.stderr)
             return 1
 
-    # 2) 提单确认对比
+    # 2) 新待取货登记（自动识别回填，2026-09-28）
+    for pn in pickup_news:
+        text = build_pickup_new_markdown(pn)
+        if not text:
+            print("SKIP pickup-new：无货品明细")
+            continue
+        ok, err = send(text, title="出入库登记 · 新待取货登记")
+        if ok:
+            print("新待取货登记已发送")
+        else:
+            print("新待取货登记发送失败: {}".format(err), file=sys.stderr)
+            return 1
+
+    # 3) 提单确认对比
     for pc in pickup_confirm:
         text = build_pickup_confirm_markdown(pc)
         if not text:

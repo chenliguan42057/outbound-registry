@@ -660,6 +660,74 @@
     return data;
   }
 
+  /* ---------- 推送钉钉（2026-09-28 主理人要求） ----------
+
+     自动识别结果确认「填入表单」时，按目标类型补推一条钉钉通知：
+       待取货 → 📦 新待取货登记 / 出库 → 🔔 出库登记 / 入库 → 🔔 入库登记
+     出库与入库复用订单提醒链路（data|data-saidis/notify/*.json → Actions「DingTalk Remind」消费，
+     由 dingtalk_remind.py 的 build_order_lines 渲染）；
+     待取货走同工作流的 pickup-new 分支（build_pickup_new_markdown），标题与正式待取货登记一致。
+     之所以不经 data/pickups/ 真数据目录：那会伪造一条真实待取货记录进系统/库存/报表，绝不能碰。
+
+     双仓隔离：载荷带 warehouse=当前仓 id，pushRemind 内会再校验一次，绝不串仓。
+     边界：识别页只知道「单号 + 货品 + 数量」，不知道结算法人等信息，故只推这部分；
+           正式字段在表单里补齐后的登记动作，仍走原有 pushRecord → 登记通知，两条不冲突。
+     失败静默：推送失败绝不影响「填入表单」这一动作本身（本地照常回填、可继续提交）。 */
+  function pushRecognizedToDingTalk(data) {
+    try {
+      var Cloud = window.App.Cloud;
+      if (!Cloud || !Cloud.pushRemind || !Cloud.hasToken || !Cloud.hasToken()) return;
+      var wid = (Config.Sys && Config.Sys.current && Config.Sys.current().id) || "shenzhen";
+      var nowStr = Util.nowLocal ? Util.nowLocal() : new Date().toISOString();
+      var items = (data.items || []).map(function (it) { return { name: it.name, qty: it.qty }; });
+
+      /* 待取货：走 pickup-new 分支，字段与正式待取货登记一致（取货人/部门/用途/预计取货时间 + 货品明细） */
+      if (activeTarget === "pickups") {
+        Cloud.pushRemind({
+          _ts: Date.now(),
+          type: "pickup-new",
+          warehouse: wid,
+          pickup: {
+            id: "rcpk" + Date.now(),
+            picker: data.picker || "",
+            dept: data.dept || "",
+            purpose: "",
+            time: nowStr,
+            note: "自动识别回填",
+            items: items
+          }
+        }).then(function () {
+          Util.toast("📤 识别结果已推送钉钉群");
+        }).catch(function () {});
+        return;
+      }
+
+      /* 出库 / 入库：走订单提醒链路（build_order_lines 按 kind 渲染成「出库登记 / 入库登记」） */
+      var kind = (activeTarget === "in") ? "in" : "out";
+      var order = {
+        id: "rc" + Date.now(),
+        type: kind,
+        time: nowStr,
+        picker: data.picker || "",
+        applicant: data.applicant || "",
+        dept: data.dept || "",
+        purpose: data.purpose || "",
+        note: "自动识别回填",
+        status: "submitted",
+        items: items
+      };
+      Cloud.pushRemind({
+        _ts: Date.now(),
+        type: "remind",
+        kind: kind,
+        warehouse: wid,
+        orders: [order]
+      }).then(function () {
+        Util.toast("📤 识别结果已推送钉钉群");
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   function doFill() {
     if (!result) return;
     var data = collect();
@@ -680,6 +748,9 @@
         if (typeof Dd.flush === "function") Dd.flush();
       }
     } catch (e) {}
+
+    /* 2026-09-28：填入表单的同时推送钉钉群（出库/入库/调拨三种格式，跟随当前仓库） */
+    pushRecognizedToDingTalk(data);
 
     pending = { target: activeTarget, data: data };
     var mod = TARGETS[activeTarget].module;
