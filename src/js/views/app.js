@@ -279,6 +279,8 @@
   /** 切换系统：数据目录/本地缓存键/catalog 基准全部按新系统热切换（不整页刷新，避免退出登录） */
   function switchSystem(id) {
     if (!id || id === Config.Sys.current().id) return;
+    // 2026-09-28：不带 { bind:false } → 主动切换会**同时写入本浏览器绑定**，
+    // 下次在这套浏览器打开即默认落在这个仓（Edge=深圳细胞 / 极智=赛迪斯 的固定法）。
     Config.Sys.set(id);
     // 2026-09-11：切仓即作废在途同步。上一仓的 syncPull 若仍在 await，
     // 完成后必须丢弃结果，否则旧仓数据会写进新仓的列表和本地缓存（串仓幽灵）。
@@ -316,7 +318,7 @@
     } else {
       remount();
     }
-    Util.toast("已切换到「" + Config.Sys.name() + "」系统");
+    Util.toast("已切换到「" + Config.Sys.name() + "」系统 · 此浏览器已默认记住");
   }
 
   function renderNav() {

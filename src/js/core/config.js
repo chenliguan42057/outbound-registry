@@ -50,22 +50,55 @@
     saidis:   { id: "saidis", name: "赛迪斯",   dataDir: "data-saidis", lsPrefix: "outbound_saidis", entity: "赛迪斯法人", saidis: true }
   };
   var ACTIVE_SYSTEM_KEY = "outbound_active_system";
+  /* 2026-09-28 主理人定稿：**每个浏览器单独绑定一个默认仓库**。
+     场景：深圳细胞用 Edge 打开、赛迪斯用极智（Quark）打开，两边各自固定，
+     关掉重开不必再手动切（要换仓再手动切即可，切完即被记住）。
+     与已废弃的 outbound_active_system 的区别（那版只记「上次选的」，手机端会串仓）：
+     本 key 记的是「**这套浏览器****属于****哪个仓**」——语义是绑定而非历史，
+     且**只由用户主动切换时写入**，跟随启动的自动判定绝不写入。
+     这样手机端（从不主动切到赛迪斯）永远保持默认深圳细胞，不会重演 2026-09-24 的串仓事故。 */
+  var BOUND_SYSTEM_KEY = "outbound_bound_system";
   var Sys = {
-    /* 2026-09-24 主理人定稿：**每次打开一律默认「深圳细胞」**。
-       原因：手机端此前默认成了赛迪斯 —— 旧逻辑会把上次选的仓库记在 localStorage
-       （outbound_active_system），主理人在手机上点过一次赛迪斯后被永久记住，
-       之后每次打开都落在赛迪斯，与「主仓 = 深圳细胞」的预期不符，容易错仓登记。
-       现改为：**进程内会话记忆**（_sessionId），刷新/重开页面即回到深圳细胞；
-       在同一次使用过程中手动切到赛迪斯仍保持有效（避免点一下就被弹回去）。
-       localStorage 里的旧值不再读取，由 clearLegacyActiveSystem() 主动清除。 */
-    _sessionId: null,
+    /* 启动默认仓（2026-09-24 定稿，2026-09-28 保留）：无任何记忆时一律「深圳细胞」。
+       原因：主仓 = 深圳细胞，错仓登记的代价高。 */
+    _sessionId: null,   // 本次会话内的切换（内存，刷新即失效）
+    _bound: null,       // 本浏览器的绑定仓（localStorage，跨刷新持久）
+    /** 读取本浏览器的绑定（启动时由 Sys.restoreBound() 装载；读不到返回 null） */
+    _loadBound: function () {
+      try { return localStorage.getItem(BOUND_SYSTEM_KEY) || null; } catch (e) { return null; }
+    },
+    /** 启动时装载绑定记忆。**必须在 State.init 之前调用**。
+        只认 shenzhen / saidis 两个合法值，其余（历史脏数据）一律忽略并清掉。 */
+    restoreBound: function () {
+      var v = Sys._loadBound();
+      if (v === "shenzhen" || v === "saidis") { Sys._bound = v; }
+      else {
+        Sys._bound = null;
+        try { if (v) localStorage.removeItem(BOUND_SYSTEM_KEY); } catch (e) {}
+      }
+      return Sys._bound;
+    },
+    /** 当前生效仓：会话内切换（_sessionId）> 本浏览器绑定（_bound）> 默认深圳细胞 */
     current: function () {
-      if (Sys._sessionId === "saidis") return SYSTEM_DEFS.saidis;
+      var id = Sys._sessionId || Sys._bound;
+      if (id === "saidis") return SYSTEM_DEFS.saidis;
+      if (id === "shenzhen") return SYSTEM_DEFS.shenzhen;
       return SYSTEM_DEFS.shenzhen;
     },
-    /** 切换当前系统（仅本次会话有效，不写入 localStorage） */
-    set: function (id) {
-      Sys._sessionId = (id === "saidis") ? "saidis" : null;
+    /** 切换当前系统。
+        opts.bind !== false 时**同时写入本浏览器绑定**（用户主动切换 → 下次打开仍落在这个仓）；
+        URL 直达（?sys=…）走 {bind:false} —— 一条分享链接不应该永久改写接收者浏览器的默认仓。 */
+    set: function (id, opts) {
+      var v = (id === "saidis") ? "saidis" : "shenzhen";
+      Sys._sessionId = v;
+      if (opts && opts.bind === false) return;
+      Sys._bound = v;
+      try { localStorage.setItem(BOUND_SYSTEM_KEY, v); } catch (e) {}
+    },
+    /** 解除本浏览器的绑定（回到「无记忆 → 默认深圳细胞」；供调试/重置用） */
+    clearBound: function () {
+      Sys._bound = null;
+      try { localStorage.removeItem(BOUND_SYSTEM_KEY); } catch (e) {}
     },
     /** 云端数据目录根：data / data-saidis */
     root: function () { return Sys.current().dataDir; },
@@ -111,8 +144,11 @@
     /* 双仓库系统上下文（2026-09-04） */
     SYSTEM_DEFS: SYSTEM_DEFS,
     ACTIVE_SYSTEM_KEY: ACTIVE_SYSTEM_KEY,
+    BOUND_SYSTEM_KEY: BOUND_SYSTEM_KEY,
     Sys: Sys,
-    /** 2026-09-24：主动清除「上次选中的仓库」旧记忆（现已改为仅本会话记忆）。
+    /** 2026-09-24：主动清除「上次选中的仓库」旧记忆（旧 key 只记历史选择，手机端会串仓）。
+        2026-09-28 起仓库记忆改用 BOUND_SYSTEM_KEY（语义 = 浏览器绑定，只由主动切换写入），
+        与本函数清理的 ACTIVE_SYSTEM_KEY 是两个不同的 key，互不影响，可长期共存。
         每个会话执行一次，确保设备上残留的历史选择不再影响这次打开的结果。 */
     clearLegacyActiveSystem: function () {
       try {

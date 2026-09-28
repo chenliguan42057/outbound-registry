@@ -7,19 +7,28 @@
 
   function init() {
     try {
-      // 2026-09-24：清除历史「上次选中仓库」的本地记忆（现已改为仅本会话记忆）。
-      // 必须在下面 URL 直达 / State.init 之前执行，否则本机残留的 saidis 记忆仍会先被读走。
+      // 2026-09-24：清除历史「上次选中仓库」的本地记忆（旧 key 已被 2026-09-28 的
+      // 「浏览器绑定」机制取代）。必须在下面 URL 直达 / State.init 之前执行。
       try {
         if (window.App.Config && window.App.Config.clearLegacyActiveSystem) {
           window.App.Config.clearLegacyActiveSystem();
         }
       } catch (e) {}
+      // 2026-09-28：装载「本浏览器绑定仓」。Edge 绑深圳细胞、极智绑赛迪斯后，
+      // 各自打开即落在自己那个仓，关掉重开也不用再手切（要换仓手动切一次即被记住）。
+      // 必须在 State.init 之前，否则会先按默认深圳细胞读一遍本地缓存。
+      try {
+        if (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.restoreBound) {
+          window.App.Config.Sys.restoreBound();
+        }
+      } catch (e) {}
       // URL 直达系统（2026-09-05）：https://…/?sys=saidis（或 shenzhen）在启动前即锁定当前仓库，
-      // 供「两仓各自的登记二维码/分享链接」使用；缺省保持 localStorage 记忆的系统。必须早于 State.init。
+      // 供「两仓各自的登记二维码/分享链接」使用。**bind:false** —— 一条分享链接只对这次打开生效，
+      // 绝不改写接收者浏览器的绑定默认仓。必须早于 State.init。
       try {
         var sm = (location.search || "").match(/[?&]sys=(shenzhen|saidis)/);
         if (sm && window.App.Config && window.App.Config.Sys) {
-          window.App.Config.Sys.set(sm[1]);
+          window.App.Config.Sys.set(sm[1], { bind: false });
         }
       } catch (e) {}
       window.App.State.init();
