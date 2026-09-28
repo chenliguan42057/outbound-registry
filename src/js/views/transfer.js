@@ -377,8 +377,14 @@
         Util.toast("❌ " + dstName + " 入库记录上传失败（网络/令牌），本次未调拨，请重试", true);
         return;
       }
-      // ② 本仓（调出方）出库记录：本地入列（扣库存、立即可见）+ 云端推送（失败自动入队列稍后补推）
-      var outRec = Records.create({
+      // ② 本仓（调出方）出库记录。
+      // 2026-09-28 主理人要求重构：调拨是「要么整单成、要么整单不成」的原子操作。
+      // 原实现先 Records.create 落本地、再 pushRecord（失败入队列「稍后自动补推」）
+      // → 用户看到「调拨成功」但数据只在本地、云端一直没到，两边账对不上。
+      // 现在：先构造记录 → 直接推云端（fast：8s 超时 + 只试 1 次，不重试干等）
+      //   成功 → 才 Records.create 落本仓列表（此时两眼一致）
+      //   失败 → 回滚对方仓那笔入库，明确报错，【绝不落本地、绝不入队列】
+      var outParams = {
         time: now,
         type: "out",
         items: items.map(function (it) { return { name: it.name, qty: it.qty }; }),
@@ -392,15 +398,42 @@
         transferId: transferId,
         transferRole: "out",
         transferNo: transferNo
-      });
-      var pushed = await Cloud.pushRecord(outRec).catch(function () { return false; });
-      // 本仓「已上云」状态栏提示（与出库/入库页一致）
+      };
+      // 先造一条「不落列表」的临时记录用于上云（Records.create 会 unshift 进列表，故此处手工构造）
+      var outRec = Object.assign({
+        id: Util.genId(),
+        _ts: Util.serverNow ? Util.serverNow() : Date.now(),
+        photos: [],
+        warehouse: Config.Sys.current().id
+      }, outParams);
+      var pushed = await Cloud.pushRecord(outRec, { noQueue: true, fast: true }).catch(function () { return false; });
+      if (!pushed) {
+        // 回滚：对方仓那笔入库已写成功，本仓出库没成 → 必须删掉，否则「对方仓凭空 +N、本仓没扣」
+        var rolledBack = true;
+        try {
+          rolledBack = await Cloud.delRecordTo(inRec.id, dst.dataDir);
+        } catch (e) { rolledBack = false; }
+        var box0 = Util.$("tfResult");
+        if (box0) {
+          box0.innerHTML = '<div class="bg-err fs-md" style="padding:12px 16px;border:1px solid var(--pp-err);border-radius:12px;line-height:1.9">' +
+            '❌ 调拨失败：本仓出库记录未能上传云端（网络不通或令牌失效）。<br>' +
+            '· 已按你的要求【不落本地、不排队补推】，本次调拨视为未发生，本仓库存未变动。<br>' +
+            (rolledBack
+              ? '· 已自动撤销对方仓（' + Util.esc(dstName) + '）那笔入库，两边账均为原样。'
+              : '· ⚠️ 对方仓（' + Util.esc(dstName) + '）那笔入库撤销失败，请去云端手动删除记录 ' + Util.esc(inRec.id)) +
+            '<br>· 请检查网络后重新点「确认调拨」。' +
+            '</div>';
+        }
+        Util.toast("❌ 调拨失败（未落本地，请重试）", true);
+        var app0 = window.App.Views && window.App.Views.app;
+        if (app0 && app0.setSyncStatus) app0.setSyncStatus("调拨失败", true);
+        return;
+      }
+      // 云端已确认落库 → 此刻才真正落本仓列表（扣库存、立即可见），两眼一致
+      try { Records.commit(outRec); } catch (e) {}
       try {
         var app = window.App.Views && window.App.Views.app;
-        if (app && app.setSyncStatus) {
-          if (pushed) app.setSyncStatus("已同步 " + new Date().toLocaleString(), false);
-          else app.setSyncStatus("已存本地，云端稍后自动补推", true);
-        }
+        if (app && app.setSyncStatus) app.setSyncStatus("已同步 " + new Date().toLocaleString(), false);
       } catch (e) {}
 
       var box = Util.$("tfResult");

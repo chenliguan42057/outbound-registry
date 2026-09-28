@@ -60,6 +60,27 @@
     return rec;
   }
 
+  /** 把「已经成功上云」的记录落进本仓列表（2026-09-28 调拨原子化专用）。
+      与 create 的区别：id/_ts 由调用方给定（云端已按此 id 落库），不再重新生成；
+      不重复上云。用于「先推云端、成功才落本地」的顺序，保证本地与云端不会一多一少。 */
+  function commit(rec) {
+    if (!rec || !rec.id) return null;
+    var exist = State.list.find(function (r) { return r.id === rec.id; });
+    if (exist) return exist;                      // 幂等：已存在不重复插入
+    State.list.unshift(rec);
+    if (window.App.Stock) window.App.Stock.markDirty();
+    stampStock(rec);        // 先入列再打快照：getStock 已包含本笔影响
+    State.save();
+    try {
+      if (window.App.Audit) window.App.Audit.log("create", {
+        id: rec.id,
+        summary: ((rec.picker || "") + " " + (rec.purpose || "") + " " +
+          (rec.items || []).map(function (it) { return it.name + "×" + it.qty; }).join("、")).slice(0, 200)
+      });
+    } catch (e) {}
+    return rec;
+  }
+
   /** 更新记录：保留原 _ts（创建时间——库存时序推算依赖，不能刷新），
       改用 updatedAt 跟踪最后编辑时间。
       P1 修复：affectsStock 保留原值（仅 patch 显式指定时才覆盖），不再恒写 true。
@@ -357,6 +378,7 @@
   window.App = window.App || {};
   window.App.Records = {
     create: create,
+    commit: commit,
     update: update,
     remove: remove,
     restore: restore,

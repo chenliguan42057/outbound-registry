@@ -93,8 +93,10 @@
   async function apiJsonInner(url, opts) {
     // 原实现无超时：移动端弱网下 fetch 会一直挂着，同步按钮永远转圈。
     // AbortController 比 AbortSignal.timeout 兼容性更好（后者需要 Chrome 103+/Safari 16+）。
+    // 2026-09-28：允许调用方用 opts.timeoutMs 指定更短超时（调拨「快速失败」用 8s）。
+    var tmo = (opts && opts.timeoutMs) || API_TIMEOUT_MS;
     var ctrl = new AbortController();
-    var timer = setTimeout(function () { ctrl.abort(); }, API_TIMEOUT_MS);
+    var timer = setTimeout(function () { ctrl.abort(); }, tmo);
     var res;
     try {
       // 统一禁用浏览器 HTTP 缓存：Edge 的启发式缓存比 Chrome/Safari 激进，会让
@@ -104,7 +106,7 @@
     } catch (e) {
       clearTimeout(timer);
       if (e && e.name === "AbortError") {
-        throw new Error("timeout 请求超时（" + (API_TIMEOUT_MS / 1000) + " 秒未响应），请检查网络后重试");
+        throw new Error("timeout 请求超时（" + (tmo / 1000) + " 秒未响应），请检查网络后重试");
       }
       throw new Error("network 网络不可用：" + ((e && e.message) || e));
     }
@@ -398,20 +400,22 @@
     return slim;
   }
 
-  /** 推送单条记录（存在则更新，不存在则新增）；云端仅存 photoUrls，剥离 photos base64 */
-  async function push(rec) {
+  /** 推送单条记录（存在则更新，不存在则新增）；云端仅存 photoUrls，剥离 photos base64
+      2026-09-28：支持 opts.timeoutMs 短超时（调拨「快速失败」用） */
+  async function push(rec, opts) {
+    opts = opts || {};
+    var to = opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : null;
     var slim = slimRecord(rec);
     var path = Config.Sys.dir("records") + "/" + slim.id + ".json";
     var content = Util.b64enc(JSON.stringify(slim));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
-    try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) {}
+    try { var ej = await apiJson(getUrl, to); sha = ej.sha; } catch (e) {}
     var body = sha
       ? { message: "update " + slim.id, content: content, sha: sha, branch: Config.GH.branch }
       : { message: "add " + slim.id, content: content, branch: Config.GH.branch };
-    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path, {
-      method: "PUT", headers: ghHeaders(), body: JSON.stringify(body)
-    });
+    await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path,
+      Object.assign({ method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) }, to || {}));
   }
 
   /** 删除云端单条记录。返回 true=删除成功（或本就不存在，视为已删）；false=删除失败需重试。
@@ -1004,11 +1008,14 @@
     });
   }
 
-  /** 带退避重试的单条推送；成功返回 true，失败（含令牌失效）返回 false */
-  async function pushWithRetry(rec, attempts) {
+  /** 带退避重试的单条推送；成功返回 true，失败（含令牌失效）返回 false
+      2026-09-28：opts.fast = true 时「快速失败」——只试 1 次、用 8s 短超时。
+      调拨链路全程走 fast：宁可当场告诉用户"失败，请重试"，也不让用户干等 100 秒。 */
+  async function pushWithRetry(rec, attempts, opts) {
+    opts = opts || {};
     attempts = attempts || 3;
     for (var i = 0; i < attempts; i++) {
-      try { await push(rec); return true; }
+      try { await push(rec, opts); return true; }
       catch (e) {
         var msg = String((e && e.message) || "");
         if (/^401 |^403 /.test(msg)) break;           // 令牌失效：不再重试，交队列等下次
@@ -1018,8 +1025,11 @@
     return false;
   }
 
-  /** 优先立即推送单条记录；失败入持久化队列，待冲刷。返回 Promise<boolean> */
-  async function pushRecord(rec) {
+  /** 优先立即推送单条记录；失败入持久化队列，待冲刷。返回 Promise<boolean>
+      2026-09-28：新增 opts.noQueue —— 失败时【绝不入本地队列、绝不自动补推】，
+      调用方（调拨）据此当场回滚并报错。opts.fast 同时启用 8s 短超时 + 只试 1 次。 */
+  async function pushRecord(rec, opts) {
+    opts = opts || {};
     if (!rec || !rec.id) return false;
     // 双仓物理隔离守卫：记录必须归属当前仓库，否则拒绝写入（杜绝脏记录污染对方仓）
     var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
@@ -1027,9 +1037,14 @@
       console.warn("[cloud] 跳过跨仓记录写入:", rec.id, "记录仓=", rec.warehouse, "当前仓=", wid);
       return false;
     }
-    if (!hasToken()) { enqueue(rec.id); return false; }
-    var ok = await pushWithRetry(rec, 3);
+    var fastOpt = opts.fast ? { timeoutMs: 8000 } : null;
+    if (!hasToken()) {
+      if (opts.noQueue) return false;               // 调拨：无令牌直接失败，不入队列
+      enqueue(rec.id); return false;
+    }
+    var ok = await pushWithRetry(rec, opts.fast ? 1 : 3, fastOpt);
     if (ok) { dequeue(rec.id); return true; }
+    if (opts.noQueue) return false;                 // 调拨：失败即失败，绝不落本地队列
     enqueue(rec.id);
     return false;
   }
@@ -1057,19 +1072,54 @@
     var content = Util.b64enc(JSON.stringify(slim));
     var putUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path;
     var getUrl = putUrl + "?ref=" + Config.GH.branch;
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 2; i++) {
       try {
         var sha;
-        try { var ej = await apiJson(getUrl); sha = ej.sha; } catch (e) { sha = null; }
+        try { var ej = await apiJson(getUrl, { timeoutMs: 8000 }); sha = ej.sha; } catch (e) { sha = null; }
         var body = sha
           ? { message: "update " + slim.id, content: content, sha: sha, branch: Config.GH.branch }
           : { message: "add " + slim.id, content: content, branch: Config.GH.branch };
-        await apiJson(putUrl, { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+        await apiJson(putUrl, { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body), timeoutMs: 8000 });
         return true;
       } catch (e) {
         var msg = String((e && e.message) || "");
         if (/^401 |^403 /.test(msg)) return false;   // 令牌失效不再重试
-        if (i < 2) await new Promise(function (r) { setTimeout(r, 800 * Math.pow(2, i)); });
+        if (i < 1) await new Promise(function (r) { setTimeout(r, 800); });
+      }
+    }
+    return false;
+  }
+
+  /** 跨系统删除：把对方仓 records/{id}.json 从云端删掉。
+      2026-09-28 调拨原子化专用 —— 调拨时「先写对方仓入库、再写本仓出库」，
+      如果本仓出库失败（网络不通/令牌失效），对方仓那笔已经落地，
+      必须调用本方法把它撤掉，否则「对方仓凭空 +N、本仓没扣」两边账对不上。
+      幂等：文件本就不存在（404）也返回 true，调用方报「已恢复原样」是安全的。
+      失败当场返回 false，调用方据此提示用户手动清理，绝不静默吞掉。 */
+  async function delRecordTo(id, dataDir) {
+    if (!id) return false;
+    if (!hasToken()) return false;
+    var dir = String(dataDir || "").replace(/[\\/]+$/, "");
+    if (!dir) return false;
+    var path = dir + "/records/" + String(id) + ".json";
+    var url = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path;
+    var getUrl = url + "?ref=" + Config.GH.branch;
+    for (var i = 0; i < 2; i++) {
+      try {
+        var sha;
+        try { var ej = await apiJson(getUrl, { timeoutMs: 8000 }); sha = ej.sha; } catch (e) { return true; }  // 404：本就不存在，视为已删除
+        if (!sha) return true;
+        await apiJson(url, {
+          method: "DELETE",
+          headers: ghHeaders(),
+          timeoutMs: 8000,
+          body: JSON.stringify({ message: "rollback " + id, sha: sha, branch: Config.GH.branch })
+        });
+        return true;
+      } catch (e) {
+        var msg = String((e && e.message) || "");
+        if (/^401 |^403 /.test(msg)) return false;   // 令牌失效不再重试
+        if (i < 1) await new Promise(function (r) { setTimeout(r, 800); });
       }
     }
     return false;
@@ -1604,6 +1654,7 @@
     pushAllLocal: pushAllLocal,
     pushRecord: pushRecord,
     pushRecordTo: pushRecordTo,
+    delRecordTo: delRecordTo,
     putJsonFile: putJsonFile,
     fetchJsonFile: fetchJsonFile,
     fetchCatalogAt: fetchCatalogAt,
