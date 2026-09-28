@@ -95,7 +95,16 @@
     // 后返回的旧仓目录绝不能覆盖新仓内存基准 → 结果过期直接丢弃。
     var sysId = Config.Sys.current().id;
     var cloud = await fetchCloud();
-    if (Config.Sys.current().id !== sysId) return;   // 已切仓：本次目录过期，丢弃（新仓加载会接管）
+    if (Config.Sys.current().id !== sysId) {
+      // 已切仓：本次目录过期，丢弃并按新仓**立即重载**（最多 2 次，防抖动）。
+      // 2026-09-28 修复：原实现只 return —— 若此时 loaded 已被置 true，就**再也不会重新加载**，
+      // Config.INVENTORY 会永久停留在上一仓的期初基准（赛迪斯库存被深圳基准整体抬高的根因）。
+      loaded = false;
+      if ((load._retry || 0) < 2) { load._retry = (load._retry || 0) + 1; return load(); }
+      load._retry = 0;
+      return;
+    }
+    load._retry = 0;
     if (cloud && Array.isArray(cloud.products)) {
       catalog = cloud;
       applyToConfig(cloud);

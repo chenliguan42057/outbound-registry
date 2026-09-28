@@ -31,6 +31,18 @@
           window.App.Config.Sys.set(sm[1], { bind: false });
         }
       } catch (e) {}
+      // 2026-09-28 修复「赛迪斯库存被深圳期初基准整体抬高」（主理人报：库存全是错的）：
+      // catalog.js 的首次 load() 在 DOMContentLoaded 就自启，那一刻本浏览器绑定**还没装载**
+      // （restoreBound 在上面才刚跑），于是它按「默认深圳」捕获系统 id 并去拉深圳目录；
+      // 等目录返回时当前系统已是赛迪斯，防串仓守卫会丢弃这次加载，而 loaded 已被置 true
+      // → 之后任何 load() 都直接 return → Config.INVENTORY 永久停留在硬编码的**深圳**期初基准
+      // → 赛迪斯库存 = 深圳基准 + 赛迪斯流水，18/20 货品被整体抬高（精华液20支装 448→545）。
+      // 修法：绑定 / URL 确定之后，按当前真实系统强制重载一次目录基准（幂等，可安全重复）。
+      try {
+        if (window.App.Catalog && window.App.Catalog.reload) {
+          window.App.Catalog.reload().catch(function () {});
+        }
+      } catch (e) {}
       window.App.State.init();
       // 启动一致性修复（幂等，可安全重复执行）：
       //   1) 已提单的先借后还差额出库单 → 原借出单自动完成
