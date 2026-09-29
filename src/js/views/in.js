@@ -22,6 +22,9 @@
   var els = null;
   var submitting = false;   // 提交互斥锁：防止连点造成重复入库
   var optimisticNotified = false;   // 顺捷感一：乐观 UI 已弹过提示，后台推送就不再重复弹
+  /** 2026-09-29：本单是否来自「自动识别」回填 —— 提交成功后补推一条钉钉确认。取一次即清，
+      避免用户在识别填入后又手动登记时被误标成「自动识别」。值为 "in"（=本视图类型）。 */
+  var recognizeConfirm = null;
   var sourceVal = "";       // 当前选中的入库来源
   var editingTransfer = false; // 编辑的是调拨/回滚生成的入库单 → 来源由系统固定，禁止改
 
@@ -407,6 +410,9 @@
   }
 
   function pushToCloud(rec, msg) {
+    /* 2026-09-29：识别标记取一次即清 —— 无论本次推送成功与否都不再保留，
+       防止「识别填入后没提交 / 推送失败」时，下一次手动登记被误标成自动识别来源。 */
+    var rcKind = recognizeConfirm; recognizeConfirm = null;
     if (!Cloud.hasToken()) {
       // 令牌缺失＝只存在本机浏览器，换设备看不到、也不会进金山台账。必须醒目告警，否则用户会误以为已同步。
       Util.toast("⚠️ 仅存本机，未上传云端！请联系管理员检查同步令牌", true);
@@ -428,7 +434,11 @@
         Util.toast("已存本地，云端稍后自动补推", true);
         return;
       }
-      if (r.pushed) watchWpsReceipt(rec);
+      if (r.pushed) {
+        watchWpsReceipt(rec);
+        /* 2026-09-29 方案 A：来自自动识别的单，正式提交成功后再补一条钉钉确认（用最终实际数据） */
+        if (rcKind && Cloud.pushRecognizeConfirm) Cloud.pushRecognizeConfirm(rec, rcKind);
+      }
     }).catch(function (e) {
       window.App.Views.app.setSyncStatus("云端同步失败：" + e.message + "（已存本地，稍后重试）", true);
     });
@@ -497,6 +507,7 @@
        这里只处理「用途 ← 入库号」（粘贴格式第 1 行的 DB 号）。 */
     if (d.purpose != null && els.purpose) els.purpose.value = d.purpose;
     if (d.items && d.items.length) picker.setSelected(d.items);
+    recognizeConfirm = "in";   // 2026-09-29：标记本单来自自动识别，提交成功后补推钉钉确认
     saveDraft();
     renderPreview();                 // 入库有「库存变化预览」，回填后必须刷新
     var n = (d.items || []).length;

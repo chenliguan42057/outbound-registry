@@ -28,6 +28,9 @@
   /** 提交互斥锁：防止移动端双击 / 快速连点产生重复出库单（编号也会随之错乱） */
   var submitting = false;
   var optimisticNotified = false;   // 顺捷感一：乐观 UI 已弹过提示，后台推送就不再重复弹
+  /** 2026-09-29：本单是否来自「自动识别」回填 —— 提交成功后补推一条钉钉确认。取一次即清，
+      避免用户在识别填入后又手动登记时被误标成「自动识别」。值为 "out"（=本视图类型）。 */
+  var recognizeConfirm = null;
   /** 当前选中的用途值（chip 单选，互斥高亮） */
   var selectedPurpose = "";
   /** 出货仓库单位默认值：跟随当前系统（深圳系统=深圳细胞法人，赛迪斯系统=赛迪斯法人）。
@@ -721,6 +724,9 @@
   }
 
   function pushToCloud(rec, msg) {
+    /* 2026-09-29：识别标记取一次即清 —— 无论本次推送成功与否都不再保留，
+       防止「识别填入后没提交 / 推送失败」时，下一次手动登记被误标成自动识别来源。 */
+    var rcKind = recognizeConfirm; recognizeConfirm = null;
     if (!Cloud.hasToken()) {
       // 令牌缺失＝只存在本机浏览器，换设备看不到、也不会进金山台账。必须醒目告警，否则用户会误以为已同步。
       Util.toast("⚠️ 仅存本机，未上传云端！请联系管理员检查同步令牌", true);
@@ -744,7 +750,11 @@
         Util.toast("⚠️ 有 " + remain + " 条记录未同步到云端，已存本机队列；打开「管理 → 云同步 → 一键重推」即可补推", true);
         return;
       }
-      if (r.pushed) watchWpsReceipt(rec);
+      if (r.pushed) {
+        watchWpsReceipt(rec);
+        /* 2026-09-29 方案 A：来自自动识别的单，正式提交成功后再补一条钉钉确认（用最终实际数据） */
+        if (rcKind && Cloud.pushRecognizeConfirm) Cloud.pushRecognizeConfirm(rec, rcKind);
+      }
     }).catch(function (e) {
       renderRecentBox();   // 失败态：让大框里立刻出现 ⚠️ 未上传成功 + 重试按钮
       appStatus("云端同步失败：" + e.message + "（已存本机队列，可在「云同步」页一键重推）", true);
@@ -1172,6 +1182,7 @@
     if (d.purpose) setPurposeSelected(d.purpose);
     else if (!selectedPurpose) setPurposeSelected((Config.PURPOSE_PRESETS || [])[0] || "");
     if (d.items && d.items.length) picker.setSelected(d.items);
+    recognizeConfirm = "out";   // 2026-09-29：标记本单来自自动识别，提交成功后补推钉钉确认
     saveDraft();
     var n = (d.items || []).length;
     Util.toast("已填入" + (n ? " " + n + " 项货品" : "") + "，请核对后提交");

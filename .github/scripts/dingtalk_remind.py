@@ -10,6 +10,8 @@
   pickup-confirm  : 待取货「确认提单」对比消息（pickup 对象，含登记时间与提单时间）
   pickup-new      : 自动识别回填待取货的登记通知（pickup 对象，标题「新待取货登记」）
   stocktake       : 库存盘点校准结果（items 数组：name 货品 / book 账面 / actual 实存 / diff 差异）
+  out-copy        : 出库领取信息（落地页「复制并通知」，按 AT_MOBILES @ 人）
+  recognize-confirm:自动识别结果「正式提交」后的确认（2026-09-29 方案 A；kind=out/in/pickup + order 对象）
 
 读取环境变量：
   WEBHOOK  : 钉钉群机器人 Webhook 地址
@@ -403,6 +405,46 @@ def build_out_copy_markdown(payload):
     return "\n".join(lines)
 
 
+def build_recognize_confirm_markdown(payload):
+    """「自动识别」结果正式提交后的确认消息（2026-09-29 主理人方案 A）。
+
+    与识别页「填入表单即推」那条的区别：那条是预通知（数据还没定、也可能最终没提交），
+    这条是提交/登记成功后、用最终实际数据补的确认，标题带 🤖 一眼能看出来源。
+    载荷：{type:"recognize-confirm", kind:"out"|"in"|"pickup",
+          order:{id, picker, applicant, dept, purpose, entity, time, items:[{name,qty}], note}}
+    """
+    o = payload.get("order") or {}
+    items = o.get("items") or []
+    if not items:
+        return None
+    kind = str(payload.get("kind") or o.get("type") or "").strip()
+    kind_txt = {"out": "出库", "in": "入库", "pickup": "待取货"}.get(kind, "出入库")
+    rows = [
+        ("登记类型", kind_txt),
+        ("取货人" if kind == "pickup" else "领取人", o.get("picker")),
+        ("部门 / 客户", o.get("dept")),
+    ]
+    if str(o.get("applicant") or "").strip():
+        rows.append(("申请人", o.get("applicant")))
+    if str(o.get("purpose") or "").strip():
+        rows.append(("用途 / 项目", o.get("purpose")))
+    if str(o.get("entity") or "").strip():
+        rows.append(("结算法人单位", o.get("entity")))
+    rows.append(("提交时间", (o.get("time") or "").replace("T", " ")))
+
+    lines = ["### 🤖 出入库登记 · 自动识别已提交", ""]
+    lines += ["- **{}**：{}".format(k, v) for k, v in rows if str(v or "").strip()]
+    from ding_card import goods_block_of
+    lines += ["", goods_block_of(items, heading="登记货品")]
+    note = str(o.get("note") or "").strip()
+    if note:
+        lines += ["", "- **备注**：{}".format(note)]
+    if str(o.get("id") or "").strip():
+        lines += ["", "- **记录号**：{}".format(o.get("id"))]
+    lines += ["", "（来源：自动识别填入表单后正式提交）"]
+    return "\n".join(lines)
+
+
 def main():
     payloads = []
     for line in (FILES or "").splitlines():
@@ -421,6 +463,7 @@ def main():
     pickup_news = []
     stocktakes = []
     out_copies = []
+    recognize_confirms = []
     for line in (FILES or "").splitlines():
         line = line.strip()
         if not line:
@@ -440,8 +483,11 @@ def main():
             stocktakes.append(data)
         elif data.get("type") == "out-copy":
             out_copies.append(data)
+        elif data.get("type") == "recognize-confirm":
+            recognize_confirms.append(data)
 
-    if not payloads and not pickup_confirm and not pickup_news and not stocktakes and not out_copies:
+    if not payloads and not pickup_confirm and not pickup_news and not stocktakes and not out_copies \
+            and not recognize_confirms:
         print("没有可解析的提醒请求，跳过发送（不报错）")
         return 0
 
@@ -508,6 +554,19 @@ def main():
             print("出库领取信息已发送（@ {}）".format(", ".join(AT_MOBILES) if AT_MOBILES else "未配置"))
         else:
             print("出库领取信息发送失败: {}".format(err), file=sys.stderr)
+            return 1
+
+    # 5) 自动识别提交确认（2026-09-29 新增：识别结果正式提交后补推，带最终实际数据）
+    for rc in recognize_confirms:
+        text = build_recognize_confirm_markdown(rc)
+        if not text:
+            print("SKIP recognize-confirm：无货品明细")
+            continue
+        ok, err = send(text, title="出入库登记 · 自动识别已提交")
+        if ok:
+            print("自动识别提交确认已发送")
+        else:
+            print("自动识别提交确认发送失败: {}".format(err), file=sys.stderr)
             return 1
 
     return 0

@@ -27,6 +27,9 @@
   var selectedPurpose = "";
   var activeTab = "todo";   // "todo"（待取货）| "shipped"（已出库）
   var submitting = false;   // 提交互斥锁：防止连点造成重复登记
+  /** 2026-09-29：本单是否来自「自动识别」回填 —— 登记成功后补推一条钉钉确认。取一次即清，
+      避免用户在识别填入后又手动登记时被误标成「自动识别」。值为 "pickup"（=本视图类型）。 */
+  var recognizeConfirm = null;
 
   /** 登记时间戳（毫秒）。
       2026-09-13 去掉「预计取货时间」字段后新增：
@@ -355,9 +358,13 @@
     Store.addHistory(Config.PICKER_HISTORY_KEY, pickerVal);
     resetForm();
     renderList();
+    /* 2026-09-29：识别标记取一次即清（口径同出库/入库），防后续手动登记被误标 */
+    var rcKind = recognizeConfirm; recognizeConfirm = null;
     if (Cloud.hasToken()) {
       Cloud.pushPickup(pk).then(function () {
         window.App.Views.app.setSyncStatus("已同步", false);
+        /* 2026-09-29 方案 A：来自自动识别的单，正式登记成功后再补一条钉钉确认（用最终实际数据） */
+        if (rcKind && Cloud.pushRecognizeConfirm) Cloud.pushRecognizeConfirm(pk, rcKind);
       }).catch(function () {
         window.App.Views.app.setSyncStatus("云端同步失败（已存本机）", true);
       })["finally"](function () { setSubmitting(false); });
@@ -641,6 +648,7 @@
     if (d.purpose) setPurposeSelected(d.purpose);            // 内部已触发 saveDraft
     else if (!selectedPurpose) setPurposeSelected((Config.PURPOSE_PRESETS || [])[0] || "");   // 用途为必填，回填时先给预设首项
     if (d.items && d.items.length) picker.setSelected(d.items);
+    recognizeConfirm = "pickup";   // 2026-09-29：标记本单来自自动识别，登记成功后补推钉钉确认
     saveDraft();
     var n = (d.items || []).length;
     Util.toast("已填入" + (n ? " " + n + " 项货品" : "") + "，请核对后提交");

@@ -1367,6 +1367,41 @@
     return id;
   }
 
+  /** 2026-09-29 主理人方案 A：自动识别结果「正式提交」后的确认通知。
+      与识别页「填入表单即推」那条互不冲突 —— 那条是预通知（可能最终没提交、或提交前又改了数据），
+      这条是提交成功后、用最终实际数据补的确认，标题带「🤖 自动识别」一眼能看出来源。
+      落 data|data-saidis/notify/recognize-confirm-<id>.json，由 Actions「DingTalk Remind」渲染。
+      双仓隔离：载荷带 warehouse，pushNotifyFile 内再校验一次，绝不串仓。
+      失败静默：登记本身已由 pushRecord/pushPickup 落地并推送，这里失败绝不影响登记结果。 */
+  async function pushRecognizeConfirm(rec, kind) {
+    try {
+      if (!rec || !hasToken()) return false;
+      var wid = (Config.Sys && Config.Sys.current && Config.Sys.current().id) || "shenzhen";
+      await pushNotifyFile("recognize-confirm", {
+        type: "recognize-confirm",
+        warehouse: wid,
+        kind: kind || "out",
+        _ts: Date.now(),
+        order: {
+          id: rec.id || "",
+          type: rec.type || kind || "",
+          time: rec.time || (Util.nowLocal ? Util.nowLocal() : ""),
+          picker: rec.picker || "",
+          applicant: rec.applicant || "",
+          dept: rec.dept || "",
+          purpose: rec.purpose || "",
+          entity: rec.entity || "",
+          note: rec.note || "",
+          items: (rec.items || []).map(function (it) { return { name: it.name, qty: it.qty }; })
+        }
+      });
+      if (Util && Util.toast) Util.toast("📤 识别登记已推送钉钉群");
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** 推送盘点校准记录到 data/stocktakes/<id>.json（独立目录：不进金山台账、不触发登记通知）。
       幂等：先 GET sha 再 PUT；成功置 _pushed 标记并落盘；失败静默（syncPull 后由
       flushStocktakesPending 对 _local 未推送项补推）。 */
@@ -1670,6 +1705,7 @@
     getLocalTombIds: getLocalTombIds,
     pushRemind: pushRemind,
     pushNotifyFile: pushNotifyFile,
+    pushRecognizeConfirm: pushRecognizeConfirm,
     rollbackTransfer: rollbackTransfer,
     fullResync: fullResync,
     diagSyncStatus: diagSyncStatus,
