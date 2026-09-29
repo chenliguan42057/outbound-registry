@@ -1,0 +1,24 @@
+{
+  "type": "recognize-confirm",
+  "warehouse": "shenzhen",
+  "kind": "pickup",
+  "stage": "submitted",
+  "_ts": 1790654358185,
+  "_manual": "试验：用 12:13 的待取货记录 mum5ddihlcw9q 验证「自动识别已提交」消息格式",
+  "order": {
+    "id": "mum5ddihlcw9q",
+    "type": "pickup",
+    "time": "2026-09-29T12:13",
+    "picker": "JY202609290002",
+    "dept": "华大智造",
+    "purpose": "客户销售",
+    "items": [
+      { "name": "精华液 20支装", "qty": 6 },
+      { "name": "精华液 5支装", "qty": 9 },
+      { "name": "中号拎袋", "qty": 3 },
+      { "name": "中号礼盒", "qty": 3 },
+      { "name": "小号拎袋", "qty": 6 }
+    ],
+    "note": ""
+  }
+}
