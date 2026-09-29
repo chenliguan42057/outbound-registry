@@ -1800,7 +1800,7 @@ html .freeze-table:not(.stock-table) td:nth-child(9) .btn { margin-left: auto; m
    修法：明细行压缩行距、单元格上下 padding 收紧；操作列改为整块纵向居中成组。 */
 html .freeze-table:not(.stock-table) td { padding-top: 12px; padding-bottom: 12px; }
 html .freeze-table:not(.stock-table) .item-line { line-height: 1.45; }
-html .freeze-table:not(.stock-table) .item-line.multi-line { padding-bottom: 5px !important; margin-bottom: 5px !important; }
+html .freeze-table:not(.stock-table) .item-line.multi-line { padding-bottom: 6px !important; margin-bottom: 6px !important; }
 /* 操作列：按钮与状态徽章同一列内垂直居中成组，不再一上一下 */
 html .freeze-table:not(.stock-table) td:nth-child(8),
 html .freeze-table:not(.stock-table) td:nth-child(9) { vertical-align: middle !important; }
