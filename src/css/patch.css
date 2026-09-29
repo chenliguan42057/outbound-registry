@@ -1790,7 +1790,7 @@ html .freeze-table:not(.stock-table) th:nth-child(5),
 html .freeze-table:not(.stock-table) td:nth-child(5) { text-align: left; }
 /* 序号列：保持左对齐（不居中），仅给一点内距 */
 html .freeze-table:not(.stock-table) th:nth-child(1),
-html .freeze-table:not(.stock-table) td:nth-child(1) { text-align: left; padding-left: 12px; padding-right: 8px; }
+html .freeze-table:not(.stock-table) td:nth-child(1) { text-align: left; padding-left: 8px; padding-right: 8px; }
 /* 操作列：按钮块水平居中，不再左贴 */
 html .freeze-table:not(.stock-table) td:nth-child(9) .btn { margin-left: auto; margin-right: auto; }
 
@@ -1812,6 +1812,41 @@ html .freeze-table:not(.stock-table) td:nth-child(9) { vertical-align: middle !i
    使「货品名 → 数量 → 可用」在视觉上连成一组。 */
 html .freeze-table:not(.stock-table) th:nth-child(5),
 html .freeze-table:not(.stock-table) td:nth-child(5) { width: 20%; }
+
+/* 13b) 固定网格：让 9 列「对称」起来（2026-09-29 v3）
+   病灶（实测）：表格宽度从未用 CSS 定义，是浏览器按内容长短 auto 算出来的 ——
+   于是「取货人」内容短只有 100px，「操作」内容长就 123px，同一类短字段宽窄不一，
+   9 列节奏是 中-大-中-中-特大-小-大-中-中，毫无秩序，肉眼就是「忽宽忽窄、不齐」。
+   修法：桌面端启用 table-layout: fixed，改成严格的「左右两翼等宽 + 中轴对称」网格：
+        左翼 40%  |  中轴货品名 20%  |  右翼 40%
+     且语义成对的列强制等宽：取货人 = 部门/客户，出库状态 = 操作。
+   窄屏（手机）保持 auto —— 固定网格在窄屏会把列挤爆、丢失横向滚动，必须放行。 */
+@media (min-width: 1024px) {
+  html .freeze-table:not(.stock-table) { table-layout: fixed; width: 100%; }
+  /* —— 左翼：标识 / 时间 / 人 / 归属（合计 40%）—— */
+  html .freeze-table:not(.stock-table) th:nth-child(1),
+  html .freeze-table:not(.stock-table) td:nth-child(1) { width: 6%; }
+  html .freeze-table:not(.stock-table) th:nth-child(2),
+  html .freeze-table:not(.stock-table) td:nth-child(2) { width: 13%; }
+  html .freeze-table:not(.stock-table) th:nth-child(3),
+  html .freeze-table:not(.stock-table) td:nth-child(3) { width: 10.5%; }
+  html .freeze-table:not(.stock-table) th:nth-child(4),
+  html .freeze-table:not(.stock-table) td:nth-child(4) { width: 10.5%; }
+  /* —— 中轴：货品名称（20%）—— 见上方第 13 项 —— */
+  /* —— 右翼：数量 / 可用 / 状态 / 操作（合计 40%）—— */
+  html .freeze-table:not(.stock-table) th:nth-child(6),
+  html .freeze-table:not(.stock-table) td:nth-child(6) { width: 8%; }
+  html .freeze-table:not(.stock-table) th:nth-child(7),
+  html .freeze-table:not(.stock-table) td:nth-child(7) { width: 12%; }
+  html .freeze-table:not(.stock-table) th:nth-child(8),
+  html .freeze-table:not(.stock-table) td:nth-child(8) { width: 10%; }
+  html .freeze-table:not(.stock-table) th:nth-child(9),
+  html .freeze-table:not(.stock-table) td:nth-child(9) { width: 10%; }
+  /* fixed 布局下 cell 不再自适应内容，长文本要允许换行，禁止撑破格子 */
+  html .freeze-table:not(.stock-table) td { overflow-wrap: break-word; }
+  html .freeze-table:not(.stock-table) td:nth-child(3),
+  html .freeze-table:not(.stock-table) td:nth-child(4) { overflow-wrap: anywhere; }
+}
 
 /* 9) 统计卡文案防「孤字换行」（2026-09-29）：
       hint 文字较长时，中文会在最后挤出一个单字或「催一下」单独一行，四张卡高度不齐。
