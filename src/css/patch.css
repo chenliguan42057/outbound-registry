@@ -1761,6 +1761,26 @@ html[data-theme="dark"] .item-line b.fx-low { color: #F09595 !important; }
 html[data-theme="dark"] .item-line b.fx-ok { color: #7FCDB6 !important; }
 html[data-theme="dark"] .item-line b.fx-tight { color: #E8B36B !important; }
 
+/* 11) 表头/内容对齐统一（2026-09-29 本次协调性修复的关键项）
+   ------------------------------------------------------------------
+   病灶：.freeze-table:not(.stock-table) td:nth-child(n+2) 把 2~9 列内容全居中，
+   但表头 th 没有任何对齐声明 → 继承全局 .table th 的 text-align:left；
+   同时明细列又被单独改回左对齐。结果是「表头靠左、内容居中、货品名靠左」
+   三套规则同屏打架，同一列里表头与内容错开，这才是页面看着散的主因。
+   修法：列宽已定，改为「表头与内容同向」——
+     序号/时间/取货人/部门/数量/可用/状态：居中（短字段，居中更整齐）
+     货品名称：左对齐（长文本，居中会参差）—— 表头同步左对齐
+   只动对齐，不动任何文字、数字、列宽与业务逻辑。 */
+html .freeze-table:not(.stock-table) th,
+html .freeze-table:not(.stock-table) td { text-align: center; }
+html .freeze-table:not(.stock-table) th:nth-child(5),
+html .freeze-table:not(.stock-table) td:nth-child(5) { text-align: left; }
+/* 首列序号：居中但补一点左内距，避免贴边 */
+html .freeze-table:not(.stock-table) th:nth-child(1),
+html .freeze-table:not(.stock-table) td:nth-child(1) { text-align: center; padding-left: 10px; padding-right: 10px; }
+/* 操作列：按钮块水平居中，不再左贴 */
+html .freeze-table:not(.stock-table) td:nth-child(9) .btn { margin-left: auto; margin-right: auto; }
+
 /* 9) 统计卡文案防「孤字换行」（2026-09-29）：
       hint 文字较长时，中文会在最后挤出一个单字或「催一下」单独一行，四张卡高度不齐。
       text-wrap: pretty 让浏览器优化断行；同时给 hint 限定行数，保证四卡等高。 */
