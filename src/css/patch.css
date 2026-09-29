@@ -1678,3 +1678,85 @@ html[data-theme="dark"] .fl-name { color: #C8D3CE; }
 @media (prefers-reduced-motion: reduce) {
   .fl-bars i, .trend-bar { transition: none; }
 }
+
+/* ==========================================================================
+   覆盖层 v1.2 增量（2026-09-29）：待取货「冻结库存」表协调性修复
+   --------------------------------------------------------------------------
+   问题：.fx-* / .item-line / .fx-sub / .fx-act 这套冻结库存可视化样式只写在
+   patch.css，用的是写死的旧色值（#6E8079 / #8D9B96 / #A8B5B0 / #C0392B…），
+   完全没接入 --pp-* 令牌体系 —— 于是同一张表里，表头文字是「令牌色」，
+   明细里的「库存 74」小字却是另一套灰，红色 #C0392B 也与 --pp-err 不同源，
+   造成同一表格内视觉割裂。
+   本段只把颜色/边框/对齐接回令牌，不改任何文字、数字、DOM 或业务逻辑。
+   ========================================================================== */
+
+/* 1) 货品名 / 数量列：文字层级接令牌，去掉「表头深、正文浅」的两套灰 */
+html .freeze-table td:nth-child(5),
+html .freeze-table td:nth-child(6) { color: var(--pp-text-2) !important; }
+
+/* 2) 多行明细的分隔虚线：统一用一个淡令牌线，不再用 --border 旧变量 */
+html .item-line.multi-line {
+  border-bottom: 1px dashed var(--pp-line) !important;
+  padding-bottom: 7px !important;
+  margin-bottom: 7px !important;
+}
+html .item-line.multi-line:last-child { border-bottom: none !important; padding-bottom: 0 !important; margin-bottom: 0 !important; }
+html .item-line { line-height: 1.5; }
+
+/* 3) 「占用后可用」主数值 + 「库存 xx」小字：字号/色阶/对齐统一，不再一个左飘一个下坠 */
+html .item-line b { font-weight: 700 !important; font-variant-numeric: tabular-nums; }
+html .fx-sub {
+  display: block;
+  margin-top: 1px;
+  font-size: var(--pp-fs-cap);
+  color: var(--pp-faint) !important;
+  font-weight: 400;
+  letter-spacing: .01em;
+}
+/* 可用数四档：全部收口到 --pp-* 功能色，与全局「绿正常/黄预警/红异常」同源 */
+html .item-line b.fx-ok { color: var(--pp-ok) !important; }
+html .item-line b.fx-tight { color: var(--pp-warn) !important; }
+html .item-line b.fx-bad,
+html .item-line b.fx-low { color: var(--pp-err) !important; }
+html .fx-none { color: var(--pp-faint) !important; }
+
+/* 4) 超时行底色：与 .fx-banner-over 同源淡红，不再是第三套红 */
+html .freeze-table tr.freeze-row > td { background: rgba(255, 255, 255, .018) !important; }
+html .freeze-table tr.freeze-over > td { background: rgba(255, 34, 85, .07) !important; }
+
+/* 5) 操作列：按钮纵向居中 + 统一间距，消除「确认提单」与「删除」错位堆叠 */
+html .freeze-table td:last-child { text-align: center; white-space: normal; }
+html .freeze-table td:last-child .btn {
+  display: block;
+  width: 100%;
+  margin: 0 0 6px !important;
+}
+html .freeze-table td:last-child .btn:last-child { margin-bottom: 0 !important; }
+
+/* 6) 状态徽章在表格内垂直居中，不再贴着单元格顶边 */
+html .freeze-table .status-pill { vertical-align: middle; }
+
+/* 7) 冻结表首列序号：居中 + 弱化，不跟数据列抢注意力 */
+html .freeze-table:not(.stock-table) td:nth-child(1) { color: var(--pp-faint) !important; }
+
+/* 8) 行高统一：单元格中段对齐（原 vertical-align:top 导致文字全贴顶，
+      多行明细一长，同一行里各列基线就散了） */
+html .freeze-table td { vertical-align: middle !important; }
+
+/* 浅色下补充：源样式给这两列写死深灰，浅色主题会偏重 */
+html[data-theme="light"] .freeze-table td:nth-child(5),
+html[data-theme="light"] .freeze-table td:nth-child(6) { color: var(--pp-text-2) !important; }
+
+/* 9) 统计卡文案防「孤字换行」（2026-09-29）：
+      hint 文字较长时，中文会在最后挤出一个单字或「催一下」单独一行，四张卡高度不齐。
+      text-wrap: pretty 让浏览器优化断行；同时给 hint 限定行数，保证四卡等高。 */
+html .stat-card { justify-content: flex-start; }
+html .stat-label, html .stat-hint { text-wrap: pretty; }
+html .stat-hint {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 15em;
+  margin: 0 auto;
+}
