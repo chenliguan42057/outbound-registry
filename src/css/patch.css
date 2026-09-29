@@ -1747,6 +1747,20 @@ html .freeze-table td { vertical-align: middle !important; }
 html[data-theme="light"] .freeze-table td:nth-child(5),
 html[data-theme="light"] .freeze-table td:nth-child(6) { color: var(--pp-text-2) !important; }
 
+/* 10) 色阶收口（2026-09-29）：一列里「正常/偏紧/负数」三级原来饱和度差异过大，
+      尤其 -3 / -6 用的是高饱和红，和上面的绿撞得很扎眼。
+      这里把「异常」降为柔和红，「库存 xx」小字再压淡一级，让整列读起来是一条连续色阶。
+      底部小字统一「库存 xx」弱化色，不再随主数值一起变红发绿。 */
+html .item-line b.fx-bad,
+html .item-line b.fx-low { color: #D9534F !important; }
+html .item-line b.fx-ok { color: #3E8E76 !important; }
+html .item-line b.fx-tight { color: #C08A2E !important; }
+html .item-line .fx-sub { color: var(--pp-faint) !important; opacity: .88; }
+html[data-theme="dark"] .item-line b.fx-bad,
+html[data-theme="dark"] .item-line b.fx-low { color: #F09595 !important; }
+html[data-theme="dark"] .item-line b.fx-ok { color: #7FCDB6 !important; }
+html[data-theme="dark"] .item-line b.fx-tight { color: #E8B36B !important; }
+
 /* 9) 统计卡文案防「孤字换行」（2026-09-29）：
       hint 文字较长时，中文会在最后挤出一个单字或「催一下」单独一行，四张卡高度不齐。
       text-wrap: pretty 让浏览器优化断行；同时给 hint 限定行数，保证四卡等高。 */
