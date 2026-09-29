@@ -348,6 +348,8 @@
 
     setSubmitting(true);
     var pk = Pickups.create({
+      /* 2026-09-29：来源标记落进记录本身（口径同出库/入库），供后面「确认提单」时补推钉钉 */
+      fromRecognize: !!recognizeConfirm,
       picker: pickerVal,
       dept: dept,
       purpose: purpose,
@@ -552,6 +554,11 @@
         });
       } catch (e) {
         Util.toast("对比消息推送失败（可稍后重试）", true);
+      }
+      /* 2026-09-29：这条是自动识别来的单 → 提单确认完成后再补推一条「✅ 自动识别提单确认完成」，
+         与上面那条通用「提单对比」并存（识别单多一条闭环确认，非识别单不受影响）。失败静默。 */
+      if (updated.fromRecognize) {
+        try { await Cloud.pushRecognizeConfirm(updated, "pickup", "confirmed"); } catch (e2) {}
       }
     }
   }

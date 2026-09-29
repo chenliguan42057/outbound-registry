@@ -396,6 +396,11 @@
         Cloud.pushRecord(rec).then(function (ok) {
           window.App.Views.app.setSyncStatus(ok ? "已同步" : "云端同步失败（已入队，稍后自动补推）", !ok);
         });
+        /* 2026-09-29：自动识别来的出库单，标记「已提单」后再补推一条钉钉确认（闭环）。
+           只在 next === "submitted" 时推 —— 反切回「未提单」属于撤销，不该再发消息。 */
+        if (next === "submitted" && rec.fromRecognize && Cloud.pushRecognizeConfirm) {
+          try { Cloud.pushRecognizeConfirm(rec, "out", "confirmed"); } catch (e) {}
+        }
       }
     }
 
@@ -650,6 +655,10 @@
         for (var i = 0; i < updated.length; i++) {
           var okPush = await Cloud.pushRecord(updated[i]);
           if (!okPush) fail++;
+          /* 2026-09-29：批量标记「已提单」时，识别来源的单同样补推钉钉确认（与单条切换口径一致） */
+          if (next === "submitted" && updated[i].fromRecognize && Cloud.pushRecognizeConfirm) {
+            try { await Cloud.pushRecognizeConfirm(updated[i], "out", "confirmed"); } catch (e) {}
+          }
         }
         window.App.Views.app.setSyncStatus(
           fail ? (fail + " 条同步失败（已入队，稍后自动补推）") : "已同步", !!fail

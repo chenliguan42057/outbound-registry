@@ -594,6 +594,9 @@
       photos.setPhotos(photoList);
     }
     var payload = {
+      /* 2026-09-29：来源标记落进记录本身（不只存内存）—— 后面在「出库记录」页点「已提单」时
+         要靠它判断这条是不是自动识别来的，才能补推提单确认。跨设备同步也认这个字段。 */
+      fromRecognize: !!recognizeConfirm,
       time: time,
       picker: pickerVal,
       applicant: applicantVal,

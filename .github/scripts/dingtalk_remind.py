@@ -430,9 +430,35 @@ def build_recognize_confirm_markdown(payload):
         rows.append(("用途 / 项目", o.get("purpose")))
     if str(o.get("entity") or "").strip():
         rows.append(("结算法人单位", o.get("entity")))
-    rows.append(("提交时间", (o.get("time") or "").replace("T", " ")))
+    reg_time = (o.get("time") or "").replace("T", " ")
+    rows.append(("提交时间", reg_time))
 
-    lines = ["### 🤖 出入库登记 · 自动识别已提交", ""]
+    # 两阶段：submitted=识别提交后 / confirmed=提单确认完成后（2026-09-29 主理人要求闭环）
+    stage = str(payload.get("stage") or "submitted").strip()
+    title = "### 🤖 出入库登记 · 自动识别已提交"
+    if stage == "confirmed":
+        title = "### ✅ 出入库登记 · 自动识别提单确认完成"
+        conf_raw = str(o.get("confirmedAt") or payload.get("confirmedAt") or "").strip()
+        if conf_raw:
+            gap = ""
+            try:
+                from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+                _CST = _tz(_td(hours=8))
+
+                def _to_cst(dt):
+                    return dt.replace(tzinfo=_CST) if dt.tzinfo is None else dt.astimezone(_CST)
+
+                t0 = _to_cst(_dt.fromisoformat(reg_time.replace("Z", "+00:00").replace(" ", "T")))
+                t1 = _to_cst(_dt.fromisoformat(conf_raw.replace("Z", "+00:00").replace(" ", "T")))
+                if t1 > t0:
+                    secs = int((t1 - t0).total_seconds())
+                    h, m = divmod(secs // 60, 60)
+                    gap = " ｜间隔：{}".format("{} 小时 {} 分钟".format(h, m) if h else "{} 分钟".format(m))
+            except Exception:
+                gap = ""
+            rows.append(("确认时间", conf_raw.replace("T", " ")[:16] + gap))
+
+    lines = [title, ""]
     lines += ["- **{}**：{}".format(k, v) for k, v in rows if str(v or "").strip()]
     from ding_card import goods_block_of
     lines += ["", goods_block_of(items, heading="登记货品")]
@@ -441,7 +467,10 @@ def build_recognize_confirm_markdown(payload):
         lines += ["", "- **备注**：{}".format(note)]
     if str(o.get("id") or "").strip():
         lines += ["", "- **记录号**：{}".format(o.get("id"))]
-    lines += ["", "（来源：自动识别填入表单后正式提交）"]
+    if stage == "confirmed":
+        lines += ["", "（来源：自动识别登记，已完成提单确认）"]
+    else:
+        lines += ["", "（来源：自动识别填入表单后正式提交）"]
     return "\n".join(lines)
 
 
@@ -562,7 +591,9 @@ def main():
         if not text:
             print("SKIP recognize-confirm：无货品明细")
             continue
-        ok, err = send(text, title="出入库登记 · 自动识别已提交")
+        _title = ("出入库登记 · 自动识别提单确认完成" if rc.get("stage") == "confirmed"
+                  else "出入库登记 · 自动识别已提交")
+        ok, err = send(text, title=_title)
         if ok:
             print("自动识别提交确认已发送")
         else:

@@ -339,6 +339,8 @@
     var purpose = els.purpose.value.trim();
     var wasEditing = !!editingId;
     var payload = {
+      /* 2026-09-29：来源标记落进记录本身（口径同出库），供后续状态确认时补推钉钉 */
+      fromRecognize: !!recognizeConfirm,
       time: Util.nowLocal(),
       type: "in",
       items: items,

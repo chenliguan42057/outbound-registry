@@ -1373,14 +1373,17 @@
       落 data|data-saidis/notify/recognize-confirm-<id>.json，由 Actions「DingTalk Remind」渲染。
       双仓隔离：载荷带 warehouse，pushNotifyFile 内再校验一次，绝不串仓。
       失败静默：登记本身已由 pushRecord/pushPickup 落地并推送，这里失败绝不影响登记结果。 */
-  async function pushRecognizeConfirm(rec, kind) {
+  async function pushRecognizeConfirm(rec, kind, stage) {
     try {
       if (!rec || !hasToken()) return false;
       var wid = (Config.Sys && Config.Sys.current && Config.Sys.current().id) || "shenzhen";
+      var st = stage || "submitted";   // submitted=识别提交后 / confirmed=提单确认完成后
       await pushNotifyFile("recognize-confirm", {
         type: "recognize-confirm",
         warehouse: wid,
         kind: kind || "out",
+        stage: st,
+        confirmedAt: rec.confirmedAt || "",
         _ts: Date.now(),
         order: {
           id: rec.id || "",
@@ -1395,7 +1398,9 @@
           items: (rec.items || []).map(function (it) { return { name: it.name, qty: it.qty }; })
         }
       });
-      if (Util && Util.toast) Util.toast("📤 识别登记已推送钉钉群");
+      if (Util && Util.toast) {
+        Util.toast(st === "confirmed" ? "📤 提单确认已推送钉钉群" : "📤 识别登记已推送钉钉群");
+      }
       return true;
     } catch (e) {
       return false;
