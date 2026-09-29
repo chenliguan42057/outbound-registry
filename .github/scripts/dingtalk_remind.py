@@ -193,6 +193,8 @@ def build_order_blocks(payload):
                 head = "**#{} 借出单 · 部分归还**　{}".format(i, t)
             elif bstage == "closed":
                 head = "**#{} 借出单 · 已还清**　{}".format(i, t)
+            elif bstage == "unborrowed":
+                head = "**#{} 借出单 · 已退回出库**　{}".format(i, t)
             else:
                 head = "**#{} 借出单**　{}".format(i, t)
             fields += [

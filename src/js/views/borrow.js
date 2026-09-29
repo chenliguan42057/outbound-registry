@@ -492,6 +492,8 @@
     if (!Cloud.hasToken()) return;
     try { await Cloud.pushRecord(updated); window.App.Views.app.setSyncStatus("已同步", false); }
     catch (e) { window.App.Views.app.setSyncStatus("退回同步待补推", true); }
+    // 2026-09-29 主理人反馈：退回出库记录同样要留痕钉钉群，否则群里只看到「借出」看不到「撤销」。
+    try { await pushBorrowStage(updated, "unborrowed", true); } catch (e2) {}
   }
 
   /* ---------- 详情 / 同步 / tab ---------- */
