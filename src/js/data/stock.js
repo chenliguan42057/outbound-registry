@@ -36,15 +36,22 @@
     return m[name] || name;
   }
 
-  /** 该记录是否计入「实际库存」口径（2026-09-28 定稿，全站唯一判据）。
+  /** 该记录是否计入「实际库存」口径（2026-09-28 定稿 / 2026-09-29 加固，全站唯一判据）。
       排除两类：
         ① affectsStock !== true —— 旧快照记录 / 先借后还差额单（已由原借出单扣过）
         ② freezeStock === true —— 被冻结的在途活单（改为计入冻结占用，不扣实际库存）
       历史未提单旧单没有 freezeStock 标记 → 正常计入实际库存（不翻旧账）。
-      入库单天然不会被 ② 命中。 */
+
+      ★ 2026-09-29 加固（历史隔离）：② 的排除**只对 v2 先借后还单生效**
+        （borrowed===true 且 borrowEngine==="v2"）。
+        背景：2026-09-28 曾有 2 张历史借出单（mumb4tttgtabo / muknuun9xx2l1）被误打
+        freezeStock:true，它们按旧口径借出时【已扣库存】；若因 freezeStock 被排除，
+        库存会凭空回涨（虚增）。故规定：borrowed 且非 v2 → 不认 freezeStock，照常计入实际库存。
+        非借出的普通冻结活单（freezeStock:true 但非 borrowed）行为不变。 */
   function countsAsStock(r) {
     if (!r || r.affectsStock !== true) return false;
-    if (r.freezeStock === true) return false;
+    // 历史借出单（borrowed 但非 v2）→ 不认 freezeStock 排除，照常计入实际库存
+    if (r.freezeStock === true && !(r.borrowed === true && r.borrowEngine !== "v2")) return false;
     return true;
   }
 

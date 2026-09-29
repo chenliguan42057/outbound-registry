@@ -44,15 +44,23 @@
     return (State.pickups || []).filter(function (p) { return p.shipped !== true && owns(p); });
   }
 
-  /** 在途出库单（2026-09-28 定稿）：**只认显式标记 freezeStock === true**。
+  /** 在途出库单（2026-09-28 定稿 / 2026-09-29 加固）：**只认显式标记 freezeStock === true**。
       排除：入库单 / 差额单（affectsStock!==true）/ 非当前仓。
-      历史未提单旧单没有这个标记 → 天然不冻结（主理人要求「不翻旧账」）。 */
+      历史未提单旧单没有这个标记 → 天然不冻结（主理人要求「不翻旧账」）。
+
+      ★ 2026-09-29 加固（历史隔离）：先借后还单**必须带 borrowEngine === "v2"** 才纳入冻结体系。
+        背景：2026-09-28 曾对 mumb4tttgtabo / muknuun9xx2l1 两张历史单误打 freezeStock:true，
+        它们的借出【未扣库存】但按旧 doReturn 归还时会写入库单 → 会把库存凭空虚增。
+        现规定：无 borrowEngine 标记的 borrowed 单 = 历史单 → 冻结体系一律不认（既不算占用、
+        也不参与库存扣除，由历史口径自行处理），保证历史数据绝不串进新口径。 */
   function pendingOut() {
     return (State.list || []).filter(function (r) {
       if (!r) return false;
       if ((r.type || "out") === "in") return false;
       if (r.affectsStock !== true) return false;   // 差额单/旧快照：已扣过或不参与，绝不冻结
       if (r.freezeStock !== true) return false;    // ★ 核心：必须是显式标记的活单
+      // ★ 历史隔离：借出单必须有 v2 引擎标记；无标记的 borrowed 单视为历史单，不纳入冻结
+      if (r.borrowed === true && r.borrowEngine !== "v2") return false;
       return owns(r);
     });
   }
