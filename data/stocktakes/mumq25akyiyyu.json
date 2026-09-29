@@ -1,0 +1,1 @@
+{"id":"mumq25akyiyyu","_ts":1790689106252,"time":"2026-09-29T21:38","kind":"stocktake","warehouse":"shenzhen","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +6 / 盘亏 -0","_local":true,"items":[{"name":"精粹水 30ml","book":72,"actual":75,"diff":3},{"name":"精粹乳 80ml","book":60,"actual":63,"diff":3}]}
