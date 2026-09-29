@@ -187,7 +187,14 @@ def build_order_blocks(payload):
         items_all = o.get("items") or []
 
         if borrowed:
-            head = "**#{} 借出单**　{}".format(i, t)
+            # 2026-09-29 主理人方案 A：借用/归还自动推送，用 borrowStage 区分阶段
+            bstage = str(o.get("borrowStage") or "").strip()
+            if bstage == "returned":
+                head = "**#{} 借出单 · 部分归还**　{}".format(i, t)
+            elif bstage == "closed":
+                head = "**#{} 借出单 · 已还清**　{}".format(i, t)
+            else:
+                head = "**#{} 借出单**　{}".format(i, t)
             fields += [
                 ("领取人", o.get("picker") or "-"),
                 ("部门/客户", o.get("dept") or "-"),
@@ -529,8 +536,16 @@ def main():
         blocks.extend(blks)
     if blocks:
         body = "\n\n---\n\n".join(blocks)
-        text = "### 🔔 出入库登记 · 订单提醒（共 {} 条）\n\n---\n\n{}".format(count, body)
-        ok, err = send(text, title="出入库登记 · 订单提醒")
+        # 2026-09-29 主理人方案 A：借用/归还的自动推送复用本 remind 链路，
+        # 若本批全是借出单则换专属标题，群里不必点开就知道是借还动态而非普通订单提醒。
+        all_borrow = bool(payloads) and all(p.get("kind") == "borrow" for p in payloads)
+        if all_borrow:
+            text = "### 🔔 出入库登记 · 借出归还动态（共 {} 条）\n\n---\n\n{}".format(count, body)
+            title = "出入库登记 · 借出归还"
+        else:
+            text = "### 🔔 出入库登记 · 订单提醒（共 {} 条）\n\n---\n\n{}".format(count, body)
+            title = "出入库登记 · 订单提醒"
+        ok, err = send(text, title=title)
         if not ok:
             print("订单提醒发送失败: {}".format(err), file=sys.stderr)
             return 1

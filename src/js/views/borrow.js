@@ -220,13 +220,10 @@
 
   /* ---------- 单条推送 ---------- */
 
-  /** 把某张借出单详情推送到钉钉（复用提醒链路：data/notify/*.json → dingtalk-remind workflow）。
-      带 borrowed 标记与已还映射，钉钉侧渲染成「借出单：借出｜已还｜剩余」一目了然。 */
-  async function notifyOne(id) {
-    var r = State.list.find(function (x) { return x.id === id; });
-    if (!r) return Util.toast("记录不存在，请刷新后重试", true);
-    if (!Cloud.hasToken()) return Util.toast("未配置云端令牌，无法推送", true);
-    var order = {
+  /** 构建单张借出单的推送载荷（钉钉侧渲染成「借出｜已还｜剩余」）。
+      stage: borrowed=刚转借出 / returned=部分归还 / closed=全部还清 / 空=旧格式 */
+  function borrowOrderOf(r, stage) {
+    return {
       id: r.id,
       type: r.type || "out",
       time: r.time || "",
@@ -237,16 +234,43 @@
       note: r.note || "",
       status: r.status || "submitted",
       borrowed: true,
+      borrowStage: stage || "",
       items: (r.items || []).map(function (it) { return { name: it.name, qty: it.qty }; }),
       returned: returnedMap(r),
       photoUrls: (r.photoUrls || []).slice(0, 3)
     };
+  }
+
+  /** 借出单推送钉钉的唯一出口（复用提醒链路：data|data-saidis/notify/r<ts>-<rand>.json
+      → dingtalk-remind workflow）。文件名自带时间戳+随机数，同一张单多次归还互不覆盖、各自成条。
+      silent=true：静默模式（自动推送用，失败不弹窗打扰主流程）。返回是否成功。 */
+  async function pushBorrowStage(r, stage, silent) {
+    if (!r) return false;
+    if (!Cloud.hasToken || !Cloud.hasToken()) return false;
     try {
-      await Cloud.pushRemind({ _ts: Date.now(), type: "remind", kind: "borrow", orders: [order] });
+      await Cloud.pushRemind({
+        _ts: Date.now(), type: "remind", kind: "borrow",
+        warehouse: (window.App.Config.Sys.current() || {}).id || "shenzhen",
+        orders: [borrowOrderOf(r, stage)]
+      });
+      return true;
+    } catch (e) {
+      if (!silent) Util.toast("推送提交失败：" + (e && e.message ? e.message : e) + "（请重试）", true);
+      return false;
+    }
+  }
+
+  /** 把某张借出单详情推送到钉钉（列表上的 🔔 手动按钮）。 */
+  async function notifyOne(id) {
+    var r = State.list.find(function (x) { return x.id === id; });
+    if (!r) return Util.toast("记录不存在，请刷新后重试", true);
+    if (!Cloud.hasToken()) return Util.toast("未配置云端令牌，无法推送", true);
+    var stage = isDone(r) ? "closed" : (hasReturned(r) ? "returned" : "borrowed");
+    var okPush = await pushBorrowStage(r, stage, false);
+    if (okPush) {
       Util.toast("已提交推送，该借出单稍后到达钉钉群");
       window.App.Views.app.setSyncStatus("借出单提醒已提交", false);
-    } catch (e) {
-      Util.toast("推送提交失败：" + (e && e.message ? e.message : e) + "（请重试）", true);
+    } else {
       window.App.Views.app.setSyncStatus("借出单提醒提交失败", true);
     }
   }
@@ -310,7 +334,9 @@
               if (updated) rec = updated;
             }
             if (Cloud.hasToken()) {
-              try { await Cloud.pushRecord(rec); } catch (e) { fail++; }
+              try { await Cloud.pushRecord(rec); } catch (e) { fail++; continue; }
+              // 2026-09-29 主理人方案 A：转入先借后还成功落云端后，自动补一条钉钉「借出通知」
+              try { await pushBorrowStage(rec, "borrowed", true); } catch (e2) {}
             }
           } else fail++;
         }
@@ -440,6 +466,9 @@
     if (inRec) { try { await Cloud.pushRecord(inRec); } catch (e) { fail++; } }
     if (diffRec) { try { await Cloud.pushRecord(diffRec); } catch (e) { fail++; } }
     if (updated) { try { await Cloud.pushRecord(updated); } catch (e) { fail++; } }
+    // 2026-09-29 主理人方案 A：归还落云端后自动推钉钉。用 updated（含最新已还量）渲染「本次已还/剩余」；
+    // 还一部分标题标「部分归还」，全部还清标「已还清」，群里一眼看得出进度。
+    try { await pushBorrowStage(updated || r, done ? "closed" : "returned", true); } catch (e2) {}
     if (fail) window.App.Views.app.setSyncStatus("部分归还同步待补推", true);
     else window.App.Views.app.setSyncStatus("已同步", false);
   }
