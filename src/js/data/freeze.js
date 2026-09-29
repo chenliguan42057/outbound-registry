@@ -58,15 +58,21 @@
   }
 
   /** 某在途出库单的**应冻结数量**（按货品计）。
-      先借后还借出中 → 只冻结剩余未还量（借出2还1剩1，只冻1）；
-      普通未提单出库单 → 冻结全额。 */
+      先借后还：
+        · 已全部还清（borrowDone === true）→ 冻结 0（借出已结清，不再占用）；
+        · 借出中 → 只冻结剩余未还量（借出2还1剩1，只冻1）；
+      普通未提单出库单 → 冻结全额。
+      ⚠️ 2026-09-29 修复：原实现只在 borrowDone!==true 时扣减已还量，
+         全部还清时反而 fall through 返回【全额】→ 归还完冻结不归零。
+         现改为：borrowed 且 borrowDone===true 直接返回 0。 */
   function frozenQtyOf(r, itemName) {
     var it = (r.items || []).find(function (x) { return norm(x.name) === norm(itemName); });
     if (!it) return 0;
     var q = Number(it.qty) || 0;
     if (q <= 0) return 0;
-    // 先借后还借出中：扣掉已归还部分
-    if (r.borrowed === true && r.borrowDone !== true) {
+    // 先借后还：已结清 → 不占用；借出中 → 扣掉已归还部分
+    if (r.borrowed === true) {
+      if (r.borrowDone === true) return 0;   // ★ 全部还清：冻结归零
       var ret = 0;
       (r.borrowReturned || []).forEach(function (x) {
         if (x && norm(x.name) === norm(itemName)) ret += (Number(x.qty) || 0);
