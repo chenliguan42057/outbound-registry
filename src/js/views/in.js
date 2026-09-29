@@ -346,9 +346,11 @@
       items: items,
       purpose: purpose,
       picker: handlerVal,
-      photos: photos.getPhotos(),
-      affectsStock: true
+      photos: photos.getPhotos()
+      // 2026-09-29 加固：affectsStock 不再恒写 true，见下方分支（仅新建时给 true）。
+      // 否则编辑一条历史上非库存单会把它强行纳入库存计算 → 凭空增减。
     };
+    if (!wasEditing) payload.affectsStock = true;  // 仅新记录参与库存计算
     if (sourceVal) payload.source = sourceVal;   // 来源写入记录本体 → 列表/报表按来源筛选用
     try { localStorage.setItem("outbound_in_last_handler", handlerVal); } catch (e) {}
     var rec;

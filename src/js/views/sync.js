@@ -456,6 +456,15 @@
         Store.saveMemos(State.memos);
       }
       if (data.catalog && window.App.Catalog && window.App.Catalog.save) {
+        // 2026-09-29 加固：备份恢复是唯一会整体覆盖「库存基准(INVENTORY)」的入口。
+        // 恢复前先记一条审计（含覆盖前后的基准条目数），万一基准被旧备份回退，事后可追溯。
+        try {
+          if (window.App.Audit) window.App.Audit.log("catalog-restore", {
+            summary: "备份恢复覆盖库存基准：恢复前 " +
+              Object.keys((window.App.Config.Sys.current() && window.App.Catalog.get && window.App.Catalog.get().inventory) || {}).length +
+              " 条 → 备份 " + Object.keys((data.catalog && data.catalog.inventory) || {}).length + " 条"
+          });
+        } catch (e) {}
         await window.App.Catalog.save(data.catalog, function () {});
       }
       if (Cloud.hasToken()) {

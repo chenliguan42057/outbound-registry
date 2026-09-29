@@ -605,10 +605,13 @@
       purpose: purpose,
       entity: entity,                                    // 结算法人单位必填，纯追加字段（与 note 同类，不破坏 schema）
       items: items,
-      photos: photoList,
-      affectsStock: true  // 新记录才参与库存计算
+      photos: photoList
+      // 2026-09-29 加固：affectsStock 不再恒写 true。
+      // 新建时在下面 !wasEditing 分支显式给 true；编辑时【不携带】→ records.update 保留原值。
+      // 否则编辑一条旧单/差额单（affectsStock 非 true）会把它强行改成计入库存 → 凭空增减库存。
     };
     if (!wasEditing) {
+      payload.affectsStock = true;      // 仅新记录参与库存计算
       payload.status = "pending";      // 新建出库记录默认「未提单」；编辑不携带 → 合并保留原值
       payload.orderNo = genOrderNo();   // 出库单自动编号（纯追加字段）
       // 2026-09-28：新单默认打「冻结占用」标记 —— 未提单期间只占住库存、不扣实际库存

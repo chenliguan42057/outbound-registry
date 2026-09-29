@@ -496,7 +496,10 @@
     }
     var ok = await UI.confirmDialog("将这笔借出退回出库记录页？\n退回后恢复显示为出库记录（库存扣减保留，不另行改动）。", "退回出库记录");
     if (!ok) return;
-    var updated = Records.update(id, { borrowed: false, borrowReturned: [], borrowDone: false, freezeStock: r.affectsStock === true });
+    // 2026-09-29 加固：退回时一并清掉 borrowEngine 残留标记。
+    // 否则该单再次被打入先借后还时，会带着「上次是 v2」的旧标记，
+    // 导致 freeze.js 的引擎分支误判（v2 单借出不动库存的口径被错误沿用）→ 冻结/库存口径错乱。
+    var updated = Records.update(id, { borrowed: false, borrowReturned: [], borrowDone: false, borrowEngine: null, freezeStock: r.affectsStock === true });
     if (!updated) { Util.toast("记录不存在", true); return; }
     renderList();
     Util.toast("已退回出库记录页");
