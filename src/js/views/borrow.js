@@ -324,7 +324,9 @@
           // 2026-09-28：转入先借后还 → 打「冻结占用」标记。
           // 借出中只占住剩余未还量（见 data/freeze.js frozenQtyOf），
           // 归还后剩余量减少、冻结随之递减；全部还清后冻结归零。
-          var rec = Records.update(ids[i], { borrowed: true, freezeStock: true });
+          // 2026-09-29 口径乙：borrowEngine:"v2" 标记本单走新口径（借出/归还都不动实际库存，
+          // 只挂冻结占用；差额单提交提单时才扣库存）。历史单无此标记 → 保持旧口径。
+          var rec = Records.update(ids[i], { borrowed: true, freezeStock: true, borrowEngine: "v2" });
           if (rec) {
             // 借出备注非空时：附加到原 note（保留原备注，不覆盖；空则用「借出备注：xxx」起头）
             if (borrowNote) {
@@ -419,36 +421,33 @@
     };
   }
 
-  /** 归还核心：生成归还入库 + 差额出库 + 更新原单（本地保存 + 云端推送，全部幂等） */
+  /** 归还核心：口径乙（2026-09-29 定稿）——
+      借出不动库存（只挂冻结占用），所以归还【不生成入库单】（从未扣过，加回来等于凭空虚增）；
+      归还只做两件事：① 更新 borrowReturned（冻结占用随之递减）；② 剩余差额生成差额出库单（未提单不扣库存）。
+      差额单提交提单时才真正扣库存（见 out.js 的差额单提交处理）。
+      历史单（无 borrowEngine 标记）保持旧口径：借出扣、归还加，不受本改动影响。
+      ⚠️ 幂等：归还本身不写新记录，只改原单字段（update 带 updatedAt），重复提交同结果。
+      返回 {inRec:null, diffRec, updated}，调用方沿用。 */
   async function doReturn(r, returns) {
     var ret = returnedMap(r);
-    // 2) 先计算新累计已还 + 剩余（供下方归还入库记录生成确定性 id 使用）
+    // 2) 先计算新累计已还 + 剩余
     var newRet = {};
     Object.keys(ret).forEach(function (k) { newRet[k] = ret[k]; });
     returns.forEach(function (x) { newRet[x.name] = (newRet[x.name] || 0) + x.qty; });
-    // 1) 归还>0 → 入库记录（加回库存）。
-    //    用确定性 id（ret-<借出单id>-<本次归还内容哈希>）：同一笔并发归还多次提交 → 同 id → 合并只留一条 → 库存只加一次；
-    //    不同次部分归还内容不同 → 不同 id → 各自累加。仍保留 fromBorrowId 用于追溯，原单标记逻辑不变。
+    // 1) 口径乙：归还【不再生成入库单】。保留变量名以兼容下方云端推送与历史分支。
     var inRec = null;
-    if (returns.length) {
-      inRec = Records.create({
-        id: returnRecordId(r, newRet),
-        type: "in", affectsStock: true, purpose: "先借后还归还",
-        note: "归还借出单 " + r.id, time: Util.nowLocal(),
-        picker: r.picker || "", dept: r.dept || "",
-        items: returns.map(function (x) { return { name: x.name, qty: x.qty }; }),
-        fromBorrowId: r.id
-      });
-    }
     var borrowReturned = Object.keys(newRet).map(function (k) { return { name: k, qty: newRet[k] }; });
     var diffItems = (r.items || []).map(function (it) {
       return { name: it.name, qty: Math.max(0, (Number(it.qty) || 0) - (newRet[it.name] || 0)) };
     }).filter(function (x) { return x.qty > 0; });
-    // 3) 差额>0 → 差额出库记录（未提单，affectsStock:false 不重复扣）
+    // 3) 差额>0 → 差额出库记录（未提单，affectsStock:true + freezeStock:true）。
+    //    口径乙（2026-09-29）：差额单不真扣库存，只挂「冻结占用」→ 与待取货/借出同口径；
+    //    提交提单时 records.js toggleStatus 会置 freezeStock=false → 该单进入库存计算 → 真扣减。
+    //    （历史差额单 affectsStock:false 无 freezeStock 字段 → 不补标记，保持「不翻旧账」。）
     var diffRec = null;
     if (diffItems.length) {
       diffRec = Records.create({
-        type: "out", status: "pending", affectsStock: false, fromBorrowId: r.id,
+        type: "out", status: "pending", affectsStock: true, freezeStock: true, fromBorrowId: r.id,
         time: Util.nowLocal(), picker: r.picker || "", dept: r.dept || "",
         purpose: r.purpose || "", entity: r.entity || "",
         note: ((r.note || "").trim() ? (r.note + "；") : "") + "先借后还差额单（原 " + r.id + "）",
