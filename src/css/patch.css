@@ -1781,6 +1781,17 @@ html .freeze-table:not(.stock-table) td:nth-child(1) { text-align: center; paddi
 /* 操作列：按钮块水平居中，不再左贴 */
 html .freeze-table:not(.stock-table) td:nth-child(9) .btn { margin-left: auto; margin-right: auto; }
 
+/* 12) 行高与留白收口（2026-09-29）
+   病灶：多行明细的 padding 叠加后整行被撑高，单条记录时表格底部留一大片空白，
+   且「未出库」徽章与右侧按钮不在同一条视觉基线上。
+   修法：明细行压缩行距、单元格上下 padding 收紧；操作列改为整块纵向居中成组。 */
+html .freeze-table:not(.stock-table) td { padding-top: 12px; padding-bottom: 12px; }
+html .freeze-table:not(.stock-table) .item-line { line-height: 1.45; }
+html .freeze-table:not(.stock-table) .item-line.multi-line { padding-bottom: 5px !important; margin-bottom: 5px !important; }
+/* 操作列：按钮与状态徽章同一列内垂直居中成组，不再一上一下 */
+html .freeze-table:not(.stock-table) td:nth-child(8),
+html .freeze-table:not(.stock-table) td:nth-child(9) { vertical-align: middle !important; }
+
 /* 9) 统计卡文案防「孤字换行」（2026-09-29）：
       hint 文字较长时，中文会在最后挤出一个单字或「催一下」单独一行，四张卡高度不齐。
       text-wrap: pretty 让浏览器优化断行；同时给 hint 限定行数，保证四卡等高。 */
