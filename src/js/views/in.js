@@ -440,6 +440,9 @@
         watchWpsReceipt(rec);
         /* 2026-09-29 方案 A：来自自动识别的单，正式提交成功后再补一条钉钉确认（用最终实际数据） */
         if (rcKind && Cloud.pushRecognizeConfirm) Cloud.pushRecognizeConfirm(rec, rcKind);
+        /* 2026-09-29 方案 A（追加）：手工登记的入库同样要推钉钉（此前历史上一律不推）。
+           与上一行互斥二选一 —— 每条入库恰好发一条，不会既发识别确认又发新入库。 */
+        else if (Cloud.pushInNew) Cloud.pushInNew(rec);
       }
     }).catch(function (e) {
       window.App.Views.app.setSyncStatus("云端同步失败：" + e.message + "（已存本地，稍后重试）", true);

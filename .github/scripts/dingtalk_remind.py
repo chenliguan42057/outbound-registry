@@ -308,6 +308,33 @@ def build_pickup_new_markdown(payload):
     return md
 
 
+def build_in_new_markdown(payload):
+    """手工登记入库的通知（2026-09-29 主理人方案 A）。
+
+    历史缺口：入库页手工登记/修改一直不推钉钉，只有从「自动识别」页带入的单才会推，
+    主理人反馈「明明登记了修改了，群里一条都没有」，故补此通知。
+    格式与 build_pickup_new_markdown 看齐（标题/字段/货品明细同款），群里观感统一。"""
+    o = payload.get("order") or {}
+    if not (o.get("items") or []):
+        return None
+    fields = [
+        ("经办人", o.get("picker", "") or "-"),
+        ("部门/客户", o.get("dept", "") or "-"),
+        ("来源/用途", o.get("purpose", "") or "-"),
+        ("入库时间", o.get("time", "") or "-"),
+    ]
+    ent = str(o.get("entity") or "").strip()
+    if ent:
+        fields.append(("结算法人单位", ent))
+    md = "### 📥 出入库登记 · 新入库登记"
+    md += "\n" + "\n".join("- **{}**：{}".format(k, v) for k, v in fields)
+    md += "\n\n" + goods_lines_of(o)
+    note = str((o.get("note") or "")).strip()
+    if note:
+        md += "\n\n- **备注**：{}".format(note)
+    return md
+
+
 def build_pickup_confirm_markdown(payload):
     """「确认提单」对比消息：登记时间 vs 提单时间 + 间隔。返回 markdown 文本。"""
     p = payload.get("pickup") or {}
@@ -499,6 +526,7 @@ def main():
 
     pickup_confirm = []
     pickup_news = []
+    in_news = []
     stocktakes = []
     out_copies = []
     recognize_confirms = []
@@ -517,6 +545,8 @@ def main():
             pickup_confirm.append(data)
         elif data.get("type") == "pickup-new":
             pickup_news.append(data)
+        elif data.get("type") == "in-new":
+            in_news.append(data)
         elif data.get("type") == "stocktake":
             stocktakes.append(data)
         elif data.get("type") == "out-copy":
@@ -524,8 +554,8 @@ def main():
         elif data.get("type") == "recognize-confirm":
             recognize_confirms.append(data)
 
-    if not payloads and not pickup_confirm and not pickup_news and not stocktakes and not out_copies \
-            and not recognize_confirms:
+    if not payloads and not pickup_confirm and not pickup_news and not in_news and not stocktakes \
+            and not out_copies and not recognize_confirms:
         print("没有可解析的提醒请求，跳过发送（不报错）")
         return 0
 
@@ -563,6 +593,19 @@ def main():
             print("新待取货登记已发送")
         else:
             print("新待取货登记发送失败: {}".format(err), file=sys.stderr)
+            return 1
+
+    # 2b) 新入库登记（2026-09-29 主理人方案 A：手工登记入库也要进群）
+    for initem in in_news:
+        text = build_in_new_markdown(initem)
+        if not text:
+            print("SKIP in-new：无货品明细")
+            continue
+        ok, err = send(text, title="出入库登记 · 新入库登记")
+        if ok:
+            print("新入库登记已发送")
+        else:
+            print("新入库登记发送失败: {}".format(err), file=sys.stderr)
             return 1
 
     # 3) 提单确认对比

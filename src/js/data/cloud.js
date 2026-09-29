@@ -1407,6 +1407,39 @@
     }
   }
 
+  /** 2026-09-29 主理人方案 A（追加）：手工登记的入库，提交成功后推一条「新入库登记」。
+      历史缺口：入库页手工登记/修改一直不推钉钉，只有从「自动识别」页带入的单会推
+      （那走的是 pushRecognizeConfirm）。主理人要求两者一视同仁，故补此函数。
+      与 recognize-confirm 互斥（in.js 里二选一），每条入库恰好发一条，不重复刷屏。
+      落 data|data-saidis/notify/in-new-<id>.json，由 Actions「DingTalk Remind」渲染。
+      双仓隔离 + 失败静默，同 pushRecognizeConfirm。 */
+  async function pushInNew(rec) {
+    try {
+      if (!rec || !hasToken()) return false;
+      var wid = (Config.Sys && Config.Sys.current && Config.Sys.current().id) || "shenzhen";
+      await pushNotifyFile("in-new", {
+        type: "in-new",
+        warehouse: wid,
+        _ts: Date.now(),
+        order: {
+          id: rec.id || "",
+          type: "in",
+          time: rec.time || (Util.nowLocal ? Util.nowLocal() : ""),
+          picker: rec.picker || "",
+          dept: rec.dept || "",
+          purpose: rec.purpose || "",
+          entity: rec.entity || "",
+          note: rec.note || "",
+          items: (rec.items || []).map(function (it) { return { name: it.name, qty: it.qty }; })
+        }
+      });
+      if (Util && Util.toast) Util.toast("📥 入库已推送钉钉群");
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** 推送盘点校准记录到 data/stocktakes/<id>.json（独立目录：不进金山台账、不触发登记通知）。
       幂等：先 GET sha 再 PUT；成功置 _pushed 标记并落盘；失败静默（syncPull 后由
       flushStocktakesPending 对 _local 未推送项补推）。 */
@@ -1711,6 +1744,7 @@
     pushRemind: pushRemind,
     pushNotifyFile: pushNotifyFile,
     pushRecognizeConfirm: pushRecognizeConfirm,
+    pushInNew: pushInNew,
     rollbackTransfer: rollbackTransfer,
     fullResync: fullResync,
     diagSyncStatus: diagSyncStatus,
