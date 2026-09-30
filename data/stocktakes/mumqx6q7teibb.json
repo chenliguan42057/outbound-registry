@@ -1,0 +1,1 @@
+{"id":"mumqx6q7teibb","_ts":1790690554447,"time":"2026-09-29T22:02","kind":"stocktake","warehouse":"shenzhen","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +70 / 盘亏 -0","_local":true,"items":[{"name":"精华液 20支装","book":47,"actual":67,"diff":20},{"name":"精华液 5支装","book":130,"actual":160,"diff":30},{"name":"面膜5片装（未入库版）","book":-20,"actual":0,"diff":20}]}
