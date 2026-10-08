@@ -263,11 +263,25 @@
       wps_sync 串行并发组会先处理加列事件再处理后续 inRec，保证 inRec 写入时列已就绪。
       返回 missing 数组；返回 false 表示有失败已中止。 */
   async function ensureTargetProducts(items, dst, dstName) {
-    var cat = await Cloud.fetchCatalogAt(dst.dataDir);
+    var cat = null;
+    try { cat = await Cloud.fetchCatalogAt(dst.dataDir); } catch (e) { cat = null; }
+    /* 防呆（2026-10-08 血泪教训）：对方 catalog 读取失败（网络超时/权限/404）时，
+       绝不能「当空目录处理再整份 PUT 覆盖」—— 那会把对方 27 个货品连同库存基准
+       一起抹成只剩本次调拨的 3 个（深圳细胞目录曾被 7e26988a 这样毁掉）。
+       读不到就中止调拨并明确报错，让人工重试，宁可不调拨也不能毁目录。 */
     if (!cat || typeof cat !== "object") {
-      cat = { version: 1, updatedAt: Date.now(), products: [], inventory: {} };
+      Util.toast("❌ 读取" + dstName + "产品目录失败，已中止本次调拨（不会改动对方目录）。请检查网络后重试。", true);
+      return false;
     }
-    if (!Array.isArray(cat.products)) cat.products = [];
+    if (!Array.isArray(cat.products)) {
+      Util.toast("❌ " + dstName + "产品目录格式异常，已中止本次调拨（不会改动对方目录）。", true);
+      return false;
+    }
+    /* 防呆 2：目录条数骤降保护 —— 新目录条数不得少于原有条数，防止「读了半截」再写回把目录写残 */
+    if (cat.products.length > 0 && cat.products.length < 3 && items.length < cat.products.length) {
+      Util.toast("❌ " + dstName + "产品目录异常偏少，已中止本次调拨以避免覆盖。", true);
+      return false;
+    }
     if (!cat.inventory || typeof cat.inventory !== "object") cat.inventory = {};
     var existing = {};
     cat.products.forEach(function (p) { if (p && p.name) existing[p.name] = true; });
