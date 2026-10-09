@@ -237,6 +237,8 @@
 
     /* 业务常量 */
     LOW_STOCK_THRESHOLD: 95,
+    /* 现场库存默认警示线（2026-10-09 双区库存）：某产品未单独设定现场警示线时用此值 */
+    SITE_WARN_DEFAULT: 10,
     PHOTO_MAX_EDGE: 1024,
     PHOTO_QUALITY: 0.6,
 

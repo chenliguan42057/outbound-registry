@@ -17,14 +17,15 @@
   var Stock = window.App.Stock;
 
   var container = null;
-  var activeTab = "runtime";   // runtime 运行状况 | overview 库存大图 | diff 差异对比 | report 报表统计
+  var activeTab = "site";      // site 现场库存 | runtime 运行状况 | overview 库存大图 | diff 差异对比 | report 报表统计
 
   function render(el) {
     container = el;
     el.innerHTML =
       '<div class="card" style="padding:14px 18px">' +
         '<div class="actions" style="margin-bottom:0;gap:8px">' +
-          '<button type="button" class="btn sm active dash-tab" data-tab="runtime">运行状况</button>' +
+          '<button type="button" class="btn sm active dash-tab" data-tab="site">现场库存</button>' +
+          '<button type="button" class="btn ghost sm dash-tab" data-tab="runtime">运行状况</button>' +
           '<button type="button" class="btn ghost sm dash-tab" data-tab="overview">库存大图</button>' +
           '<button type="button" class="btn ghost sm dash-tab" data-tab="diff">差异对比</button>' +
           '<button type="button" class="btn ghost sm dash-tab" data-tab="report">报表统计</button>' +
@@ -47,6 +48,11 @@
     var body = container ? container.querySelector('#dashTabBody') : null;
     if (!body) return;
     body.innerHTML = '';
+    if (activeTab === 'site') {
+      if (window.App.Views.site && window.App.Views.site.render) window.App.Views.site.render(body);
+      else body.innerHTML = '<div class="empty">现场库存模块未加载</div>';
+      return;
+    }
     if (activeTab === 'report') {
       if (window.App.Views.report && window.App.Views.report.render) {
         window.App.Views.report.render(body);

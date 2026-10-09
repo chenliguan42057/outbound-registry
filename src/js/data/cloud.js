@@ -1479,6 +1479,42 @@
     }
   }
 
+  /* ================= 分区事件同步（data/zones/，双区库存 2026-10-09） ================= */
+  /** 合并分区事件：同 id 较新（_ts）者胜；按当前仓过滤。本地未推送项一并保留。 */
+  function mergeZones(local, remote) {
+    var wid = (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+    function owns(r) { return !r || !r.warehouse || r.warehouse === wid; }
+    var map = new Map();
+    (local || []).filter(owns).forEach(function (r) { if (r && r.id) map.set(r.id, r); });
+    (remote || []).filter(owns).forEach(function (r) {
+      if (!r || !r.id) return;
+      var prev = map.get(r.id);
+      if (!prev) { map.set(r.id, r); return; }
+      if (Number(r._ts || 0) >= Number(prev._ts || 0)) map.set(r.id, Object.assign({}, prev, r));
+    });
+    return Array.from(map.values()).sort(function (a, b) { return Number(a._ts || 0) - Number(b._ts || 0); });
+  }
+
+  /** 冲刷本地分区事件中尚未推送成功的（_local 且未 _pushed）。syncPull 后调用。 */
+  async function flushZonesPending() {
+    if (!hasToken()) return;
+    var arr = (window.App.State && window.App.State.zones) || [];
+    var any = false;
+    for (var i = 0; i < arr.length; i++) {
+      var r = arr[i];
+      if (r && r.id && r._local && r._pushed !== true) {
+        try {
+          var ok = await putJsonFile({
+            dataDir: Config.Sys.root(), subdir: "zones", id: r.id, payload: r,
+            message: "zone " + (r.mode || r.dir) + " " + r.product
+          });
+          if (ok) { r._local = false; r._pushed = true; any = true; }
+        } catch (e) {}
+      }
+    }
+    if (any) { try { window.App.Store.saveZones(arr); } catch (e) {} }
+  }
+
   /* ================= 金山台账回执（提交后告诉用户「真的进台账了」） =================
      链路：前端 PUT 记录 → GitHub Action(wps-sync) 调金山写行 → 回写 .wps_synced.json →
            前端轮询这个标记文件 → 看到自己这条 id 就显示「✅已入金山台账（表名 第N行）」。
@@ -1694,6 +1730,12 @@
         .filter(function (s) { return !(s && s.id && stkDead[s.id]); });
       Store.saveStocktakes(window.App.State.stocktakes);
       try { await flushStocktakesPending(); } catch (e) {}
+      // 分区事件（data/zones/）：双区库存的转移/设定流水，独立目录、不进库存计算
+      var zonesCloud = [];
+      try { zonesCloud = (await pullDir(Config.Sys.dir("zones"), tree)).recs; } catch (e) { zonesCloud = []; }
+      window.App.State.zones = mergeZones(window.App.State.zones || [], zonesCloud);
+      Store.saveZones(window.App.State.zones);
+      try { await flushZonesPending(); } catch (e) {}
       // 冲刷本地墓碑队列（删除云端失败的补推，成功才出队）
       try { await flushTombQueue(); } catch (e) {}
       window.App.State.lastSync = new Date();
@@ -1781,6 +1823,7 @@
     pullMemos: pullMemos,
     pushMemo: pushMemo,
     delMemo: delMemo,
-    pushAllMemos: pushAllMemos
+    pushAllMemos: pushAllMemos,
+    flushZonesPending: flushZonesPending
   };
 })();

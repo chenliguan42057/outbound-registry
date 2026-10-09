@@ -141,6 +141,18 @@
       Store.set(Config.Sys.key("stocktakes_v1"), clean);
     },
 
+    /* ---- 分区事件（仓库/现场双区库存）。键按当前系统隔离：outbound_zones_v1 / outbound_saidis_zones_v1 ---- */
+    loadZones: function () {
+      var wid = Config.Sys.current().id;
+      var arr = Store.get(Config.Sys.key("zones_v1"), []);
+      return (arr || []).filter(function (r) { return !r || !r.warehouse || r.warehouse === wid; });
+    },
+    saveZones: function (list) {
+      var wid = Config.Sys.current().id;
+      var clean = (list || []).filter(function (r) { return !r || !r.warehouse || r.warehouse === wid; });
+      Store.set(Config.Sys.key("zones_v1"), clean);
+    },
+
     /* ---- 历史补全（部门 / 领取人，冻结键） ---- */
     getHistory: function (key) { return Store.get(key, []); },
     addHistory: function (key, val) {
@@ -205,6 +217,8 @@
     memos: [],
     /* 盘点校准记录（独立于 records：只进库存流水展示，不进金山/出入库列表/报表统计） */
     stocktakes: [],
+    /* 分区事件（仓库/现场双区库存；同样独立于 records，只进仪表盘「现场库存」面板） */
+    zones: [],
     /* 删除墓碑（回收站数据源）：只存内存不落 localStorage——快照里含照片 dataURL，
        持久化会迅速撑爆 5MB 配额；每次 syncPull 都会重新填充。 */
     tombstones: [],
@@ -216,12 +230,14 @@
       State.pickups = Store.loadPickups();
       State.memos = Store.loadMemos();
       State.stocktakes = Store.loadStocktakes();
+      State.zones = Store.loadZones();
       State.nav = Store.loadNav();
     },
     save: function () { Store.saveRecords(State.list); },
     savePickups: function () { Store.savePickups(State.pickups); },
     saveMemos: function () { Store.saveMemos(State.memos); },
-    saveStocktakes: function () { Store.saveStocktakes(State.stocktakes); }
+    saveStocktakes: function () { Store.saveStocktakes(State.stocktakes); },
+    saveZones: function () { Store.saveZones(State.zones); }
   };
 
   window.App = window.App || {};

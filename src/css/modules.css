@@ -486,3 +486,101 @@ html[data-theme="dark"] .win-status-alarm {
 html[data-theme="dark"] .win-status.err .win-status-main { color: #E8A57C; }
 html[data-theme="dark"] .sync-count-hint.ok { color: #8FC7B3; }
 html[data-theme="dark"] .sync-count-hint.warn { color: #E8A57C; }
+
+/* ============================================================
+   现场库存（双区库存）面板 —— 2026-10-09 主理人需求
+   仪表盘首个 tab；卡片式展示 仓库锁定 / 现场可用 / 总量 + 现场流水
+   ============================================================ */
+.zone-help { margin-left: 8px; color: #93A39C; font-size: 12px; }
+
+.zone-ov { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0 14px; }
+.zone-ov-card {
+  position: relative; padding: 14px 16px; border-radius: 16px;
+  background: linear-gradient(160deg, #F2F8F5, #FAF8F3);
+  border: 1px solid #DCE8E2; display: flex; flex-direction: column; gap: 2px;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.zone-ov-card[data-act] { cursor: pointer; }
+.zone-ov-card[data-act]:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(60,72,69,.1); }
+.zone-ov-card b { font-size: 26px; font-weight: 800; color: #3C4845; letter-spacing: .5px; }
+.zone-ov-card span { font-size: 12px; color: #6B7A75; }
+.zone-ov-card i { font-size: 11px; color: #93A39C; font-style: normal; }
+.zone-ov-card.k-site b { color: #35738C; }
+.zone-ov-card.k-wh b { color: #7E6039; }
+.zone-ov-card.warn { background: linear-gradient(160deg, #FDF1EC, #FBF6F0); border-color: #EBCFBE; }
+.zone-ov-card.warn b { color: #C2703F; }
+
+.zone-toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+
+.zone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.zone-card {
+  border: 1px solid #E1ECE7; border-radius: 16px; padding: 14px 16px;
+  background: #fff; box-shadow: 0 2px 8px rgba(60,72,69,.04);
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.zone-card:hover { box-shadow: 0 8px 22px rgba(60,72,69,.09); }
+.zone-card.low { border-color: #EBC7B2; background: linear-gradient(180deg, #FFFDFB, #FFF8F4); }
+.zc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.zc-name { font-weight: 700; color: #3C4845; font-size: 14px; }
+.zc-unit { color: #93A39C; font-style: normal; font-size: 12px; margin-left: 2px; }
+.zc-flag { font-size: 11px; color: #C2703F; background: rgba(194,112,63,.12); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.zc-main { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.zc-figure { display: flex; align-items: baseline; gap: 6px; }
+.zc-figure b { font-size: 30px; font-weight: 800; color: #3F8370; line-height: 1; }
+.zc-figure b.warn { color: #C2703F; }
+.zc-figure span { font-size: 12px; color: #6B7A75; }
+.zc-meta { text-align: right; font-size: 12px; color: #7A8A84; line-height: 1.7; }
+.zc-meta b { color: #3C4845; }
+.zc-bar { height: 6px; border-radius: 999px; background: #EDF3F0; overflow: hidden; margin: 10px 0 12px; }
+.zc-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #8FCDB6, #6FA08A); transition: width .4s ease; }
+.zone-card.low .zc-bar i { background: linear-gradient(90deg, #E8B48F, #C2703F); }
+.zc-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* 现场流水 */
+.zf { margin-top: 12px; border-top: 1px dashed #E1ECE7; padding-top: 10px; }
+.zf-empty { color: #93A39C; font-size: 12px; text-align: center; padding: 10px; }
+.zf-head, .zf-row { display: grid; grid-template-columns: 96px 60px 1fr 64px; gap: 8px; align-items: center; font-size: 12px; }
+.zf-head { color: #93A39C; padding-bottom: 6px; }
+.zf-row { padding: 5px 0; border-bottom: 1px solid #F2F6F4; color: #4A5A55; }
+.zf-row .zf-q { font-weight: 700; }
+.zf-row.out .zf-q { color: #B4501F; }
+.zf-row.in .zf-q { color: #3F8370; }
+.zf-row .zf-left { text-align: right; font-weight: 600; color: #3C4845; }
+
+.zone-set-lbl { display: block; font-size: 12px; color: #6B7A75; margin: 10px 0 4px; }
+.zone-set-lbl .pw-input { margin-top: 4px; }
+
+/* 登入警示横幅（现场库存偏低） */
+.zone-warn-banner {
+  position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
+  z-index: 9998; max-width: 92vw; width: 560px;
+  background: linear-gradient(160deg, #FFF7F2, #FDFBF7);
+  border: 1px solid #EBC7B2; border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(60,72,69,.16); padding: 14px 16px;
+  font: 13px/1.7 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; color: #4A3A30;
+}
+.zone-warn-banner .zw-title { font-weight: 800; color: #B4501F; margin-bottom: 6px; }
+.zone-warn-banner .zw-body { font-size: 12.5px; color: #6B5A50; }
+.zone-warn-banner .zw-body b { color: #B4501F; }
+.zone-warn-banner .zw-more { color: #93A39C; font-size: 12px; margin-top: 2px; }
+.zone-warn-banner .zw-acts { display: flex; gap: 8px; margin-top: 10px; }
+
+/* 深色主题覆盖 */
+html[data-theme="dark"] .zone-ov-card { background: linear-gradient(160deg, #232B29, #262C2A); border-color: #333E3A; }
+html[data-theme="dark"] .zone-ov-card b { color: #E4EDE9; }
+html[data-theme="dark"] .zone-card { background: #232B29; border-color: #333E3A; }
+html[data-theme="dark"] .zone-card.low { background: linear-gradient(180deg, #2C2622, #2A251F); border-color: #4A3A2E; }
+html[data-theme="dark"] .zc-name,
+html[data-theme="dark"] .zc-meta b,
+html[data-theme="dark"] .zf-row .zf-left { color: #DCE6E2; }
+html[data-theme="dark"] .zc-bar { background: #2E3735; }
+html[data-theme="dark"] .zf-row { color: #C3CFCA; border-bottom-color: #2E3735; }
+html[data-theme="dark"] .zone-warn-banner { background: linear-gradient(160deg, #2C2622, #2A2724); border-color: #4A3A2E; color: #E6D9CF; }
+
+/* 窄屏适配 */
+@media (max-width: 720px) {
+  .zone-ov { grid-template-columns: repeat(2, 1fr); }
+  .zone-grid { grid-template-columns: 1fr; }
+  .zf-head, .zf-row { grid-template-columns: 78px 48px 1fr 54px; }
+  .zone-warn-banner { left: 10px; right: 10px; width: auto; transform: none; }
+}

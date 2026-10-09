@@ -508,6 +508,7 @@
     content.appendChild(viewEl);
     view.render(viewEl);
     updateStatusBar();
+    checkSiteWarnings();
   }
 
   /* 底部状态栏：就绪｜共N条｜已同步HH:MM（含待同步队列计数）
@@ -701,6 +702,7 @@
     var view = viewName && window.App.Views[viewName];
     if (view && view.refresh) view.refresh();
     updateStatusBar();
+    checkSiteWarnings();
   }
 
   /** 设定下次自动同步时间并重置定时器（同步完成/手动同步后调用，倒计时从完成时刻重新计） */
@@ -787,6 +789,55 @@
   /** 请求系统通知授权（需在用户手势内调用，故在添加备忘时触发） */
   function requestMemoNotification() {
     try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
+  }
+
+  /* ================= 现场库存警示（双区库存，2026-10-09） =================
+     现场库存 = 总库存 − 仓库锁定（见 data/zones.js）。低于警示线时，
+     每次登入弹醒目横幅，提示及时从仓库转出现场（可见但不遮挡主视图）。
+     去重：按「每仓 + 预警集合签名」判断，集合无变化不重复弹，避免切模块刷屏。 */
+  var siteWarnSig = {};   // sysId -> 上次展示的预警签名
+  function ensureSiteWarnBanner() {
+    var b = document.getElementById("siteWarnBanner");
+    if (!b) {
+      b = document.createElement("div");
+      b.id = "siteWarnBanner";
+      b.className = "zone-warn-banner";
+      b.style.display = "none";
+      document.body.appendChild(b);
+    }
+    return b;
+  }
+  function siteWarnSignature(low) {
+    return low.map(function (s) { return s.name + ":" + s.site; }).sort().join("|");
+  }
+  function checkSiteWarnings() {
+    var Zones = window.App.Zones;
+    if (!Zones || !Zones.lowList) return;
+    var banner = ensureSiteWarnBanner();
+    var sysId = Config.Sys.current().id;
+    var low = Zones.lowList();
+    var sig = siteWarnSignature(low);
+    if (low.length === 0) {
+      banner.style.display = "none";
+      siteWarnSig[sysId] = sig;
+      return;
+    }
+    if (siteWarnSig[sysId] === sig) return;   // 集合无变化 → 不重复弹
+    siteWarnSig[sysId] = sig;
+    var lines = low.slice(0, 8).map(function (s) {
+      return "• " + Util.esc(s.name) + "　现场 <b>" + s.site + "</b>（警示线 " + s.warnAt + "）";
+    }).join("<br>");
+    var more = low.length > 8 ? '<div class="zw-more">…等共 ' + low.length + ' 项</div>' : "";
+    banner.innerHTML =
+      '<div class="zw-title">⚠️ 现场库存偏低（' + low.length + ' 项）：请及时从仓库转出现场</div>' +
+      '<div class="zw-body">' + lines + more + '</div>' +
+      '<div class="zw-acts">' +
+        '<button type="button" class="btn sm" data-zw="go">去仪表盘处理</button>' +
+        '<button type="button" class="btn ghost sm" data-zw="close">知道了</button>' +
+      '</div>';
+    banner.style.display = "block";
+    banner.querySelector('[data-zw="go"]').onclick = function () { banner.style.display = "none"; mount("dashboard"); };
+    banner.querySelector('[data-zw="close"]').onclick = function () { banner.style.display = "none"; };
   }
 
   /* ================= PWA 离线状态（优化 3） ================= */
