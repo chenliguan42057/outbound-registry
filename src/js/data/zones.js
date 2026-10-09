@@ -92,6 +92,7 @@
   /** 全产品分区汇总（仪表盘用） */
   function summary() {
     var Stock = window.App.Stock;
+    var ov = baseOverlayMap();
     return (Config.PRODUCTS || []).map(function (name) {
       var total = Stock.getStock(name);
       var wh = warehouseLocked(name);
@@ -99,13 +100,52 @@
       var wa = warnAt(name);
       return {
         name: name, total: total, warehouse: wh, site: site,
-        warnAt: wa, low: site < wa
+        warnAt: wa, low: site < wa,
+        manuallySet: Object.prototype.hasOwnProperty.call(ov, name)
       };
     });
   }
 
   /** 现场库存低于警示线的产品（登入警示 / 徽标用） */
   function lowList() { return summary().filter(function (s) { return s.low; }); }
+
+  /* ================= 总库存手动覆盖（2026-10-09 追加，主理人需求） =================
+     主理人要求：总库存要能自己直接设定（如「精华液20支装 50 盒」），
+     而「仓库锁定 / 现场」的拆分也由自己设。
+     做法：记一条 base 事件，把「目标总库存」换算成该产品的新期初基准，写回
+     Config.INVENTORY —— 全站库存口径（库存页/报表/仪表盘）随之一致；
+     之后出入库流水照常叠加，所以「仓库管理里的数据怎么变，总库存就怎么变」。
+     应用时机：必须在 catalog.applyToConfig（覆盖目录基准）之后调用，否则被冲掉。 */
+
+  /** 各产品的手动基准覆盖 {name: base}（已清除的不出现）。仅当前仓的 base 事件。 */
+  function baseOverlayMap() {
+    var m = {};
+    var wid = Config.Sys.current().id;
+    all().filter(function (r) {
+      return r && r.kind === "zone" && r.mode === "base" && (!r.warehouse || r.warehouse === wid);
+    }).sort(function (a, b) { return evTs(a) - evTs(b); }).forEach(function (r) {
+      var n = normName(r.product);
+      if (r.base === null || r.base === undefined) delete m[n];
+      else m[n] = num(r.base);
+    });
+    return m;
+  }
+
+  /** 该产品是否被手动设定过总库存 */
+  function hasBase(name) {
+    return Object.prototype.hasOwnProperty.call(baseOverlayMap(), normName(name));
+  }
+
+  /** 把「总库存覆盖」应用到 Config.INVENTORY（幂等：先还原目录原始基准，再叠加覆盖）。
+      目录原始基准由 catalog.js 写入 Config._INVENTORY_RAW。 */
+  function applyBaseOverrides() {
+    var raw = Config._INVENTORY_RAW;
+    if (!raw) return;                         // catalog 尚未提供原始基准 → 不动，等它加载后再调
+    Object.keys(raw).forEach(function (n) { Config.INVENTORY[n] = raw[n]; });
+    var ov = baseOverlayMap();
+    Object.keys(ov).forEach(function (n) { Config.INVENTORY[n] = ov[n]; });
+    try { if (window.App.Stock) window.App.Stock.markDirty(); } catch (e) {}
+  }
 
   /* ================= 写入 ================= */
 
@@ -173,6 +213,26 @@
     return append(baseRec({ mode: "warn", product: normName(name), siteWarnAt: v }));
   }
 
+  /** 直接设定某产品的「总库存」= target（自动换算期初基准，保证设定后 Stock 立刻等于 target）。
+      delta 法：新基准 = 当前生效基准 + (目标 − 当前总库存)，无需重算全部流水，且多次设定自洽。 */
+  function setBase(name, target) {
+    name = normName(name);
+    target = Math.max(0, Math.round(num(target)));
+    var cur = window.App.Stock.getStock(name);
+    var newBase = num(Config.INVENTORY[name]) + (target - cur);
+    var rec = append(baseRec({ mode: "base", product: name, base: newBase, target: target }));
+    Config.INVENTORY[name] = newBase;                 // 立即生效（不等 catalog 回调）
+    try { if (window.App.Stock) window.App.Stock.markDirty(); } catch (e) {}
+    return rec;
+  }
+
+  /** 清除手动设定，恢复跟随目录基准 */
+  function clearBase(name) {
+    var rec = append(baseRec({ mode: "base", product: normName(name), base: null, target: null }));
+    try { applyBaseOverrides(); } catch (e) {}
+    return rec;
+  }
+
   /* ================= 现场流水 ================= */
 
   /** 现场流水：该产品的出入库流水 + 逐条「出/入库后现场剩余」，倒序（最新在前）。
@@ -222,6 +282,10 @@
     setWarehouse: setWarehouse,
     transfer: transfer,
     setWarn: setWarn,
+    setBase: setBase,
+    clearBase: clearBase,
+    hasBase: hasBase,
+    applyBaseOverrides: applyBaseOverrides,
     siteFlow: siteFlow,
     eventsOf: eventsOf,
     _countsAsStock: countsAsStock

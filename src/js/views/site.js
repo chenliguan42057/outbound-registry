@@ -80,6 +80,7 @@
       '</div>' +
       '<div class="zone-toolbar">' +
         chip("all", "全部") + chip("site", "仅现场有货") + chip("low", "仅预警") +
+        '<button type="button" class="btn sm zone-set-btn" data-act="batchset">⚙ 分区设置（单个 / 批量）</button>' +
       '</div>' +
       (shown.length ? '<div class="zone-grid">' + shown.map(card).join("") + '</div>'
                     : '<div class="empty">没有符合条件的货品</div>');
@@ -148,6 +149,7 @@
     var btn = e.target.closest ? e.target.closest("[data-act]") : null;
     if (!btn) return;
     var act = btn.getAttribute("data-act");
+    if (act === "batchset") return openBatch();
     if (act === "filter") {
       filter = btn.getAttribute("data-f") || "all";
       draw();
@@ -186,15 +188,20 @@
       });
   }
 
-  /** 设置弹窗：仓库锁定数（绝对值）+ 现场警示线（绝对值） */
+  /** 单产品设置弹窗：总库存（可手动设定）+ 仓库锁定数 + 现场警示线 */
   function openSettings(name) {
     var cur = Zones.summary().filter(function (x) { return x.name === name; })[0] || {};
+    var total = (cur.total != null) ? cur.total : (Zones.siteStock(name) + Zones.warehouseLocked(name));
     var wh = Zones.warehouseLocked(name);
     var wa = Zones.warnAt(name);
     var body =
-      '<div class="confirm-msg">' + Util.esc(name) + '<br><span style="color:#6B7A75;font-size:12px">当前总量 ' +
-        (cur.total != null ? cur.total : "—") + '　现场 ' + (cur.site != null ? cur.site : "—") + '</span></div>' +
-      '<label class="zone-set-lbl">仓库锁定数（整箱存放的绝对数）' +
+      '<div class="confirm-msg"><b>' + Util.esc(name) + '</b></div>' +
+      '<label class="zone-set-lbl">总库存（该产品的库存总数，可直接设定）' +
+        '<input type="number" min="0" class="pw-input" id="zsTotal" value="' + total + '" /></label>' +
+      (cur.manuallySet
+        ? '<div class="zs-hint">当前为<b>手动设定</b> · <a href="javascript:void(0)" id="zsClear">恢复跟随系统</a>（之后出入库会自动变化）</div>'
+        : '<div class="zs-hint">当前跟随系统库存，出入库会自动变化</div>') +
+      '<label class="zone-set-lbl">仓库锁定数（其中整箱存放、只能转入现场的部分）' +
         '<input type="number" min="0" class="pw-input" id="zsWh" value="' + wh + '" /></label>' +
       '<label class="zone-set-lbl">现场警示线（现场低于此值即预警）' +
         '<input type="number" min="0" class="pw-input" id="zsWarn" value="' + wa + '" /></label>' +
@@ -206,12 +213,20 @@
     UI.Modal.show("设置 · " + name, body, { width: "360px" });
     var m = UI.Modal.body();
     var err = m.querySelector("#zsErr");
+    var clr = m.querySelector("#zsClear");
+    if (clr) clr.onclick = function () {
+      Zones.clearBase(name); UI.Modal.hide();
+      Util.toast("「" + name + "」已恢复跟随系统库存"); draw();
+    };
     m.querySelector('[data-act="zc"]').onclick = function () { UI.Modal.hide(); };
     m.querySelector('[data-act="zok"]').onclick = function () {
+      var newTotal = Math.round(Number(m.querySelector("#zsTotal").value));
       var newWh = Math.round(Number(m.querySelector("#zsWh").value));
       var newWarn = Math.round(Number(m.querySelector("#zsWarn").value));
+      if (isNaN(newTotal) || newTotal < 0) { err.textContent = "总库存需为 ≥0 的整数"; return; }
       if (isNaN(newWh) || newWh < 0) { err.textContent = "仓库锁定数需为 ≥0 的整数"; return; }
       if (isNaN(newWarn) || newWarn < 0) { err.textContent = "警示线需为 ≥0 的整数"; return; }
+      if (newTotal !== total) Zones.setBase(name, newTotal);
       if (newWh !== wh) Zones.setWarehouse(name, newWh);
       if (newWarn !== wa) Zones.setWarn(name, newWarn);
       UI.Modal.hide();
@@ -220,7 +235,105 @@
     };
   }
 
+  /** 批量 / 逐行分区设置（总库存 + 仓库锁定 + 现场警示线） */
+  function openBatch() {
+    var sum = Zones.summary();
+    var origMap = {};
+    sum.forEach(function (s) { origMap[s.name] = s; });
+
+    var rowsHtml = sum.map(function (s) {
+      return '<div class="zb-row" data-name="' + Util.esc(s.name) + '">' +
+        '<span class="zb-ckw"><input type="checkbox" class="zb-ck" /></span>' +
+        '<span class="zb-name">' + Util.esc(s.name) + (s.manuallySet ? '<i class="zb-mk">手动</i>' : '') + '</span>' +
+        '<span><input type="number" min="0" class="zb-in" data-f="base" value="' + s.total + '" /></span>' +
+        '<span><input type="number" min="0" class="zb-in" data-f="wh" value="' + s.warehouse + '" /></span>' +
+        '<span class="zb-site">' + s.site + '</span>' +
+        '<span><input type="number" min="0" class="zb-in" data-f="warn" value="' + s.warnAt + '" /></span>' +
+      '</div>';
+    }).join("");
+
+    var body =
+      '<div class="zb-tip">「总库存」= 该产品的库存总数（可直接设定）；「仓库锁定」是其中整箱存放、只能转入现场的部分；' +
+        '<b>现场 = 总库存 − 仓库锁定</b>（自动算）。逐行改，或用上排批量填，最后点「保存」。</div>' +
+      '<div class="zb-bar">' +
+        '<label class="zb-all"><input type="checkbox" id="zbAll" /> 全选</label>' +
+        '<select id="zbField" class="zb-sel">' +
+          '<option value="base">总库存</option>' +
+          '<option value="wh">仓库锁定</option>' +
+          '<option value="warn">现场警示线</option>' +
+        '</select>' +
+        '<input type="number" min="0" id="zbVal" class="zb-val" placeholder="批量值" />' +
+        '<button type="button" class="btn sm" data-zb="toSel">应用到勾选</button>' +
+        '<button type="button" class="btn ghost sm" data-zb="toAll">应用到全部</button>' +
+      '</div>' +
+      '<div class="zb-table">' +
+        '<div class="zb-head"><span></span><span>产品</span><span>总库存</span><span>仓库锁定</span><span>现场</span><span>警示线</span></div>' +
+        rowsHtml +
+      '</div>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="btn ghost sm" data-zb="cancel">取消</button>' +
+        '<button type="button" class="btn sm" data-zb="save">保存</button>' +
+      '</div>';
+
+    UI.Modal.show("分区设置 · 总库存 / 仓库锁定 / 现场 / 警示线", body, { width: "92vw" });
+    var m = UI.Modal.body();
+    function eachRow(fn) { Array.prototype.forEach.call(m.querySelectorAll(".zb-row"), fn); }
+
+    function recalcRow(row) {
+      var t = Math.max(0, Math.round(Number(row.querySelector('[data-f="base"]').value) || 0));
+      var w = Math.max(0, Math.round(Number(row.querySelector('[data-f="wh"]').value) || 0));
+      row.querySelector(".zb-site").textContent = Math.max(0, t - w);
+    }
+    eachRow(function (row) {
+      Array.prototype.forEach.call(row.querySelectorAll(".zb-in"), function (inp) {
+        var f = inp.getAttribute("data-f");
+        if (f === "base" || f === "wh") inp.addEventListener("input", function () { recalcRow(row); });
+      });
+    });
+
+    var all = m.querySelector("#zbAll");
+    if (all) all.onchange = function () {
+      Array.prototype.forEach.call(m.querySelectorAll(".zb-ck"), function (c) { c.checked = all.checked; });
+    };
+
+    function bulk(onlyChecked) {
+      var field = m.querySelector("#zbField").value;
+      var raw = m.querySelector("#zbVal").value;
+      if (raw === "") { Util.toast("请先填写批量值", true); return; }
+      var n = Math.max(0, Math.round(Number(raw)));
+      var cnt = 0;
+      eachRow(function (row) {
+        var ck = row.querySelector(".zb-ck");
+        if (onlyChecked && !(ck && ck.checked)) return;
+        var inp = row.querySelector('[data-f="' + field + '"]');
+        if (!inp) return;
+        inp.value = n; cnt++; recalcRow(row);
+      });
+      Util.toast("已为 " + cnt + " 行填入 " + n + "，点「保存」生效");
+    }
+    m.querySelector('[data-zb="toSel"]').onclick = function () { bulk(true); };
+    m.querySelector('[data-zb="toAll"]').onclick = function () { bulk(false); };
+    m.querySelector('[data-zb="cancel"]').onclick = function () { UI.Modal.hide(); };
+    m.querySelector('[data-zb="save"]').onclick = function () {
+      var changed = 0;
+      eachRow(function (row) {
+        var name = row.getAttribute("data-name");
+        var o = origMap[name] || {};
+        var t = Math.round(Number(row.querySelector('[data-f="base"]').value));
+        var w = Math.round(Number(row.querySelector('[data-f="wh"]').value));
+        var wa = Math.round(Number(row.querySelector('[data-f="warn"]').value));
+        if (isNaN(t) || isNaN(w) || isNaN(wa)) return;
+        if (t !== o.total) { Zones.setBase(name, t); changed++; }
+        if (w !== o.warehouse) { Zones.setWarehouse(name, w); changed++; }
+        if (wa !== o.warnAt) { Zones.setWarn(name, wa); changed++; }
+      });
+      UI.Modal.hide();
+      Util.toast(changed ? ("已保存 " + changed + " 项设置") : "没有改动");
+      draw();
+    };
+  }
+
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
-  window.App.Views.site = { render: render, refresh: refresh };
+  window.App.Views.site = { render: render, refresh: refresh, openBatch: openBatch };
 })();

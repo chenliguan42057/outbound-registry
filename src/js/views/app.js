@@ -700,6 +700,8 @@
     var cur = State.nav.active;
     var viewName = VIEW_MAP[cur];
     var view = viewName && window.App.Views[viewName];
+    // 同步后分区数据可能变化 → 重新应用「总库存手动设定」，再刷新视图
+    try { if (window.App.Zones && window.App.Zones.applyBaseOverrides) window.App.Zones.applyBaseOverrides(); } catch (e) {}
     if (view && view.refresh) view.refresh();
     updateStatusBar();
     checkSiteWarnings();

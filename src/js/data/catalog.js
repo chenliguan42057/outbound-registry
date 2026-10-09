@@ -33,6 +33,9 @@
     Config.PRODUCTS.length = 0;
     names.forEach(function (n) { Config.PRODUCTS.push(n); });
     var inv = cat.inventory || {};
+    // 目录原始期初基准快照（供双区库存「总库存手动设定」先还原、再叠加覆盖；见 data/zones.js）
+    Config._INVENTORY_RAW = {};
+    Object.keys(inv).forEach(function (k) { Config._INVENTORY_RAW[k] = Number(inv[k]) || 0; });
     Object.keys(Config.INVENTORY).forEach(function (k) { delete Config.INVENTORY[k]; });
     Object.keys(inv).forEach(function (k) { Config.INVENTORY[k] = Number(inv[k]) || 0; });
     // 每个货品独立预警线（2026-08-14）：用户在目录管理里设的 warnAt，缺省回退全局阈值
@@ -47,6 +50,9 @@
     Object.keys(cm).forEach(function (catKey) {
       cm[catKey] = (cm[catKey] || []).filter(function (n) { return names.indexOf(n) !== -1; });
     });
+    // 双区库存（2026-10-09）：用户手动设定的「总库存」覆盖目录期初基准。
+    // 必须放在最后 —— 否则会被上面刚写入的目录值冲掉。
+    try { if (window.App.Zones && window.App.Zones.applyBaseOverrides) window.App.Zones.applyBaseOverrides(); } catch (e) {}
   }
 
   /** 异步加载完成后，刷新依赖目录的视图（库存/仪表盘/报表），避免首次进入页面时短暂显示统一阈值。

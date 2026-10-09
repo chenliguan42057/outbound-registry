@@ -584,3 +584,44 @@ html[data-theme="dark"] .zone-warn-banner { background: linear-gradient(160deg, 
   .zf-head, .zf-row { grid-template-columns: 78px 48px 1fr 54px; }
   .zone-warn-banner { left: 10px; right: 10px; width: auto; transform: none; }
 }
+
+/* 分区设置（单个 / 批量） —— 2026-10-09 */
+.zone-set-btn { margin-left: auto; }
+.zs-hint { font-size: 12px; color: #7A8A84; margin: 6px 0 2px; line-height: 1.6; }
+.zs-hint a { color: #3F8370; text-decoration: underline; cursor: pointer; }
+.zs-hint b { color: #B4501F; }
+
+.zb-tip { font-size: 12px; color: #6B7A75; line-height: 1.7; margin-bottom: 10px; background: #F4F8F6; border-radius: 10px; padding: 9px 12px; }
+.zb-tip b { color: #3C4845; }
+.zb-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #E1ECE7; }
+.zb-all { font-size: 13px; color: #4A5A55; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.zb-sel, .zb-val { border: 1px solid #C6DAD1; border-radius: 9px; padding: 7px 10px; font-size: 13px; background: #FBFCFA; color: #3C4845; }
+.zb-val { width: 96px; }
+.zb-table { max-height: 56vh; overflow-y: auto; border: 1px solid #E1ECE7; border-radius: 12px; }
+.zb-head, .zb-row { display: grid; grid-template-columns: 34px 1fr 92px 100px 64px 92px; gap: 8px; align-items: center; padding: 7px 12px; }
+.zb-head { position: sticky; top: 0; background: #F4F8F6; font-size: 12px; color: #6B7A75; z-index: 1; }
+.zb-row { border-top: 1px solid #F2F6F4; font-size: 13px; }
+.zb-row:nth-child(even) { background: #FCFEFD; }
+.zb-ckw { text-align: center; }
+.zb-name { color: #3C4845; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zb-mk { font-style: normal; font-size: 11px; color: #C2703F; background: rgba(194,112,63,.12); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+.zb-in { width: 100%; box-sizing: border-box; border: 1px solid #C6DAD1; border-radius: 8px; padding: 6px 8px; font-size: 13px; background: #fff; color: #3C4845; }
+.zb-in:focus { outline: none; border-color: #8FCDB6; box-shadow: 0 0 0 2px rgba(143,205,182,.25); }
+.zb-site { text-align: center; font-weight: 600; color: #35738C; }
+
+html[data-theme="dark"] .zb-tip { background: #262E2C; color: #B7C4BF; }
+html[data-theme="dark"] .zb-tip b { color: #E4EDE9; }
+html[data-theme="dark"] .zb-head { background: #262E2C; color: #9AA8A3; }
+html[data-theme="dark"] .zb-table { border-color: #333E3A; }
+html[data-theme="dark"] .zb-row { border-top-color: #2E3735; }
+html[data-theme="dark"] .zb-row:nth-child(even) { background: #212927; }
+html[data-theme="dark"] .zb-name { color: #DCE6E2; }
+html[data-theme="dark"] .zb-in,
+html[data-theme="dark"] .zb-sel,
+html[data-theme="dark"] .zb-val { background: #1E2523; border-color: #3A4642; color: #DCE6E2; }
+html[data-theme="dark"] .zs-hint { color: #9AA8A3; }
+
+@media (max-width: 720px) {
+  .zb-head, .zb-row { grid-template-columns: 28px 1fr 70px 76px 48px 70px; gap: 5px; padding: 6px 8px; font-size: 12px; }
+  .zb-in { padding: 5px 6px; font-size: 12px; }
+}
