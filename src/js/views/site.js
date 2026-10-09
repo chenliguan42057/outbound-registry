@@ -15,7 +15,6 @@
 
   var container = null;
   var filter = "all";          // all | site | low
-  var expanded = {};           // 展开流水的产品名集合
 
   /** 产品单位（取自 catalog，读不到留空） */
   function unitOf(name) {
@@ -100,7 +99,6 @@
 
   function card(s) {
     var u = unitOf(s.name);
-    var open = !!expanded[s.name];
     var barSite = pct(s.site, s.total);
     return '<div class="zone-card' + (s.low ? " low" : "") + '">' +
       '<div class="zc-head">' +
@@ -119,28 +117,48 @@
       '<div class="zc-acts">' +
         '<button type="button" class="btn sm" data-act="to_site" data-name="' + Util.esc(s.name) + '"' + (s.warehouse <= 0 ? " disabled" : "") + '>转出现场</button>' +
         '<button type="button" class="btn ghost sm" data-act="to_wh" data-name="' + Util.esc(s.name) + '"' + (s.site <= 0 ? " disabled" : "") + '>退回仓库</button>' +
-        '<button type="button" class="btn ghost sm" data-act="flow" data-name="' + Util.esc(s.name) + '">' + (open ? "收起流水" : "流水") + '</button>' +
+        '<button type="button" class="btn ghost sm" data-act="flow" data-name="' + Util.esc(s.name) + '">流水</button>' +
         '<button type="button" class="btn ghost sm" data-act="set" data-name="' + Util.esc(s.name) + '">设置</button>' +
       '</div>' +
-      (open ? flowHtml(s.name) : '') +
     '</div>';
   }
 
-  function flowHtml(name) {
-    var rows = Zones.siteFlow(name, 40);
-    if (!rows.length) return '<div class="zf"><div class="zf-empty">暂无出入库流水</div></div>';
-    return '<div class="zf">' +
-      '<div class="zf-head"><span>时间</span><span>变动</span><span>经手 / 部门</span><span>现场剩余</span></div>' +
-      rows.map(function (r) {
-        var sign = (r.type === "in") ? "+" : "−";
-        return '<div class="zf-row ' + r.type + '">' +
-          '<span class="zf-t">' + Util.esc(fmtTime(r.time)) + '</span>' +
-          '<span class="zf-q">' + sign + r.qty + '</span>' +
-          '<span class="zf-who">' + Util.esc((r.picker || "—") + (r.dept ? " · " + r.dept : "")) + '</span>' +
-          '<span class="zf-left">' + r.siteAfter + '</span>' +
-        '</div>';
-      }).join("") +
-    '</div>';
+  /** 现场流水弹窗：点卡片「流水」打开独立小窗口，避免长表格把卡片撑乱 */
+  function openFlow(name) {
+    var s = Zones.summary().filter(function (x) { return x.name === name; })[0] || {};
+    var u = unitOf(name);
+    var rows = Zones.siteFlow(name, 60);
+    var head =
+      '<div class="zf-sum">' +
+        '<span class="zf-s-item"><b>' + (s.site != null ? s.site : 0) + '</b>现场可用</span>' +
+        '<span class="zf-s-item"><b>' + (s.warehouse != null ? s.warehouse : 0) + '</b>仓库锁定</span>' +
+        '<span class="zf-s-item"><b>' + (s.total != null ? s.total : 0) + '</b>总库存' + (u ? '·' + Util.esc(u) : '') + '</span>' +
+        '<span class="zf-s-item' + (s.low ? ' warn' : '') + '"><b>' + (s.warnAt != null ? s.warnAt : 0) + '</b>警示线</span>' +
+      '</div>';
+    var table = rows.length
+      ? '<div class="zf-wrap"><div class="zf-head"><span>时间</span><span>变动</span><span>经手 / 部门</span><span>现场剩余</span></div>' +
+        rows.map(function (r) {
+          var sign = (r.type === "in") ? "+" : "−";
+          return '<div class="zf-row ' + r.type + '">' +
+            '<span class="zf-t">' + Util.esc(fmtTime(r.time)) + '</span>' +
+            '<span class="zf-q">' + sign + r.qty + '</span>' +
+            '<span class="zf-who">' + Util.esc((r.picker || "—") + (r.dept ? " · " + r.dept : "")) + '</span>' +
+            '<span class="zf-left">' + r.siteAfter + '</span>' +
+          '</div>';
+        }).join("") + '</div>'
+      : '<div class="zf-empty">暂无出入库流水</div>';
+    var body =
+      head +
+      '<div class="zf-tip">「变动」为 − 出库 / + 入库；「现场剩余」是该笔之后现场还剩多少。</div>' +
+      table +
+      '<div class="modal-actions">' +
+        '<button type="button" class="btn ghost sm" data-fz="close">关闭</button>' +
+        '<button type="button" class="btn sm" data-fz="set">分区设置</button>' +
+      '</div>';
+    UI.Modal.show("现场流水 · " + name, body, { width: "560px" });
+    var m = UI.Modal.body();
+    m.querySelector('[data-fz="close"]').onclick = function () { UI.Modal.hide(); };
+    m.querySelector('[data-fz="set"]').onclick = function () { UI.Modal.hide(); openSettings(name); };
   }
 
   /* ================= 事件（委托，只绑一次） ================= */
@@ -157,7 +175,7 @@
     }
     var name = btn.getAttribute("data-name");
     if (!name) return;
-    if (act === "flow") { expanded[name] = !expanded[name]; draw(); return; }
+    if (act === "flow") return openFlow(name);
     if (act === "to_site") return doTransfer(name, "to_site");
     if (act === "to_wh") return doTransfer(name, "to_wh");
     if (act === "set") return openSettings(name);

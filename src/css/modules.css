@@ -536,15 +536,21 @@ html[data-theme="dark"] .sync-count-hint.warn { color: #E8A57C; }
 .zone-card.low .zc-bar i { background: linear-gradient(90deg, #E8B48F, #C2703F); }
 .zc-acts { display: flex; gap: 6px; flex-wrap: wrap; }
 
-/* 现场流水 */
-.zf { margin-top: 12px; border-top: 1px dashed #E1ECE7; padding-top: 10px; }
-.zf-empty { color: #93A39C; font-size: 12px; text-align: center; padding: 10px; }
-.zf-head, .zf-row { display: grid; grid-template-columns: 96px 60px 1fr 64px; gap: 8px; align-items: center; font-size: 12px; }
-.zf-head { color: #93A39C; padding-bottom: 6px; }
-.zf-row { padding: 5px 0; border-bottom: 1px solid #F2F6F4; color: #4A5A55; }
+/* 现场流水（点「流水」打开的独立弹窗版） */
+.zf-sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+.zf-s-item { background: #F4F8F6; border-radius: 10px; padding: 9px 10px; font-size: 12px; color: #6B7A75; display: flex; flex-direction: column; gap: 3px; }
+.zf-s-item b { font-size: 18px; font-weight: 700; color: #3C4845; }
+.zf-s-item.warn b { color: #C2703F; }
+.zf-tip { font-size: 12px; color: #93A39C; margin: 2px 0 8px; }
+.zf-empty { color: #93A39C; font-size: 12px; text-align: center; padding: 16px; }
+.zf-wrap { border: 1px solid #E1ECE7; border-radius: 12px; max-height: 52vh; overflow-y: auto; padding: 0 12px 6px; }
+.zf-head, .zf-row { display: grid; grid-template-columns: 92px 56px 1fr 72px; gap: 8px; align-items: center; font-size: 13px; }
+.zf-head { color: #93A39C; padding: 10px 0 6px; position: sticky; top: 0; background: #fff; }
+.zf-row { padding: 7px 0; border-bottom: 1px solid #F2F6F4; color: #4A5A55; }
 .zf-row .zf-q { font-weight: 700; }
 .zf-row.out .zf-q { color: #B4501F; }
 .zf-row.in .zf-q { color: #3F8370; }
+.zf-row .zf-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zf-row .zf-left { text-align: right; font-weight: 600; color: #3C4845; }
 
 .zone-set-lbl { display: block; font-size: 12px; color: #6B7A75; margin: 10px 0 4px; }
@@ -575,12 +581,17 @@ html[data-theme="dark"] .zc-meta b,
 html[data-theme="dark"] .zf-row .zf-left { color: #DCE6E2; }
 html[data-theme="dark"] .zc-bar { background: #2E3735; }
 html[data-theme="dark"] .zf-row { color: #C3CFCA; border-bottom-color: #2E3735; }
+html[data-theme="dark"] .zf-s-item { background: #262E2C; color: #9AA8A3; }
+html[data-theme="dark"] .zf-s-item b { color: #E4EDE9; }
+html[data-theme="dark"] .zf-wrap { border-color: #333E3A; }
+html[data-theme="dark"] .zf-head { background: #232B29; }
 html[data-theme="dark"] .zone-warn-banner { background: linear-gradient(160deg, #2C2622, #2A2724); border-color: #4A3A2E; color: #E6D9CF; }
 
 /* 窄屏适配 */
 @media (max-width: 720px) {
   .zone-ov { grid-template-columns: repeat(2, 1fr); }
   .zone-grid { grid-template-columns: 1fr; }
+  .zf-sum { grid-template-columns: repeat(2, 1fr); }
   .zf-head, .zf-row { grid-template-columns: 78px 48px 1fr 54px; }
   .zone-warn-banner { left: 10px; right: 10px; width: auto; transform: none; }
 }
