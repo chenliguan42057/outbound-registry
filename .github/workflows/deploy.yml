@@ -135,7 +135,7 @@ jobs:
             exit 1
           fi
           # 双区库存（2026-10-09）：现场库存 = 总库存 − 仓库锁定；防回滚守卫
-          if ! [ -f src/js/data/zones.js ] || ! grep -q 'warehouseLocked' src/js/data/zones.js || ! grep -q 'applyBaseOverrides' src/js/data/zones.js ; then
+          if ! [ -f src/js/data/zones.js ] || ! grep -q 'warehouseLocked' src/js/data/zones.js || ! grep -q 'applyBaseOverrides' src/js/data/zones.js || ! grep -q 'outFrozenOf' src/js/data/zones.js ; then
             echo "::error::检测到双区库存数据层（zones.js）缺失或被回滚，已中止部署。"
             exit 1
           fi

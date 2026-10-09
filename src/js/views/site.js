@@ -68,7 +68,7 @@
     shown = sortRows(shown);
 
     var html =
-      '<div class="dash-note">仓库＝锁定库存（整箱存放，只能转入现场）；现场＝日常出库扣减的可用库存。两者相加＝该产品全部库存。' +
+      '<div class="dash-note">仓库＝锁定库存（整箱存放，只能转入现场）；现场＝日常出库扣减的可用库存——出库单一经创建即扣现场（含未提单），待取货不影响。' +
         '<span class="zone-help">点产品卡的「流水」看谁拿了多少、还剩多少</span></div>' +
       '<div class="zone-ov">' +
         ovCard("现场可用合计", siteTotal, "site", lowN ? (lowN + " 项现场偏低") : "现场充足") +
@@ -109,6 +109,7 @@
         '<div class="zc-figure"><b' + (s.low ? ' class="warn"' : '') + '>' + s.site + '</b><span>现场可用</span></div>' +
         '<div class="zc-meta">' +
           '<span>仓库锁定 <b>' + s.warehouse + '</b></span>' +
+          (s.inTransit > 0 ? '<span class="zc-trans">在途 <b>' + s.inTransit + '</b></span>' : '') +
           '<span>总量 <b>' + s.total + '</b></span>' +
           '<span>警示线 <b>' + s.warnAt + '</b></span>' +
         '</div>' +
@@ -132,6 +133,7 @@
       '<div class="zf-sum">' +
         '<span class="zf-s-item"><b>' + (s.site != null ? s.site : 0) + '</b>现场可用</span>' +
         '<span class="zf-s-item"><b>' + (s.warehouse != null ? s.warehouse : 0) + '</b>仓库锁定</span>' +
+        '<span class="zf-s-item"><b>' + (s.inTransit != null ? s.inTransit : 0) + '</b>在途（已出未提单）</span>' +
         '<span class="zf-s-item"><b>' + (s.total != null ? s.total : 0) + '</b>总库存' + (u ? '·' + Util.esc(u) : '') + '</span>' +
         '<span class="zf-s-item' + (s.low ? ' warn' : '') + '"><b>' + (s.warnAt != null ? s.warnAt : 0) + '</b>警示线</span>' +
       '</div>';
@@ -149,7 +151,7 @@
       : '<div class="zf-empty">暂无出入库流水</div>';
     var body =
       head +
-      '<div class="zf-tip">「变动」为 − 出库 / + 入库；「现场剩余」是该笔之后现场还剩多少。</div>' +
+      '<div class="zf-tip">「变动」为 − 出库 / + 入库；「现场剩余」= 该笔之后现场还剩多少（已扣在途与仓库锁定）。</div>' +
       table +
       '<div class="modal-actions">' +
         '<button type="button" class="btn ghost sm" data-fz="close">关闭</button>' +

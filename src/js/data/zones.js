@@ -83,10 +83,24 @@
   function hasWarn(name) { return eventsOf(name).some(function (e) { return e.mode === "warn"; }); }
   function hasWarehouse(name) { return eventsOf(name).some(function (e) { return e.mode === "set" || e.dir; }); }
 
-  /** 现场可用 = 总库存 − 仓库锁定（下限 0） */
+  /** 在途出库冻结量（**不含待取货**）：未提单出库单全额 + 先借后还未还剩余量。
+      复用 Freeze.detail（src === "out" 的项）—— 与全站「冻结占用」同口径、自动跟随其改进。
+      主理人 2026-10-09 定稿：现场库存要扣「已出库/未提单」，但**不扣待取货**（货还在现场）。
+      先借后还与盘点天然涵盖：借出单 affectsStock+freezeStock → 计入；盘点调整在 Stock 实际库存里。 */
+  function outFrozenOf(name) {
+    var F = window.App.Freeze;
+    if (!F || !F.detail) return 0;
+    var det = F.detail(normName(name)) || [];
+    var s = 0;
+    for (var i = 0; i < det.length; i++) if (det[i] && det[i].src === "out") s += num(det[i].qty);
+    return s;
+  }
+
+  /** 现场可用 = 总库存 − 仓库锁定 − 在途出库（未提单 / 先借后还未还）。
+      出库单一经创建即扣现场（无需等提单）；待取货不影响现场。 */
   function siteStock(name, total) {
     var t = (typeof total === "number") ? total : window.App.Stock.getStock(name);
-    return Math.max(0, t - warehouseLocked(name));
+    return Math.max(0, t - warehouseLocked(name) - outFrozenOf(name));
   }
 
   /** 全产品分区汇总（仪表盘用） */
@@ -96,10 +110,11 @@
     return (Config.PRODUCTS || []).map(function (name) {
       var total = Stock.getStock(name);
       var wh = warehouseLocked(name);
-      var site = Math.max(0, total - wh);
+      var tr = outFrozenOf(name);                       // 在途（已出未提单）
+      var site = Math.max(0, total - wh - tr);
       var wa = warnAt(name);
       return {
-        name: name, total: total, warehouse: wh, site: site,
+        name: name, total: total, warehouse: wh, inTransit: tr, site: site,
         warnAt: wa, low: site < wa,
         manuallySet: Object.prototype.hasOwnProperty.call(ov, name)
       };
@@ -263,7 +278,7 @@
         purpose: r.purpose || "",
         note: r.note || "",
         entity: r.entity || "",
-        siteAfter: Math.max(0, totalAfter - whAfter)
+        siteAfter: Math.max(0, totalAfter - whAfter - outFrozenOf(name))
       };
     }).filter(Boolean).sort(function (a, b) { return b._ts - a._ts; });
     return rows.slice(0, limit);
