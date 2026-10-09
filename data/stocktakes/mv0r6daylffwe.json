@@ -1,0 +1,1 @@
+{"id":"mv0r6daylffwe","_ts":1791537509338,"time":"2026-10-09T17:18","kind":"stocktake","warehouse":"shenzhen","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +0 / 盘亏 -173","_local":true,"items":[{"name":"小鹿牛皮纸袋 大","book":209,"actual":88,"diff":-121},{"name":"小鹿牛皮纸袋 小","book":556,"actual":504,"diff":-52}]}
