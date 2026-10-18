@@ -175,7 +175,7 @@
         '<div class="zc-meta">' +
           '<span>仓库锁定 <b>' + s.warehouse + '</b>' + (cs > 0 ? ' <i class="zc-case">' + fmtBoxes(s.warehouse, cs) + '</i>' : '') + '</span>' +
           (s.inTransit > 0 ? '<span class="zc-trans">在途 <b>' + s.inTransit + '</b></span>' : '') +
-          '<span>可用 <b>' + s.site + '</b></span>' +
+          '<span title="总可用 = 总量 − 在途（已出未提单）：仓库锁定的货也能转出来用，所以算在可用里">总可用 <b>' + (s.total - s.inTransit) + '</b></span>' +
           '<span>总量 <b>' + s.total + '</b></span>' +
           '<span>警示线 <b>' + s.warnAt + '</b></span>' +
         '</div>' +
@@ -328,7 +328,9 @@
       var l1 = v.qty > 0
         ? (v.boxes + " 箱 × " + v.size + " 个/箱 ＝ <b>" + v.qty + "</b> 个")
         : '<span class="ce-warn">先填「每箱多少个」和「箱数」</span>';
-      var l2 = "当前仓库锁定 <b>" + cur + "</b> 个" + (csNow > 0 ? "（" + fmtBoxes(cur, csNow) + "）" : "");
+      /* 当前锁定的箱数优先用「本次填的箱规」换算 —— 否则新货品没存过箱规时这行看不到箱数，容易误读成"180 箱" */
+      var boxSize = v.size > 0 ? v.size : csNow;
+      var l2 = "当前仓库锁定 <b>" + cur + "</b> 个" + (boxSize > 0 ? "（" + fmtBoxes(cur, boxSize) + "）" : "");
       var l3 = v.qty > 0 ? "累加后 <b>" + (cur + v.qty) + "</b> 个（" + fmtBoxes(cur + v.qty, v.size) + "）" : "";
       calcEl.innerHTML = '<div>' + l1 + '</div><div>' + l2 + '</div>' + (l3 ? '<div class="ce-after">' + l3 + '</div>' : '');
       setBtn.disabled = !(v.qty > 0);
