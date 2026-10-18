@@ -143,11 +143,10 @@
      恢复上架：把名字从这个数组里删掉（或置空），重建 bundle 即可。 */
   var HIDDEN_PICK = ["面膜 5片装"];
 
-  /** 货品名归一：去所有空白 + 去掉「（未入库版）」后缀 —— 同一 SKU 的不同写法视为同一个 */
+  /** 货品名归一：只做首尾去空白。**不做去空格 / 去后缀** —— 必须精确到具体 SKU 名，
+      「面膜5片装（未入库版）」是独立在售品，不能被「面膜 5片装」的隐藏规则牵连。 */
   function pickKey(name) {
-    return String(name == null ? "" : name)
-      .replace(/\s+/g, "")
-      .replace(/[（(]未入库版[）)]/g, "");
+    return String(name == null ? "" : name).trim();
   }
 
   function isPickHidden(name) {
