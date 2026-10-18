@@ -103,7 +103,7 @@
         chip("all", "全部") + chip("site", "仅现场有货") + chip("low", "仅预警") +
         '<button type="button" class="btn sm zone-set-btn" data-act="batchset">⚙ 分区设置（单个 / 批量）</button>' +
       '</div>' +
-      (shown.length ? '<div class="zone-grid">' + shown.map(card).join("") + '</div>'
+      (shown.length ? renderGroups(shown)
                     : '<div class="empty">没有符合条件的货品</div>');
 
     container.innerHTML = html;
@@ -117,6 +117,27 @@
   function chip(val, label) {
     return '<button type="button" class="btn sm' + (filter === val ? "" : " ghost") +
       '" data-act="filter" data-f="' + val + '">' + Util.esc(label) + '</button>';
+  }
+
+  /** 按分类分块渲染（2026-10-18）：每组一个小标题 + 组内网格。
+      list 已由 sortRows 排好序（组序 → 组内目录序），这里只做分组与块序校正，
+      保证「选择货品」面板看到的分组顺序 = 仪表盘看到的分组顺序。 */
+  function renderGroups(list) {
+    var groups = [], map = {};
+    list.forEach(function (s) {
+      var g = UI.pickGroupOf ? UI.pickGroupOf(s.name) : (String(s.name || "").split(" ")[0] || "其他");
+      if (!map[g]) { map[g] = { name: g, idx: groupIndex(s.name), items: [] }; groups.push(map[g]); }
+      map[g].items.push(s);
+    });
+    groups.sort(function (a, b) { return a.idx - b.idx; });
+    return groups.map(function (g) {
+      var c = g.idx > 9 ? 9 : g.idx;
+      return '<div class="zone-group">' +
+          '<div class="zg-head"><i class="zg-dot" data-c="' + c + '"></i>' +
+            Util.esc(g.name) + '<span class="zg-count">' + g.items.length + '</span></div>' +
+          '<div class="zone-grid">' + g.items.map(card).join("") + '</div>' +
+        '</div>';
+    }).join("");
   }
 
   function card(s) {

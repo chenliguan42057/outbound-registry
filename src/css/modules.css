@@ -634,6 +634,34 @@ html[data-theme="dark"] .zb-sel,
 html[data-theme="dark"] .zb-val { background: #1E2523; border-color: #3A4642; color: #DCE6E2; }
 html[data-theme="dark"] .zs-hint { color: #9AA8A3; }
 
+/* ===== 2026-10-18 现场库存按分类分块（与「选择货品」面板同一套色板） =====
+   卡片顺序固定后按品类分块展示，块序与选择面板完全一致（精华液→精粹水→…→抽绳袋）；
+   c0~c9 对应 picker.css 的 --bpa 色号。组内仍用 .zone-grid（自适应多列，窄屏自动单列）。 */
+.zone-group { margin-bottom: 18px; }
+.zone-group:last-child { margin-bottom: 4px; }
+.zg-head {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 9px 2px; font-size: 13px; font-weight: 700; color: #5D6B66;
+}
+.zg-dot { width: 9px; height: 9px; border-radius: 3px; background: #9AA8A3; flex: none; }
+.zg-dot[data-c="0"] { background: #3F8370; }
+.zg-dot[data-c="1"] { background: #35738C; }
+.zg-dot[data-c="2"] { background: #63559E; }
+.zg-dot[data-c="3"] { background: #A86A34; }
+.zg-dot[data-c="4"] { background: #B0566F; }
+.zg-dot[data-c="5"] { background: #3F6E9E; }
+.zg-dot[data-c="6"] { background: #8A6D31; }
+.zg-dot[data-c="7"] { background: #5F7D31; }
+.zg-dot[data-c="8"] { background: #A04760; }
+.zg-dot[data-c="9"] { background: #7E6039; }
+.zg-count {
+  min-width: 18px; height: 18px; padding: 0 6px; border-radius: 9px;
+  background: #EDF2F0; color: #7A8A85; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+html[data-theme="dark"] .zg-head { color: #B7C4BF; }
+html[data-theme="dark"] .zg-count { background: #2C3A36; color: #9AA8A3; }
+
 @media (max-width: 720px) {
   .zb-head, .zb-row { grid-template-columns: 28px 1fr 70px 76px 48px 70px; gap: 5px; padding: 6px 8px; font-size: 12px; }
   .zb-in { padding: 5px 6px; font-size: 12px; }
