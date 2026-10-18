@@ -28,6 +28,24 @@
     return "";
   }
 
+  /** 箱规（每箱多少个）：取货品目录的 product.caseSize，没设过返回 0（2026-10-18） */
+  function caseSizeOf(name) {
+    var c = window.App.Catalog && window.App.Catalog.get && window.App.Catalog.get();
+    if (c && c.products) {
+      for (var i = 0; i < c.products.length; i++) {
+        if (c.products[i].name === name) return Number(c.products[i].caseSize) || 0;
+      }
+    }
+    return 0;
+  }
+
+  /** 个数 → 「12 箱」/「12 箱 +3」 的展示（size 为 0 时返回空串） */
+  function fmtBoxes(qty, size) {
+    if (!size || !(qty > 0)) return "";
+    var b = Math.floor(qty / size), r = Math.round(qty % size);
+    return b + " 箱" + (r ? " +" + r : "");
+  }
+
   function pct(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; }
   function fmtTime(t) {
     var s = String(t || "");
@@ -101,6 +119,7 @@
       '</div>' +
       '<div class="zone-toolbar">' +
         chip("all", "全部") + chip("site", "仅现场有货") + chip("low", "仅预警") +
+        '<button type="button" class="btn sm zone-set-btn" data-act="caseentry">📦 按箱录锁定</button>' +
         '<button type="button" class="btn sm zone-set-btn" data-act="batchset">⚙ 分区设置（单个 / 批量）</button>' +
       '</div>' +
       (shown.length ? renderGroups(shown)
@@ -142,6 +161,7 @@
 
   function card(s) {
     var u = unitOf(s.name);
+    var cs = caseSizeOf(s.name);
     var barSite = pct(s.site, s.total);
     return '<div class="zone-card' + (s.low ? " low" : "") + '">' +
       '<div class="zc-head">' +
@@ -151,8 +171,9 @@
       '<div class="zc-main">' +
         '<div class="zc-figure"><b' + (s.low ? ' class="warn"' : '') + '>' + s.site + '</b><span>现场可用</span></div>' +
         '<div class="zc-meta">' +
-          '<span>仓库锁定 <b>' + s.warehouse + '</b></span>' +
+          '<span>仓库锁定 <b>' + s.warehouse + '</b>' + (cs > 0 ? ' <i class="zc-case">' + fmtBoxes(s.warehouse, cs) + '</i>' : '') + '</span>' +
           (s.inTransit > 0 ? '<span class="zc-trans">在途 <b>' + s.inTransit + '</b></span>' : '') +
+          '<span>可用 <b>' + s.site + '</b></span>' +
           '<span>总量 <b>' + s.total + '</b></span>' +
           '<span>警示线 <b>' + s.warnAt + '</b></span>' +
         '</div>' +
@@ -212,6 +233,7 @@
     var btn = e.target.closest ? e.target.closest("[data-act]") : null;
     if (!btn) return;
     var act = btn.getAttribute("data-act");
+    if (act === "caseentry") return openCaseEntry();
     if (act === "batchset") return openBatch();
     if (act === "filter") {
       filter = btn.getAttribute("data-f") || "all";
@@ -252,6 +274,89 @@
   }
 
   /** 单产品设置弹窗：总库存（可手动设定）+ 仓库锁定数 + 现场警示线 */
+  /* ================= 按箱录仓库锁定（2026-10-18） ================= */
+  /** 用「箱」录仓库锁定：填「每箱多少个」（箱规）+「几箱」，自动换算成个数写入仓库锁定。
+      箱规记进货品目录 product.caseSize（随 catalog.json 云端同步），卡片上反向显示"共几箱"。
+      两个动作：＋累加（在现有锁定上加）/ ＝设为（直接改成这个数，适合实物盘点）。 */
+  function openCaseEntry() {
+    var Cat = window.App.Catalog;
+    var names = (Config.PRODUCTS || []).slice();
+    if (!names.length) { Util.toast("货品目录还没加载好，请稍后重试", true); return; }
+    var body =
+      '<div class="hint" style="margin:-2px 0 12px">按<b>箱</b>录仓库锁定：填「每箱多少个」+「几箱」，自动换算成个数。箱规会记住，下次自动带出。</div>' +
+      '<div class="field"><label>货品</label>' +
+        '<select id="ceName" class="ce-in">' + names.map(function (n) {
+          return '<option value="' + Util.esc(n) + '">' + Util.esc(n) + '</option>';
+        }).join("") + '</select></div>' +
+      '<div class="ce-row">' +
+        '<div class="field"><label>每箱多少个</label><input type="number" id="ceSize" min="1" step="1" class="ce-in" placeholder="如 20" /></div>' +
+        '<div class="field"><label>箱数</label><input type="number" id="ceBoxes" min="1" step="1" class="ce-in" value="1" /></div>' +
+      '</div>' +
+      '<div class="ce-calc" id="ceCalc"></div>' +
+      '<div class="modal-actions" style="margin-top:14px">' +
+        '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+        '<button type="button" class="btn ghost sm" id="ceSet">＝ 设为该数值</button>' +
+        '<button type="button" class="btn sm" id="ceAdd">＋ 累加到仓库锁定</button>' +
+      '</div>';
+    UI.Modal.show("📦 按箱录仓库锁定", body, { width: "540px" });
+    var m = UI.Modal.body();
+    var selEl = m.querySelector("#ceName");
+    var sizeEl = m.querySelector("#ceSize");
+    var boxEl = m.querySelector("#ceBoxes");
+    var calcEl = m.querySelector("#ceCalc");
+    var setBtn = m.querySelector("#ceSet");
+    var addBtn = m.querySelector("#ceAdd");
+
+    function curWh(name) {
+      var list = Zones.summary();
+      for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i].warehouse;
+      return 0;
+    }
+    function vals() {
+      var size = Math.max(0, Math.round(Number(sizeEl.value) || 0));
+      var boxes = Math.max(0, Math.round(Number(boxEl.value) || 0));
+      return { size: size, boxes: boxes, qty: size * boxes };
+    }
+    function draw() {
+      var v = vals();
+      var name = selEl.value;
+      var cur = curWh(name);
+      var csNow = caseSizeOf(name);
+      var l1 = v.qty > 0
+        ? (v.boxes + " 箱 × " + v.size + " 个/箱 ＝ <b>" + v.qty + "</b> 个")
+        : '<span class="ce-warn">先填「每箱多少个」和「箱数」</span>';
+      var l2 = "当前仓库锁定 <b>" + cur + "</b> 个" + (csNow > 0 ? "（" + fmtBoxes(cur, csNow) + "）" : "");
+      var l3 = v.qty > 0 ? "累加后 <b>" + (cur + v.qty) + "</b> 个（" + fmtBoxes(cur + v.qty, v.size) + "）" : "";
+      calcEl.innerHTML = '<div>' + l1 + '</div><div>' + l2 + '</div>' + (l3 ? '<div class="ce-after">' + l3 + '</div>' : '');
+      setBtn.disabled = !(v.qty > 0);
+      addBtn.disabled = !(v.qty > 0);
+    }
+    function commit(mode) {
+      var v = vals();
+      if (!(v.qty > 0)) { Util.toast("请先填写每箱多少个和箱数", true); return; }
+      var name = selEl.value;
+      var cur = curWh(name);
+      var target = (mode === "add") ? cur + v.qty : v.qty;
+      /* 箱规变了就顺手存进目录（云端同步，下次换设备也带得出来） */
+      if (Cat && Cat.setCaseSize && caseSizeOf(name) !== v.size) Cat.setCaseSize(name, v.size, function () {});
+      Zones.setWarehouse(name, target);
+      UI.Modal.hide();
+      Util.toast((mode === "add" ? "已累加 " : "已设为 ") + name + "：仓库锁定 " + target + " 个（" + v.boxes + " 箱 × " + v.size + "）");
+      refresh();
+    }
+    function fillSize() {
+      var cs = caseSizeOf(selEl.value);
+      sizeEl.value = cs > 0 ? cs : "";
+      draw();
+    }
+    selEl.addEventListener("change", fillSize);
+    sizeEl.addEventListener("input", draw);
+    boxEl.addEventListener("input", draw);
+    setBtn.addEventListener("click", function () { commit("set"); });
+    addBtn.addEventListener("click", function () { commit("add"); });
+    fillSize();
+  }
+
   function openSettings(name) {
     var cur = Zones.summary().filter(function (x) { return x.name === name; })[0] || {};
     var total = (cur.total != null) ? cur.total : (Zones.siteStock(name) + Zones.warehouseLocked(name));

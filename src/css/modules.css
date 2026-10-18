@@ -673,6 +673,27 @@ html[data-theme="dark"] .zone-group { background: #1F2724; border-color: #2F3A36
 html[data-theme="dark"] .zg-head { background: #26302C; border-bottom-color: #2F3A36; color: #C8D3CE; }
 html[data-theme="dark"] .zg-count { background: rgba(255,255,255,.10); color: #C2CEC9; border-color: rgba(255,255,255,.08); }
 
+/* ===== 2026-10-18 按箱录仓库锁定（弹窗） + 卡片上的箱数标记 ===== */
+.ce-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.ce-in {
+  width: 100%; padding: 9px 10px; border: 1px solid var(--input-line, #C6DAD1);
+  border-radius: 10px; background: var(--input-bg, #FBFCFA); color: inherit;
+}
+.ce-calc {
+  margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+  background: #F6FAF8; border: 1px solid #E4EDE8;
+  font-size: 13px; line-height: 1.9; color: #4A5B55;
+}
+.ce-calc b { color: #2F6B57; }
+.ce-after { color: #2F6B57; font-weight: 600; }
+.ce-warn { color: #C2703F; }
+.zc-meta > span { margin-left: 10px; }
+.zc-meta > span:first-child { margin-left: 0; }
+.zc-case { font-style: normal; font-size: 11px; color: #8A9A93; }
+html[data-theme="dark"] .ce-calc { background: #232C29; border-color: #2F3A36; color: #C3CFCA; }
+html[data-theme="dark"] .ce-in { background: #232C29; border-color: #2F3A36; color: #DCE6E2; }
+html[data-theme="dark"] .ce-calc b, html[data-theme="dark"] .ce-after { color: #8FCDB6; }
+
 @media (max-width: 720px) {
   .zb-head, .zb-row { grid-template-columns: 28px 1fr 70px 76px 48px 70px; gap: 5px; padding: 6px 8px; font-size: 12px; }
   .zb-in { padding: 5px 6px; font-size: 12px; }

@@ -516,6 +516,21 @@
   /** 2026-10-18：切换某货品在「选择货品」面板的隐藏 / 显示（写 product.hiddenPick 并保存目录）。
       隐藏只影响 ProductPicker 的展示与扫码解析；库存、报表、历史记录完全不动。
       cb(ok, msg)：失败时 msg 为可读原因（云端保存失败会回落到本机缓存，下次启动仍生效）。 */
+  /** 2026-10-18：记录某货品的「箱规」= 每箱多少个（product.caseSize），随目录云端同步。
+      仪表盘「按箱录仓库锁定」用它把箱数换算成个数，并在卡片上反向显示"共几箱"。 */
+  function setCaseSize(name, size, cb) {
+    if (!name) { if (cb) cb(false, "货品名称不能为空"); return; }
+    var work = JSON.parse(JSON.stringify(catalog || defaultCatalog()));
+    var hit = null;
+    for (var i = 0; i < work.products.length; i++) {
+      if (work.products[i].name === name) { hit = work.products[i]; break; }
+    }
+    if (!hit) { if (cb) cb(false, "货品不存在：" + name); return; }
+    var n = Math.max(0, Math.round(Number(size) || 0));
+    if (n > 0) hit.caseSize = n; else delete hit.caseSize;   // 0 = 清除箱规
+    save(work, function (ok, msg) { if (cb) cb(ok, msg); });
+  }
+
   function setHiddenPick(name, hidden, cb) {
     if (!name) { if (cb) cb(false, "货品名称不能为空"); return; }
     var work = JSON.parse(JSON.stringify(catalog || defaultCatalog()));
@@ -542,6 +557,7 @@
     quickAdd: quickAdd,
     removeProduct: removeProduct,
     setHiddenPick: setHiddenPick,
+    setCaseSize: setCaseSize,
     guessWps: guessWps,
     pushWpsColEvents: pushWpsColEvents,
     pushCatalogEvent: pushCatalogEvent,
