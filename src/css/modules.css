@@ -637,30 +637,41 @@ html[data-theme="dark"] .zs-hint { color: #9AA8A3; }
 /* ===== 2026-10-18 现场库存按分类分块（与「选择货品」面板同一套色板） =====
    卡片顺序固定后按品类分块展示，块序与选择面板完全一致（精华液→精粹水→…→抽绳袋）；
    c0~c9 对应 picker.css 的 --bpa 色号。组内仍用 .zone-grid（自适应多列，窄屏自动单列）。 */
-.zone-group { margin-bottom: 18px; }
+.zone-group {
+  margin-bottom: 16px; border: 1px solid #E6EDEA; border-radius: 14px;
+  background: #FFFFFF; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(60,72,69,.04);
+}
 .zone-group:last-child { margin-bottom: 4px; }
+/* 每块用自己的浅色标题条（色号与「选择货品」面板一致：0 精华液 → 9 拎袋/其他） */
+.zone-group[data-c="0"] { --zgc: #3F8370; --zgb: #EFF7F3; --zgbr: #DCEAE4; }
+.zone-group[data-c="1"] { --zgc: #35738C; --zgb: #ECF4F8; --zgbr: #D9E7EF; }
+.zone-group[data-c="2"] { --zgc: #63559E; --zgb: #F2F0FA; --zgbr: #E3DEF2; }
+.zone-group[data-c="3"] { --zgc: #A86A34; --zgb: #FBF3EA; --zgbr: #F0E0CD; }
+.zone-group[data-c="4"] { --zgc: #B0566F; --zgb: #FBF0F3; --zgbr: #F2DCE3; }
+.zone-group[data-c="5"] { --zgc: #3F6E9E; --zgb: #EEF3F9; --zgbr: #DCE7F1; }
+.zone-group[data-c="6"] { --zgc: #8A6D31; --zgb: #F8F3E8; --zgbr: #EDE3D0; }
+.zone-group[data-c="7"] { --zgc: #5F7D31; --zgb: #F4F8EC; --zgbr: #E2EBCF; }
+.zone-group[data-c="8"] { --zgc: #A04760; --zgb: #FAF0F2; --zgbr: #EFD8DE; }
+.zone-group[data-c="9"] { --zgc: #7E6039; --zgb: #F8F3EC; --zgbr: #EADFCC; }
 .zg-head {
   display: flex; align-items: center; gap: 8px;
-  margin: 0 0 9px 2px; font-size: 13px; font-weight: 700; color: #5D6B66;
+  margin: 0; padding: 9px 14px;
+  background: var(--zgb, #F2F6F4);
+  border-bottom: 1px solid var(--zgbr, #E6EDEA);
+  font-size: 13px; font-weight: 700; color: #46564F; letter-spacing: .2px;
 }
-.zg-dot { width: 9px; height: 9px; border-radius: 3px; background: #9AA8A3; flex: none; }
-.zg-dot[data-c="0"] { background: #3F8370; }
-.zg-dot[data-c="1"] { background: #35738C; }
-.zg-dot[data-c="2"] { background: #63559E; }
-.zg-dot[data-c="3"] { background: #A86A34; }
-.zg-dot[data-c="4"] { background: #B0566F; }
-.zg-dot[data-c="5"] { background: #3F6E9E; }
-.zg-dot[data-c="6"] { background: #8A6D31; }
-.zg-dot[data-c="7"] { background: #5F7D31; }
-.zg-dot[data-c="8"] { background: #A04760; }
-.zg-dot[data-c="9"] { background: #7E6039; }
+.zg-dot { width: 9px; height: 9px; border-radius: 3px; background: var(--zgc, #9AA8A3); flex: none; }
 .zg-count {
   min-width: 18px; height: 18px; padding: 0 6px; border-radius: 9px;
-  background: #EDF2F0; color: #7A8A85; font-size: 11px; font-weight: 700;
+  background: rgba(255,255,255,.85); color: #6E7E78; font-size: 11px; font-weight: 700;
+  border: 1px solid rgba(0,0,0,.05);
   display: inline-flex; align-items: center; justify-content: center;
 }
-html[data-theme="dark"] .zg-head { color: #B7C4BF; }
-html[data-theme="dark"] .zg-count { background: #2C3A36; color: #9AA8A3; }
+.zone-group > .zone-grid { padding: 12px 14px 14px; }
+html[data-theme="dark"] .zone-group { background: #1F2724; border-color: #2F3A36; box-shadow: none; }
+html[data-theme="dark"] .zg-head { background: #26302C; border-bottom-color: #2F3A36; color: #C8D3CE; }
+html[data-theme="dark"] .zg-count { background: rgba(255,255,255,.10); color: #C2CEC9; border-color: rgba(255,255,255,.08); }
 
 @media (max-width: 720px) {
   .zb-head, .zb-row { grid-template-columns: 28px 1fr 70px 76px 48px 70px; gap: 5px; padding: 6px 8px; font-size: 12px; }

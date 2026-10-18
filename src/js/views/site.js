@@ -132,7 +132,7 @@
     groups.sort(function (a, b) { return a.idx - b.idx; });
     return groups.map(function (g) {
       var c = g.idx > 9 ? 9 : g.idx;
-      return '<div class="zone-group">' +
+      return '<div class="zone-group" data-c="' + c + '">' +
           '<div class="zg-head"><i class="zg-dot" data-c="' + c + '"></i>' +
             Util.esc(g.name) + '<span class="zg-count">' + g.items.length + '</span></div>' +
           '<div class="zone-grid">' + g.items.map(card).join("") + '</div>' +
