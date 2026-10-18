@@ -735,6 +735,16 @@ html[data-theme="dark"] .cb-head { background: #26302C; color: #B7C4BF; }
 html[data-theme="dark"] .cb-in { background: #1E2523; border-color: #3A4642; color: #DCE6E2; }
 html[data-theme="dark"] .cb-name { color: #DCE6E2; }
 
+/* ===== 2026-10-18 现场为负（货被拿走但没转出现场）=====
+   负数不是错误数据，是账实差信号：卡片转成红系，数字加负号，标记「现场为负」。 */
+.zc-figure b.neg { color: #C0392B; }
+.zone-card.neg { border-color: #E7B5AD; background: linear-gradient(180deg, #FFFBFA, #FFF6F4); }
+.zone-card.neg .zc-bar i { background: linear-gradient(90deg, #E7B5AD, #C0392B); }
+.zc-flag.neg { color: #C0392B; background: rgba(192,57,43,.12); }
+html[data-theme="dark"] .zone-card.neg { background: linear-gradient(180deg, #2A2220, #251E1C); border-color: #5A3A34; }
+html[data-theme="dark"] .zc-figure b.neg { color: #E88C7D; }
+html[data-theme="dark"] .zc-flag.neg { color: #E88C7D; background: rgba(232,140,125,.14); }
+
 @media (max-width: 720px) {
   .zb-head, .zb-row { grid-template-columns: 28px 1fr 70px 76px 48px 70px; gap: 5px; padding: 6px 8px; font-size: 12px; }
   .zb-in { padding: 5px 6px; font-size: 12px; }

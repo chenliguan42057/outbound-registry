@@ -97,10 +97,12 @@
   }
 
   /** 现场可用 = 总库存 − 仓库锁定 − 在途出库（未提单 / 先借后还未还）。
-      出库单一经创建即扣现场（无需等提单）；待取货不影响现场。 */
+      出库单一经创建即扣现场（无需等提单）；待取货不影响现场。
+      2026-10-18 主理人定稿：**允许为负** —— 货被拿走却来不及做「转出现场」时，
+      负数就是账实差的信号（提示补一张转出或盘点平账），不再夹到 0 掩盖问题。 */
   function siteStock(name, total) {
     var t = (typeof total === "number") ? total : window.App.Stock.getStock(name);
-    return Math.max(0, t - warehouseLocked(name) - outFrozenOf(name));
+    return t - warehouseLocked(name) - outFrozenOf(name);
   }
 
   /** 全产品分区汇总（仪表盘用） */
@@ -111,7 +113,7 @@
       var total = Stock.getStock(name);
       var wh = warehouseLocked(name);
       var tr = outFrozenOf(name);                       // 在途（已出未提单）
-      var site = Math.max(0, total - wh - tr);
+      var site = total - wh - tr;   // 允许负数（账实差信号，见 siteStock 注释）
       var wa = warnAt(name);
       return {
         name: name, total: total, warehouse: wh, inTransit: tr, site: site,
@@ -278,7 +280,7 @@
         purpose: r.purpose || "",
         note: r.note || "",
         entity: r.entity || "",
-        siteAfter: Math.max(0, totalAfter - whAfter - outFrozenOf(name))
+        siteAfter: totalAfter - whAfter - outFrozenOf(name)
       };
     }).filter(Boolean).sort(function (a, b) { return b._ts - a._ts; });
     return rows.slice(0, limit);

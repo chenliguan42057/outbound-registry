@@ -39,11 +39,11 @@
     return 0;
   }
 
-  /** 个数 → 「12 箱」/「12 箱 +3」 的展示（size 为 0 时返回空串） */
+  /** 个数 → 箱数展示，**允许小数箱**（90 个 / 20 = 4.5 箱）；箱规为 0 时返回空串 */
   function fmtBoxes(qty, size) {
     if (!size || !(qty > 0)) return "";
-    var b = Math.floor(qty / size), r = Math.round(qty % size);
-    return b + " 箱" + (r ? " +" + r : "");
+    var b = Math.round((qty / size) * 100) / 100;
+    return b + " 箱";
   }
 
   function pct(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; }
@@ -109,6 +109,7 @@
 
     var html =
       '<div class="dash-note">仓库＝锁定库存（整箱存放，只能转入现场）；现场＝日常出库扣减的可用库存——出库单一经创建即扣现场（含未提单），待取货不影响。' +
+        '<b>现场出现负数</b>＝货被拿走但没做「转出现场」，补一张转出或盘点平账即可平掉。' +
         '<span class="zone-help">点产品卡的「流水」看谁拿了多少、还剩多少</span></div>' +
       '<div class="zone-ov">' +
         ovCard("现场可用合计", siteTotal, "site", lowN ? (lowN + " 项现场偏低") : "现场充足") +
@@ -163,14 +164,14 @@
   function card(s) {
     var u = unitOf(s.name);
     var cs = caseSizeOf(s.name);
-    var barSite = pct(s.site, s.total);
-    return '<div class="zone-card' + (s.low ? " low" : "") + '">' +
+    var barSite = Math.max(0, Math.min(100, pct(s.site, s.total)));   // 现场为负时进度条归零，不画反条
+    return '<div class="zone-card' + (s.low ? " low" : "") + (s.site < 0 ? " neg" : "") + '">' +
       '<div class="zc-head">' +
         '<div class="zc-name">' + Util.esc(s.name) + (u ? ' <i class="zc-unit">' + Util.esc(u) + '</i>' : '') + '</div>' +
-        (s.low ? '<span class="zc-flag">⚠ 现场偏低</span>' : '') +
+        (s.site < 0 ? '<span class="zc-flag neg">⚠ 现场为负</span>' : (s.low ? '<span class="zc-flag">⚠ 现场偏低</span>' : '')) +
       '</div>' +
       '<div class="zc-main">' +
-        '<div class="zc-figure"><b' + (s.low ? ' class="warn"' : '') + '>' + s.site + '</b><span>现场可用</span></div>' +
+        '<div class="zc-figure"><b' + (s.site < 0 ? ' class="neg"' : (s.low ? ' class="warn"' : '')) + '>' + s.site + '</b><span>' + (s.site < 0 ? '现场为负' : '现场可用') + '</span></div>' +
         '<div class="zc-meta">' +
           '<span>仓库锁定 <b>' + s.warehouse + '</b>' + (cs > 0 ? ' <i class="zc-case">' + fmtBoxes(s.warehouse, cs) + '</i>' : '') + '</span>' +
           (s.inTransit > 0 ? '<span class="zc-trans">在途 <b>' + s.inTransit + '</b></span>' : '') +
@@ -285,14 +286,14 @@
     var names = (Config.PRODUCTS || []).slice();
     if (!names.length) { Util.toast("货品目录还没加载好，请稍后重试", true); return; }
     var body =
-      '<div class="hint" style="margin:-2px 0 12px">按<b>箱</b>录仓库锁定：填「每箱多少个」+「几箱」，自动换算成个数。箱规会记住，下次自动带出。</div>' +
+      '<div class="hint" style="margin:-2px 0 12px">按<b>箱</b>录仓库锁定：填「每箱多少个」+「几箱」，自动换算成个数。箱规会记住，下次自动带出；<b>箱数可以是小数</b>（如 1.5 箱）。</div>' +
       '<div class="field"><label>货品</label>' +
         '<select id="ceName" class="ce-in">' + names.map(function (n) {
           return '<option value="' + Util.esc(n) + '">' + Util.esc(n) + '</option>';
         }).join("") + '</select></div>' +
       '<div class="ce-row">' +
         '<div class="field"><label>每箱多少个</label><input type="number" id="ceSize" min="1" step="1" class="ce-in" placeholder="如 20" /></div>' +
-        '<div class="field"><label>箱数</label><input type="number" id="ceBoxes" min="1" step="1" class="ce-in" value="1" /></div>' +
+        '<div class="field"><label>箱数（可填小数）</label><input type="number" id="ceBoxes" min="0.01" step="0.01" class="ce-in" value="1" /></div>' +
       '</div>' +
       '<div class="ce-calc" id="ceCalc"></div>' +
       '<div class="modal-actions" style="margin-top:14px">' +
@@ -315,9 +316,9 @@
       return 0;
     }
     function vals() {
-      var size = Math.max(0, Math.round(Number(sizeEl.value) || 0));
-      var boxes = Math.max(0, Math.round(Number(boxEl.value) || 0));
-      return { size: size, boxes: boxes, qty: size * boxes };
+      var size = Math.max(0, Math.round(Number(sizeEl.value) || 0));   // 箱规：整数个/箱
+      var boxes = Math.max(0, Number(boxEl.value) || 0);              // 箱数：允许小数（0.5 / 1.5 箱）
+      return { size: size, boxes: boxes, qty: Math.round(size * boxes) };   // 个数四舍五入取整
     }
     function draw() {
       var v = vals();
@@ -372,7 +373,7 @@
         '<span class="cb-ckw"><input type="checkbox" class="cb-ck" /></span>' +
         '<span class="cb-name" title="' + Util.esc(s.name) + '">' + Util.esc(s.name) + '</span>' +
         '<span><input type="number" min="0" step="1" class="cb-in" data-f="size" value="' + (cs > 0 ? cs : "") + '" placeholder="个/箱" /></span>' +
-        '<span><input type="number" min="0" step="1" class="cb-in" data-f="boxes" placeholder="箱数" /></span>' +
+        '<span><input type="number" min="0" step="0.01" class="cb-in" data-f="boxes" placeholder="箱数(可小数)" /></span>' +
         '<span class="cb-qty">—</span>' +
         '<span class="cb-cur">' + s.warehouse + '</span>' +
         '<span class="cb-after">—</span>' +
@@ -401,14 +402,16 @@
     var m = UI.Modal.body();
 
     function rows() { return Array.prototype.slice.call(m.querySelectorAll(".cb-row[data-name]")); }
-    function rowVal(row, f) {
+    function rowVal(row, f, isInt) {
       var el = row.querySelector('[data-f="' + f + '"]');
-      return Math.max(0, Math.round(Number(el && el.value) || 0));
+      var v = Number(el && el.value);
+      if (!isFinite(v) || v <= 0) return 0;
+      return isInt ? Math.round(v) : v;   // 箱规取整；箱数允许小数（0.5 / 1.5 箱）
     }
     function recalc(row) {
-      var size = rowVal(row, "size"), boxes = rowVal(row, "boxes");
+      var size = rowVal(row, "size", true), boxes = rowVal(row, "boxes", false);
       var cur = Number(row.querySelector(".cb-cur").textContent) || 0;
-      var qty = (size > 0 && boxes > 0) ? size * boxes : 0;
+      var qty = (size > 0 && boxes > 0) ? Math.round(size * boxes) : 0;
       row.querySelector(".cb-qty").textContent = qty > 0 ? (qty + " 个") : "—";
       row.querySelector(".cb-after").textContent = qty > 0 ? String(cur + qty) : "—";
     }
@@ -425,7 +428,9 @@
       var f = m.querySelector("#cbField").value;
       var raw = m.querySelector("#cbVal").value;
       if (raw === "") { Util.toast("请先填写批量值", true); return; }
-      var n = Math.max(0, Math.round(Number(raw)));
+      var rawN = Number(raw);
+      if (!isFinite(rawN)) { Util.toast("批量值必须是数字", true); return; }
+      var n = (f === "boxes") ? Math.max(0, rawN) : Math.max(0, Math.round(rawN));
       var cnt = 0;
       rows().forEach(function (row) {
         var ck = row.querySelector(".cb-ck");
@@ -439,11 +444,11 @@
       var list = [];
       rows().forEach(function (row) {
         var name = row.getAttribute("data-name");
-        var size = rowVal(row, "size") || caseSizeOf(name);
-        var boxes = rowVal(row, "boxes");
+        var size = rowVal(row, "size", true) || caseSizeOf(name);
+        var boxes = rowVal(row, "boxes", false);
         if (!(boxes > 0) || !(size > 0)) return;
         list.push({
-          name: name, size: size, boxes: boxes, qty: size * boxes,
+          name: name, size: size, boxes: boxes, qty: Math.round(size * boxes),
           cur: Number(row.querySelector(".cb-cur").textContent) || 0
         });
       });
