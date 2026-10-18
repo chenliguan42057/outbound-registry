@@ -516,6 +516,21 @@
   /** 2026-10-18：切换某货品在「选择货品」面板的隐藏 / 显示（写 product.hiddenPick 并保存目录）。
       隐藏只影响 ProductPicker 的展示与扫码解析；库存、报表、历史记录完全不动。
       cb(ok, msg)：失败时 msg 为可读原因（云端保存失败会回落到本机缓存，下次启动仍生效）。 */
+  /** 2026-10-18：批量写箱规（一次 save，避免连续点保存刷爆云端 API）。
+      map = { 货品名: 每箱多少个 }；值 0 / 空 = 清除该货品箱规。 */
+  function setCaseSizes(map, cb) {
+    if (!map) { if (cb) cb(false, "无数据"); return; }
+    var work = JSON.parse(JSON.stringify(catalog || defaultCatalog()));
+    var n = 0;
+    work.products.forEach(function (p) {
+      if (!p || !Object.prototype.hasOwnProperty.call(map, p.name)) return;
+      var v = Math.max(0, Math.round(Number(map[p.name]) || 0));
+      if (v > 0) { p.caseSize = v; n++; } else { delete p.caseSize; }
+    });
+    if (!n && !Object.keys(map).length) { if (cb) cb(true, "无变化"); return; }
+    save(work, function (ok, msg) { if (cb) cb(ok, msg); });
+  }
+
   /** 2026-10-18：记录某货品的「箱规」= 每箱多少个（product.caseSize），随目录云端同步。
       仪表盘「按箱录仓库锁定」用它把箱数换算成个数，并在卡片上反向显示"共几箱"。 */
   function setCaseSize(name, size, cb) {
@@ -558,6 +573,7 @@
     removeProduct: removeProduct,
     setHiddenPick: setHiddenPick,
     setCaseSize: setCaseSize,
+    setCaseSizes: setCaseSizes,
     guessWps: guessWps,
     pushWpsColEvents: pushWpsColEvents,
     pushCatalogEvent: pushCatalogEvent,

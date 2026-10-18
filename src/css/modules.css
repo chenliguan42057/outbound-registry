@@ -694,6 +694,47 @@ html[data-theme="dark"] .ce-calc { background: #232C29; border-color: #2F3A36; c
 html[data-theme="dark"] .ce-in { background: #232C29; border-color: #2F3A36; color: #DCE6E2; }
 html[data-theme="dark"] .ce-calc b, html[data-theme="dark"] .ce-after { color: #8FCDB6; }
 
+/* ===== 2026-10-18 批量按箱表（一张表填多个货品的箱规 + 箱数） ===== */
+.tool-row { flex-wrap: wrap; }
+/* 注意：原有 .zb-* 样式整体写在 @media (max-width:720px) 里，宽屏不生效，
+   所以批量按箱条必须是独立类名（cb-*），不能复用 zb-*。 */
+.cb-tip { font-size: 12px; color: #6B7A75; line-height: 1.7; margin-bottom: 10px; background: #F4F8F6; border-radius: 10px; padding: 9px 12px; }
+.cb-tip b { color: #3C4845; }
+.cb-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #E1ECE7;
+}
+.cb-all { font-size: 13px; color: #4A5A55; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.cb-bar select, .cb-bar input {
+  width: auto; flex: 0 0 auto; border: 1px solid #C6DAD1; border-radius: 9px;
+  padding: 7px 10px; font-size: 13px; background: #FBFCFA; color: #3C4845;
+}
+.cb-bar #cbVal { width: 110px; }
+.cb-table { max-height: 50vh; overflow: auto; border: 1px solid #E1ECE7; border-radius: 12px; }
+.cb-row {
+  display: grid; grid-template-columns: 26px minmax(140px, 1fr) 96px 84px 76px 84px 76px;
+  gap: 6px; align-items: center; padding: 6px 10px; font-size: 13px;
+  border-bottom: 1px solid #EEF4F1;
+}
+.cb-row:last-child { border-bottom: none; }
+.cb-head {
+  position: sticky; top: 0; z-index: 1; background: #F4F9F6;
+  font-weight: 700; color: #5A6B65; font-size: 12px;
+}
+.cb-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #3C4845; }
+.cb-in {
+  width: 100%; box-sizing: border-box; border: 1px solid #C6DAD1; border-radius: 8px;
+  padding: 5px 7px; font-size: 13px; background: #fff; color: #3C4845;
+}
+.cb-in:focus { outline: none; border-color: #8FCDB6; box-shadow: 0 0 0 2px rgba(143,205,182,.25); }
+.cb-qty, .cb-after { color: #2F6B57; font-weight: 600; }
+.cb-cur { color: #7A8A84; }
+html[data-theme="dark"] .cb-table { border-color: #2F3A36; }
+html[data-theme="dark"] .cb-row { border-bottom-color: #2A3330; }
+html[data-theme="dark"] .cb-head { background: #26302C; color: #B7C4BF; }
+html[data-theme="dark"] .cb-in { background: #1E2523; border-color: #3A4642; color: #DCE6E2; }
+html[data-theme="dark"] .cb-name { color: #DCE6E2; }
+
 @media (max-width: 720px) {
   .zb-head, .zb-row { grid-template-columns: 28px 1fr 70px 76px 48px 70px; gap: 5px; padding: 6px 8px; font-size: 12px; }
   .zb-in { padding: 5px 6px; font-size: 12px; }

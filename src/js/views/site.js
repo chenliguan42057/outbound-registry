@@ -120,6 +120,7 @@
       '<div class="zone-toolbar">' +
         chip("all", "全部") + chip("site", "仅现场有货") + chip("low", "仅预警") +
         '<button type="button" class="btn sm zone-set-btn" data-act="caseentry">📦 按箱录锁定</button>' +
+        '<button type="button" class="btn ghost sm" data-act="casebatch">📦 批量按箱</button>' +
         '<button type="button" class="btn sm zone-set-btn" data-act="batchset">⚙ 分区设置（单个 / 批量）</button>' +
       '</div>' +
       (shown.length ? renderGroups(shown)
@@ -234,6 +235,7 @@
     if (!btn) return;
     var act = btn.getAttribute("data-act");
     if (act === "caseentry") return openCaseEntry();
+    if (act === "casebatch") return openCaseBatch();
     if (act === "batchset") return openBatch();
     if (act === "filter") {
       filter = btn.getAttribute("data-f") || "all";
@@ -355,6 +357,114 @@
     setBtn.addEventListener("click", function () { commit("set"); });
     addBtn.addEventListener("click", function () { commit("add"); });
     fillSize();
+  }
+
+  /* ================= 批量按箱录锁定（2026-10-18） ================= */
+  /** 一张表给多个货品填「每箱多少个 + 箱数」，一次写进仓库锁定。
+      只在「箱数」> 0 的行生效；箱规空着就用目录里记住的值。箱规有变化的行合成一次目录保存。 */
+  function openCaseBatch() {
+    var Cat = window.App.Catalog;
+    var sum = Zones.summary();
+    if (!sum.length) { Util.toast("货品目录还没加载好，请稍后重试", true); return; }
+    var rowsHtml = sum.map(function (s) {
+      var cs = caseSizeOf(s.name);
+      return '<div class="cb-row" data-name="' + Util.esc(s.name) + '">' +
+        '<span class="cb-ckw"><input type="checkbox" class="cb-ck" /></span>' +
+        '<span class="cb-name" title="' + Util.esc(s.name) + '">' + Util.esc(s.name) + '</span>' +
+        '<span><input type="number" min="0" step="1" class="cb-in" data-f="size" value="' + (cs > 0 ? cs : "") + '" placeholder="个/箱" /></span>' +
+        '<span><input type="number" min="0" step="1" class="cb-in" data-f="boxes" placeholder="箱数" /></span>' +
+        '<span class="cb-qty">—</span>' +
+        '<span class="cb-cur">' + s.warehouse + '</span>' +
+        '<span class="cb-after">—</span>' +
+      '</div>';
+    }).join("");
+    var body =
+      '<div class="cb-tip">批量按箱：只在<b>「箱数」</b>填了数字的行才生效（每箱多少个空着 → 用目录里记住的箱规）。' +
+        '换算个数 ＝ 箱数 × 每箱多少个，写进「仓库锁定」。可以先用上排批量填，再逐行微调。</div>' +
+      '<div class="cb-bar">' +
+        '<label class="cb-all"><input type="checkbox" id="cbAll" /> 全选</label>' +
+        '<select id="cbField"><option value="size">每箱多少个</option><option value="boxes">箱数</option></select>' +
+        '<input type="number" min="0" step="1" id="cbVal" placeholder="批量值" />' +
+        '<button type="button" class="btn sm" data-cb="toSel">应用到勾选</button>' +
+        '<button type="button" class="btn ghost sm" data-cb="toAll">应用到全部</button>' +
+      '</div>' +
+      '<div class="cb-table">' +
+        '<div class="cb-row cb-head"><span></span><span>货品</span><span>每箱多少个</span><span>箱数</span><span>换算</span><span>当前锁定</span><span>变更后</span></div>' +
+        rowsHtml +
+      '</div>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="btn ghost sm" data-cb="cancel">取消</button>' +
+        '<button type="button" class="btn ghost sm" data-cb="set">＝ 全部设为该数值</button>' +
+        '<button type="button" class="btn sm" data-cb="add">＋ 全部累加到仓库锁定</button>' +
+      '</div>';
+    UI.Modal.show("📦 批量按箱录锁定", body, { width: "92vw" });
+    var m = UI.Modal.body();
+
+    function rows() { return Array.prototype.slice.call(m.querySelectorAll(".cb-row[data-name]")); }
+    function rowVal(row, f) {
+      var el = row.querySelector('[data-f="' + f + '"]');
+      return Math.max(0, Math.round(Number(el && el.value) || 0));
+    }
+    function recalc(row) {
+      var size = rowVal(row, "size"), boxes = rowVal(row, "boxes");
+      var cur = Number(row.querySelector(".cb-cur").textContent) || 0;
+      var qty = (size > 0 && boxes > 0) ? size * boxes : 0;
+      row.querySelector(".cb-qty").textContent = qty > 0 ? (qty + " 个") : "—";
+      row.querySelector(".cb-after").textContent = qty > 0 ? String(cur + qty) : "—";
+    }
+    rows().forEach(function (row) {
+      Array.prototype.forEach.call(row.querySelectorAll(".cb-in"), function (inp) {
+        inp.addEventListener("input", function () { recalc(row); });
+      });
+    });
+    var all = m.querySelector("#cbAll");
+    if (all) all.onchange = function () {
+      Array.prototype.forEach.call(m.querySelectorAll(".cb-ck"), function (c) { c.checked = all.checked; });
+    };
+    function bulk(onlyChecked) {
+      var f = m.querySelector("#cbField").value;
+      var raw = m.querySelector("#cbVal").value;
+      if (raw === "") { Util.toast("请先填写批量值", true); return; }
+      var n = Math.max(0, Math.round(Number(raw)));
+      var cnt = 0;
+      rows().forEach(function (row) {
+        var ck = row.querySelector(".cb-ck");
+        if (onlyChecked && !(ck && ck.checked)) return;
+        row.querySelector('[data-f="' + f + '"]').value = n;
+        recalc(row); cnt++;
+      });
+      Util.toast("已为 " + cnt + " 行填入 " + n);
+    }
+    function commit(mode) {
+      var list = [];
+      rows().forEach(function (row) {
+        var name = row.getAttribute("data-name");
+        var size = rowVal(row, "size") || caseSizeOf(name);
+        var boxes = rowVal(row, "boxes");
+        if (!(boxes > 0) || !(size > 0)) return;
+        list.push({
+          name: name, size: size, boxes: boxes, qty: size * boxes,
+          cur: Number(row.querySelector(".cb-cur").textContent) || 0
+        });
+      });
+      if (!list.length) { Util.toast("还没有「箱数」大于 0 的行", true); return; }
+      var sizeMap = {};
+      list.forEach(function (r) { sizeMap[r.name] = r.size; });
+      if (Cat && Cat.setCaseSizes) Cat.setCaseSizes(sizeMap, function () {});
+      var totalQty = 0;
+      list.forEach(function (r) {
+        Zones.setWarehouse(r.name, mode === "add" ? (r.cur + r.qty) : r.qty);
+        totalQty += r.qty;
+      });
+      UI.Modal.hide();
+      Util.toast((mode === "add" ? "已累加 " : "已设为 ") + list.length + " 个货品，合计 " + totalQty + " 个");
+      refresh();
+    }
+    m.querySelector('[data-cb="toSel"]').onclick = function () { bulk(true); };
+    m.querySelector('[data-cb="toAll"]').onclick = function () { bulk(false); };
+    m.querySelector('[data-cb="cancel"]').onclick = function () { UI.Modal.hide(); };
+    m.querySelector('[data-cb="set"]').onclick = function () { commit("set"); };
+    m.querySelector('[data-cb="add"]').onclick = function () { commit("add"); };
   }
 
   function openSettings(name) {
