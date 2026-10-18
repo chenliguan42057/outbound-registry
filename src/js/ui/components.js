@@ -1632,6 +1632,10 @@
     collapseSection: collapseSection,
     bindCollapse: bindCollapse,
     ProductPicker: ProductPicker,
+    /* 2026-10-18：把「选择货品」面板的分类分组规则对外暴露，供仪表盘「现场库存」
+       卡片排序复用 —— 两处顺序必须同源，否则选的顺序和看的顺序会对不上。 */
+    PICK_GROUP_ORDER: PICK_GROUP_ORDER,
+    pickGroupOf: pickGroupOf,
     PhotoUpload: PhotoUpload,
     celebrate: celebrate,
     showFieldError: showFieldError,

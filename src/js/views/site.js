@@ -12,6 +12,7 @@
   var Util = window.App.Util;
   var Zones = window.App.Zones;
   var UI = window.App.UI;
+  var Config = window.App.Config;
 
   var container = null;
   var filter = "all";          // all | site | low
@@ -45,12 +46,33 @@
 
   function refresh() { if (container) draw(); }
 
+  /* ================= 卡片固定顺序（2026-10-18 主理人定稿） =================
+     原来按「预警优先 → 库存量 → 名称」动态排，库存一动卡片就换位置，找不到货。
+     现在**完全按「选择货品」面板的分类顺序**（精华液 → 精粹水 → 精粹乳 → 精粹霜 → 面膜 →
+     洁面慕斯 → 小鹿牛皮纸袋 → 员工帆布袋 → 礼盒 → 拎袋 → 其他），组内再按货品目录的规格顺序，
+     目录外的货品（历史遗留、已删除但仍有记录）统一排最后。
+     分组规则直接复用 UI.PICK_GROUP_ORDER / UI.pickGroupOf，和选择面板同源，不会两处跑偏。
+     筛选（全部 / 仅现场有货 / 仅预警）只减少卡片，不改变相对顺序。 */
+  function groupIndex(name) {
+    var order = (UI.PICK_GROUP_ORDER || []);
+    var g = UI.pickGroupOf ? UI.pickGroupOf(name) : String(name || "").split(" ")[0];
+    var i = order.indexOf(g);
+    return i < 0 ? 999 : i;
+  }
+
+  function orderIndex(name) {
+    var list = Config.PRODUCTS || [];
+    var i = list.indexOf(name);
+    return i < 0 ? 99999 : i;
+  }
+
   function sortRows(list) {
     return list.slice().sort(function (a, b) {
-      if (a.low !== b.low) return a.low ? -1 : 1;
-      if ((a.total > 0) !== (b.total > 0)) return a.total > 0 ? -1 : 1;
-      if (a.site !== b.site) return a.site - b.site;
-      return a.name.localeCompare(b.name, "zh");
+      var ga = groupIndex(a.name), gb = groupIndex(b.name);
+      if (ga !== gb) return ga - gb;
+      var ia = orderIndex(a.name), ib = orderIndex(b.name);
+      if (ia !== ib) return ia - ib;
+      return String(a.name).localeCompare(String(b.name), "zh");
     });
   }
 
