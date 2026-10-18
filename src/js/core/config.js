@@ -136,8 +136,34 @@
         "小鹿牛皮纸袋（精华+面膜手提袋）小": "小鹿牛皮纸袋 小"
       };
 
+  /* ================= 选择页「临时隐藏货品」名单（2026-10-18） =================
+     场景：某货品暂时缺货，不想让人在下单/出库的「选择货品」面板里选到它。
+     只影响 ProductPicker 的展示与扫码解析，**绝不改动 PRODUCTS 本身** ——
+     库存统计、报表、金山台账同步、历史记录展示全部照旧（历史里出现过这个货品名不能变成非法数据）。
+     恢复上架：把名字从这个数组里删掉（或置空），重建 bundle 即可。 */
+  var HIDDEN_PICK = ["面膜 5片装"];
+
+  /** 货品名归一：去所有空白 + 去掉「（未入库版）」后缀 —— 同一 SKU 的不同写法视为同一个 */
+  function pickKey(name) {
+    return String(name == null ? "" : name)
+      .replace(/\s+/g, "")
+      .replace(/[（(]未入库版[）)]/g, "");
+  }
+
+  function isPickHidden(name) {
+    var n = pickKey(name);
+    if (!n) return false;
+    for (var i = 0; i < HIDDEN_PICK.length; i++) {
+      if (pickKey(HIDDEN_PICK[i]) === n) return true;
+    }
+    return false;
+  }
+
   var Config = {
     PRODUCTS: PRODUCTS,
+    /* 选择页临时隐藏名单（2026-10-18，缺货时用；不影响库存与目录） */
+    HIDDEN_PICK: HIDDEN_PICK,
+    isPickHidden: isPickHidden,
     INVENTORY: INVENTORY,
     NAME_MAP: NAME_MAP,
     GH: GH,

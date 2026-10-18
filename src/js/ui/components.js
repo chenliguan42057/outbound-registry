@@ -334,6 +334,10 @@
   function resolveScan(code) {
     var q = String(code || "").trim();
     if (!q) return null;
+    // 2026-10-18：缺货临时隐藏的货品，扫码/精确命中也不许选中（返回 null 退回普通搜索，搜索池里同样没有它）
+    var vis = function (n) {
+      return (window.App.Config && window.App.Config.isPickHidden && window.App.Config.isPickHidden(n)) ? null : n;
+    };
     var low = q.toLowerCase();
     var cat = null;
     try { cat = (window.App.Catalog && window.App.Catalog.get) ? window.App.Catalog.get() : null; } catch (e) { cat = null; }
@@ -341,16 +345,16 @@
     var i, p;
     for (i = 0; i < prods.length; i++) {                       // ① 精确条码
       p = prods[i];
-      if (p && p.barcode && String(p.barcode).trim().toLowerCase() === low) return p.name;
+      if (p && p.barcode && String(p.barcode).trim().toLowerCase() === low) return vis(p.name);
     }
     for (i = 0; i < prods.length; i++) {                       // ② 精确货品名
       p = prods[i];
-      if (p && p.name && String(p.name).trim().toLowerCase() === low) return p.name;
+      if (p && p.name && String(p.name).trim().toLowerCase() === low) return vis(p.name);
     }
     var nm = (window.App.Config && window.App.Config.NAME_MAP) || {};
     var keys = Object.keys(nm);                                // ③ 别名表
     for (i = 0; i < keys.length; i++) {
-      if (String(keys[i]).toLowerCase() === low) return nm[keys[i]] || keys[i];
+      if (String(keys[i]).toLowerCase() === low) return vis(nm[keys[i]] || keys[i]);
       if (String(nm[keys[i]] || "").toLowerCase() === low) return keys[i];
     }
     return null;
@@ -542,6 +546,7 @@
     var map = {}, order = [];
     var key = String(q || "").toLowerCase();
     (Config.PRODUCTS || []).forEach(function (p) {
+      if (Config.isPickHidden && Config.isPickHidden(p)) return;   // 2026-10-18 缺货临时隐藏
       if (key && String(p).toLowerCase().indexOf(key) === -1) return;
       var g = pickGroupOf(p);
       if (!map[g]) { map[g] = []; order.push(g); }
@@ -782,6 +787,7 @@
     var self = this;
     var q = this.searchEl.value.trim().toLowerCase();
     var pool = Config.PRODUCTS.filter(function (p) {
+      if (Config.isPickHidden && Config.isPickHidden(p)) return false;   // 2026-10-18 缺货临时隐藏
       return !self.selected.some(function (s) { return s.name === p; }) &&
         (q === "" || p.toLowerCase().includes(q));
     });
