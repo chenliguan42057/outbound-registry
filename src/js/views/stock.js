@@ -37,6 +37,7 @@
           '<button type="button" class="btn sm" id="stockAddBtn">＋ 新增货品</button>' +
           '<button type="button" class="btn ghost sm" id="stockCatalogBtn">📋 货品目录</button>' +
           '<button type="button" class="btn ghost sm" id="stockTakeBtn">📊 盘点平账</button>' +
+          '<button type="button" class="btn ghost sm" id="stockHiddenBtn">🙈 隐藏管理</button>' +
           '<span class="tool-spacer"></span>' +
           '<button type="button" class="btn ghost sm c-err" id="stockDelBtn">🗑 删除货品</button>' +
         '</div>' +
@@ -70,6 +71,7 @@
       else Util.toast("目录模块未加载", true);
     });
     Util.$("stockTakeBtn").addEventListener("click", openStocktake);
+    Util.$("stockHiddenBtn").addEventListener("click", openHiddenManager);
     Util.$("stockDelBtn").addEventListener("click", openDelProductList);
     Util.$("stockAddBtn").addEventListener("click", openQuickAdd);
     wireHistory();
@@ -649,6 +651,81 @@
         try { trDet.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e2) {}
       }, 30);
     });
+  }
+
+  /* ================= 选择页隐藏管理（2026-10-18） ================= */
+  /** 随时把某个货品从「选择货品」面板隐藏 / 恢复显示。
+      状态写进货品目录的 product.hiddenPick，随 catalog.json 一起云端保存 → 换设备/手机打开同样生效。
+      隐藏只影响 ProductPicker 的展示与扫码解析；库存数字、报表、历史记录完全不动。 */
+  function openHiddenManager() {
+    var Cat = window.App.Catalog;
+    if (!Cat || !Cat.get || !Cat.setHiddenPick || !Cat.get() || !Array.isArray(Cat.get().products)) {
+      Util.toast("货品目录还没加载好，请等两秒再打开", true);
+      return;
+    }
+    var body =
+      '<div class="hint" style="margin:-2px 0 10px">🙈 已隐藏 = 在「选择货品」面板里看不到（库存、报表、历史记录照常，不动任何数据）。点一下即时切换，自动保存到云端。</div>' +
+      '<div class="field" style="margin:0 0 10px">' +
+        '<input type="text" class="search hp-search" placeholder="搜索货品名称…" autocomplete="off" />' +
+      '</div>' +
+      '<div class="table-wrap" style="max-height:50vh;overflow:auto">' +
+        '<table class="table" style="width:100%;min-width:0">' +
+          '<thead><tr><th>货品名称</th><th style="width:130px;text-align:right">选择页状态</th></tr></thead>' +
+          '<tbody class="hp-rows"></tbody>' +
+        '</table>' +
+      '</div>' +
+      '<div class="modal-actions" style="margin-top:12px">' +
+        '<button type="button" class="btn ghost sm" data-act="cancel">关闭</button>' +
+      '</div>';
+    UI.Modal.show("🙈 隐藏管理", body, { width: "620px" });
+    var mb = UI.Modal.body();
+    var rowsEl = mb.querySelector(".hp-rows");
+    var searchEl = mb.querySelector(".hp-search");
+
+    function draw() {
+      var c = Cat.get();
+      var list = (c && c.products) || [];
+      var kw = String(searchEl.value || "").trim().toLowerCase();
+      var rows = list.filter(function (p) {
+        return !kw || String(p.name).toLowerCase().indexOf(kw) !== -1;
+      });
+      // 已隐藏的排在最前，一眼看清"现在藏了哪些"
+      rows.sort(function (a, b) {
+        return (Config.isPickHidden(a.name) ? 0 : 1) - (Config.isPickHidden(b.name) ? 0 : 1);
+      });
+      if (!rows.length) {
+        rowsEl.innerHTML = '<tr><td colspan="2" class="hint" style="padding:14px">没有匹配的货品</td></tr>';
+        return;
+      }
+      rowsEl.innerHTML = rows.map(function (p) {
+        var hid = Config.isPickHidden(p.name);
+        return '<tr>' +
+          '<td>' + Util.esc(p.name) + (hid ? ' <span class="tag">已隐藏</span>' : '') + '</td>' +
+          '<td style="text-align:right">' +
+            '<button type="button" class="btn ' + (hid ? 'sm c-err' : 'ghost sm') + '" data-hp="' + Util.esc(p.name) + '" data-to="' + (hid ? "0" : "1") + '">' +
+              (hid ? '🙈 已隐藏' : '👁 显示中') +
+            '</button>' +
+          '</td>' +
+        '</tr>';
+      }).join("");
+    }
+
+    rowsEl.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-hp]");
+      if (!btn || btn.getAttribute("data-busy") === "1") return;
+      var name = btn.getAttribute("data-hp");
+      var toHidden = btn.getAttribute("data-to") === "1";
+      btn.setAttribute("data-busy", "1");
+      btn.disabled = true;
+      btn.textContent = "保存中…";
+      Cat.setHiddenPick(name, toHidden, function (ok, msg) {
+        if (ok) Util.toast(toHidden ? ("已在选择页隐藏：" + name) : ("已恢复显示：" + name));
+        else Util.toast(msg || "保存失败，请重试", true);
+        draw();
+      });
+    });
+    searchEl.addEventListener("input", draw);
+    draw();
   }
 
   /* ================= B2 库存盘点平账 ================= */

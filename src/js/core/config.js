@@ -143,6 +143,13 @@
      恢复上架：把名字从这个数组里删掉（或置空），重建 bundle 即可。 */
   var HIDDEN_PICK = ["面膜 5片装"];
 
+  /* 运行时覆盖表（2026-10-18）：来自货品目录 catalog.json 的 product.hiddenPick ——
+     用户在「库存查询 → 隐藏管理」里点的开关，由 catalog.applyToConfig 同步进来。
+       true  = 显式隐藏
+       false = 显式显示（用来盖住上面 HIDDEN_PICK 里的内置默认，例如到货后恢复上架）
+     没有这个键 = 沿用内置默认。键名与货品名完全一致（catalog 名 == Config.PRODUCTS 名）。 */
+  var HIDDEN_PICK_MAP = {};
+
   /** 货品名归一：只做首尾去空白。**不做去空格 / 去后缀** —— 必须精确到具体 SKU 名，
       「面膜5片装（未入库版）」是独立在售品，不能被「面膜 5片装」的隐藏规则牵连。 */
   function pickKey(name) {
@@ -152,6 +159,8 @@
   function isPickHidden(name) {
     var n = pickKey(name);
     if (!n) return false;
+    /* 目录里的显式开关优先（true=隐藏 / false=显示），没设置过才落到内置默认名单 */
+    if (Object.prototype.hasOwnProperty.call(HIDDEN_PICK_MAP, n)) return !!HIDDEN_PICK_MAP[n];
     for (var i = 0; i < HIDDEN_PICK.length; i++) {
       if (pickKey(HIDDEN_PICK[i]) === n) return true;
     }
@@ -162,6 +171,7 @@
     PRODUCTS: PRODUCTS,
     /* 选择页临时隐藏名单（2026-10-18，缺货时用；不影响库存与目录） */
     HIDDEN_PICK: HIDDEN_PICK,
+    HIDDEN_PICK_MAP: HIDDEN_PICK_MAP,
     isPickHidden: isPickHidden,
     INVENTORY: INVENTORY,
     NAME_MAP: NAME_MAP,

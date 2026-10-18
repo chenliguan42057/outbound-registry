@@ -53,6 +53,15 @@
     // 双区库存（2026-10-09）：用户手动设定的「总库存」覆盖目录期初基准。
     // 必须放在最后 —— 否则会被上面刚写入的目录值冲掉。
     try { if (window.App.Zones && window.App.Zones.applyBaseOverrides) window.App.Zones.applyBaseOverrides(); } catch (e) {}
+    /* 2026-10-18：「选择页隐藏」开关（product.hiddenPick）→ Config.HIDDEN_PICK_MAP，
+       供 ProductPicker 的 isPickHidden 判定。整表重建，保证目录增删货品后不残留旧键。 */
+    try {
+      var hm = Config.HIDDEN_PICK_MAP || {};
+      Object.keys(hm).forEach(function (k) { delete hm[k]; });
+      cat.products.forEach(function (p) {
+        if (p && typeof p.hiddenPick === "boolean") hm[p.name] = p.hiddenPick;
+      });
+    } catch (e2) {}
   }
 
   /** 异步加载完成后，刷新依赖目录的视图（库存/仪表盘/报表），避免首次进入页面时短暂显示统一阈值。
@@ -504,6 +513,21 @@
     });
   }
 
+  /** 2026-10-18：切换某货品在「选择货品」面板的隐藏 / 显示（写 product.hiddenPick 并保存目录）。
+      隐藏只影响 ProductPicker 的展示与扫码解析；库存、报表、历史记录完全不动。
+      cb(ok, msg)：失败时 msg 为可读原因（云端保存失败会回落到本机缓存，下次启动仍生效）。 */
+  function setHiddenPick(name, hidden, cb) {
+    if (!name) { if (cb) cb(false, "货品名称不能为空"); return; }
+    var work = JSON.parse(JSON.stringify(catalog || defaultCatalog()));
+    var hit = null;
+    for (var i = 0; i < work.products.length; i++) {
+      if (work.products[i].name === name) { hit = work.products[i]; break; }
+    }
+    if (!hit) { if (cb) cb(false, "货品不存在：" + name); return; }
+    hit.hiddenPick = !!hidden;
+    save(work, function (ok, msg) { if (cb) cb(ok, msg); });
+  }
+
   window.App = window.App || {};
   window.App.Catalog = {
     load: load,
@@ -517,6 +541,7 @@
     openManager: openManager,
     quickAdd: quickAdd,
     removeProduct: removeProduct,
+    setHiddenPick: setHiddenPick,
     guessWps: guessWps,
     pushWpsColEvents: pushWpsColEvents,
     pushCatalogEvent: pushCatalogEvent,
