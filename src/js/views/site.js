@@ -331,8 +331,12 @@
       /* 当前锁定的箱数优先用「本次填的箱规」换算 —— 否则新货品没存过箱规时这行看不到箱数，容易误读成"180 箱" */
       var boxSize = v.size > 0 ? v.size : csNow;
       var l2 = "当前仓库锁定 <b>" + cur + "</b> 个" + (boxSize > 0 ? "（" + fmtBoxes(cur, boxSize) + "）" : "");
-      var l3 = v.qty > 0 ? "累加后 <b>" + (cur + v.qty) + "</b> 个（" + fmtBoxes(cur + v.qty, v.size) + "）" : "";
-      calcEl.innerHTML = '<div>' + l1 + '</div><div>' + l2 + '</div>' + (l3 ? '<div class="ce-after">' + l3 + '</div>' : '');
+      /* 两个按钮两种结果，都预览出来，避免只显示"累加后"被当成唯一结果 */
+      var l3 = v.qty > 0
+        ? '<div class="ce-after">点「＋ 累加」→ ' + (cur + v.qty) + ' 个（' + fmtBoxes(cur + v.qty, v.size) + '）</div>' +
+          '<div class="ce-after">点「＝ 设为」→ ' + v.qty + ' 个（' + fmtBoxes(v.qty, v.size) + '）</div>'
+        : "";
+      calcEl.innerHTML = '<div>' + l1 + '</div><div>' + l2 + '</div>' + l3;
       setBtn.disabled = !(v.qty > 0);
       addBtn.disabled = !(v.qty > 0);
     }
