@@ -30,6 +30,10 @@
       默认锁进仓库，是主理人定稿口径：货到先整箱上架，要出库时才「转入现场」，
       避免现场账面数字虚高（现场的每一件都必须是随时能拿走的）。 */
   var zoneVal = "wh";
+  /** 2026-10-19：本单里「其中转入现场」的数量 {货品名: 数量}。
+      只在「仓库锁定」模式下有意义：填了 = 这部分直接从仓库转到现场（立即可出库），
+      不填 / 0 = 全部锁在仓库。用途是省掉「先入库、再回仪表盘逐项转入现场」这一步。 */
+  var moveMap = {};
   var editingTransfer = false; // 编辑的是调拨/回滚生成的入库单 → 来源由系统固定，禁止改
 
   function render(container) {
@@ -57,6 +61,7 @@
             '<button type="button" class="iz-btn" data-zone="site"><i>🏪</i>现场库存</button>' +
           '</div>' +
           '<div class="iz-hint" id="inZoneHint"></div>' +
+          '<div class="zm-wrap" id="inZoneMove" style="display:none"></div>' +
         '</div>' +
         '<div class="field">' +
           '<label for="inPurpose">用途 / 补充说明</label>' +
@@ -90,7 +95,8 @@
       srcBox: Util.$("inSourceChips"),
       srcCustom: Util.$("inSourceCustom"),
       zoneSeg: Util.$("inZoneSeg"),
-      zoneHint: Util.$("inZoneHint")
+      zoneHint: Util.$("inZoneHint"),
+      zoneMove: Util.$("inZoneMove")
     };
 
     // 经办人默认带出上次值
@@ -136,7 +142,7 @@
     Util.$("inSubmit").addEventListener("click", submit);
 
     Util.$("inPurpose").addEventListener("input", saveDraft);
-    picker.onChange = function () { saveDraft(); renderPreview(); };
+    picker.onChange = function () { renderZoneMove(); saveDraft(); renderPreview(); };
     photos.onChange = saveDraft;
     // 来源自定义：点按钮或回车即保存入库（自动持久化到本仓自定义来源库）
     Util.$("inSourceAdd").addEventListener("click", addCustomSource);
@@ -153,12 +159,20 @@
         if (z === zoneVal) return;
         zoneVal = z;
         renderZoneSeg();
+        renderZoneMove();
         renderPreview();
         saveDraft();
       });
     }
+    /* 「其中转入现场」（2026-10-19）：事件委托到容器，重绘不叠加监听；
+       input 时只改状态+刷预览，不重绘这块，否则光标会跑。 */
+    if (els.zoneMove) {
+      els.zoneMove.addEventListener("input", onMoveInput);
+      els.zoneMove.addEventListener("click", onMoveClick);
+    }
     renderSourceChips();
     renderZoneSeg();
+    renderZoneMove();
     renderPreview();
     var _d = restoreDraft();
     if (_d) showDraftBar(_d);
@@ -254,9 +268,109 @@
     }
     if (els.zoneHint) {
       els.zoneHint.innerHTML = (zoneVal === "wh")
-        ? '先<b>整箱锁进仓库</b>，现场可用数不变；要出库时到仪表盘对应货品点「转入现场」。'
+        ? '先<b>整箱锁进仓库</b>；急用的在下面填「转现场」数量，填多少就当场多少可出库，不填=全锁仓库。'
         : '<b>直接进现场</b>，立即可出库——适合临时到货、当天就要发的货。';
     }
+  }
+
+  /** 本单某货品「其中转入现场」的数量（已按入库量夹紧，绝不大于入库数） */
+  function moveOf(name, qty) {
+    var q = Math.max(0, Math.round(Number(qty) || 0));
+    var m = Math.round(Number(moveMap[name]) || 0);
+    if (!isFinite(m) || m < 0) m = 0;
+    if (m > q) m = q;
+    return m;
+  }
+
+  /** 收集提交用的 {货品: 转现场数量}；只有「仓库锁定」模式才有意义 */
+  function collectMoves(items) {
+    var out = {};
+    if (zoneVal !== "wh") return out;
+    (items || []).forEach(function (it) {
+      var m = moveOf(it.name, it.qty);
+      if (m > 0) out[it.name] = m;
+    });
+    return out;
+  }
+
+  /** 「其中转入现场」小表（2026-10-19）：只在「仓库锁定 + 已选货品」时出现。
+      每行一个已选货品，填多少 = 这部分直接进现场；现场低于警示线的给一个建议值，一键填。 */
+  function renderZoneMove() {
+    var box = els && els.zoneMove;
+    if (!box) return;
+    var items = picker ? picker.getItems() : [];
+    if (zoneVal !== "wh" || !items.length) {
+      box.style.display = "none";
+      box.innerHTML = "";
+      return;
+    }
+    var Z = window.App.Zones;
+    var rows = items.map(function (it) {
+      var name = it.name;
+      var qty = Math.max(0, Math.round(Number(it.qty) || 0));
+      var mv = moveOf(name, qty);
+      moveMap[name] = mv;
+      var site = null, wa = null;
+      try {
+        if (Z && Z.siteStock) { site = Z.siteStock(name); wa = Z.warnAt(name); }
+      } catch (e) { site = null; }
+      var sug = (site !== null && wa !== null && site < wa)
+        ? Math.max(1, Math.min(qty, wa - site)) : 0;
+      var tip = "";
+      /* 只在「现场低于警示线」时提示（红字）——现场够用时不必占一行，预览区已经写了现场数 */
+      if (site !== null && wa !== null && site < wa) {
+        tip = '<span class="zm-warn" title="现场低于警示线，出库前需要先转一部分进来">现场 ' + site + ' ＜ 警示线 ' + wa + '</span>';
+      }
+      return '<div class="zm-row" data-name="' + Util.esc(name) + '">' +
+          '<span class="zm-name" title="' + Util.esc(name) + '">' + Util.esc(name) + '</span>' +
+          '<span class="zm-qty">入库 ' + qty + '</span>' +
+          '<input type="number" class="zm-in" data-name="' + Util.esc(name) + '" data-max="' + qty + '"' +
+            ' min="0" max="' + qty + '" step="1" inputmode="numeric" enterkeyhint="done"' +
+            ' placeholder="0" value="' + (mv > 0 ? mv : "") + '"' +
+            ' aria-label="' + Util.esc(name) + ' 转入现场数量" />' +
+          '<span class="zm-unit">个转现场</span>' +
+          (sug > 0
+            ? '<button type="button" class="zm-sug" data-name="' + Util.esc(name) + '" data-sug="' + sug + '"' +
+              ' title="按警示线补到 ' + wa + '（现场还差 ' + (wa - site) + '）">用建议 ' + sug + '</button>'
+            : '<span></span>') +
+          tip +
+        '</div>';
+    }).join("");
+    box.innerHTML =
+      '<div class="zm-head">其中转入现场 <span class="zm-sub">（选填 · 不填 = 全部锁在仓库）</span></div>' +
+      rows;
+    box.style.display = "";
+  }
+
+  /** 输入「转现场」数量：夹紧到 0~入库量，只刷预览不重绘本块（否则光标会跳） */
+  function onMoveInput(ev) {
+    var inp = ev.target;
+    if (!inp || !inp.classList || !inp.classList.contains("zm-in")) return;
+    var name = inp.getAttribute("data-name");
+    var max = Math.round(Number(inp.getAttribute("data-max")) || 0);
+    var raw = String(inp.value || "").replace(/[^\d]/g, "");
+    var v = raw === "" ? 0 : Math.round(Number(raw));
+    if (!isFinite(v) || v < 0) v = 0;
+    if (v > max) { v = max; inp.value = String(v); }
+    moveMap[name] = v;
+    renderPreview();
+    saveDraft();
+  }
+
+  /** 「用建议 N」：按警示线一键填 */
+  function onMoveClick(ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest(".zm-sug") : null;
+    if (!b || !els.zoneMove) return;
+    var name = b.getAttribute("data-name");
+    var sug = Math.round(Number(b.getAttribute("data-sug")) || 0);
+    if (!name || !(sug > 0)) return;
+    moveMap[name] = sug;
+    var ins = els.zoneMove.querySelectorAll(".zm-in");
+    for (var i = 0; i < ins.length; i++) {
+      if (ins[i].getAttribute("data-name") === name) ins[i].value = String(sug);
+    }
+    renderPreview();
+    saveDraft();
   }
 
   /** 库存变化预览：当前库存 → 入库后 */
@@ -267,13 +381,13 @@
       var cur = window.App.Stock.getStock(it.name);
       var q = Number(it.qty) || 0;
       var after = cur + q;
-      /* 现场数变化（2026-10-18）：进仓库锁定时现场不变，直接进现场时现场 +qty。
-         用 Zones.siteStock 取，与仪表盘卡片上的「现场可用」严格同口径。 */
+      /* 现场数变化：进仓库锁定时现场只加「其中转入现场」那部分；
+         直接进现场时现场 +qty。用 Zones.siteStock 取，与仪表盘「现场可用」严格同口径。 */
       var siteNow = null, siteAfter = null;
       try {
         if (window.App.Zones && window.App.Zones.siteStock) {
           siteNow = window.App.Zones.siteStock(it.name, cur);
-          siteAfter = (zoneVal === "wh") ? siteNow : siteNow + q;
+          siteAfter = (zoneVal === "wh") ? siteNow + moveOf(it.name, q) : siteNow + q;
         }
       } catch (e) { siteNow = null; }
       return '<div class="preview-row">' +
@@ -298,6 +412,7 @@
       purpose: els.purpose.value,
       source: sourceVal,
       zone: zoneVal,
+      zoneMove: collectMoves(picker.getItems()),
       items: picker.selected,
       photos: photos.getPhotos()
     });
@@ -310,11 +425,16 @@
     els.purpose.value = d.purpose || "";
     sourceVal = d.source || "";
     zoneVal = (d.zone === "site") ? "site" : "wh";
+    moveMap = {};
+    if (d.zoneMove && typeof d.zoneMove === "object") {
+      Object.keys(d.zoneMove).forEach(function (k) { moveMap[k] = Math.round(Number(d.zoneMove[k]) || 0); });
+    }
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
     renderPreview();
     renderSourceChips();
     renderZoneSeg();
+    renderZoneMove();
     return d;
   }
 
@@ -377,6 +497,14 @@
     }
     if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) return;
 
+    /* 2026-10-19：本单里「其中转入现场」的数量（选填）。合计只用于核对清单展示。 */
+    var moveVals = collectMoves(items);
+    var moveTotal = 0;
+    Object.keys(moveVals).forEach(function (k) { moveTotal += moveVals[k]; });
+    var zoneLabel = (zoneVal === "wh")
+      ? ("🏬 进仓库锁定" + (moveTotal > 0 ? "，其中 " + moveTotal + " 个当场转现场" : "（现场不变）"))
+      : "🏪 直接进现场库存";
+
     // 2026-09-24：提交前「核对清单」（与出库统一口径）；确认后二次进入 submit() 跳过弹窗直接写库
     if (!confirmedOnce) {
       confirming = true;
@@ -386,7 +514,7 @@
         meta: [
           ["经办人", handlerVal],
           ["入库来源", editingTransfer ? "（调拨自动带入，不可改）" : (sourceVal || "")],
-          ["入库去向", zoneVal === "wh" ? "🏬 进仓库锁定（现场不变）" : "🏪 直接进现场库存"]
+          ["入库去向", zoneLabel]
         ],
         items: items
       }).then(function (ok) {
@@ -413,7 +541,10 @@
       picker: handlerVal,
       photos: photos.getPhotos(),
       /* 2026-10-18：入库去向（wh/site）随记录落库，删单/编辑时据此冲抵仓库锁定 */
-      zone: zSel
+      zone: zSel,
+      /* 2026-10-19：其中转入现场的数量（选填，空 = 全部锁仓库）。
+         存进记录是为了编辑回显、详情展示；实际锁定按「入库量 − 转入现场」计算。 */
+      zoneMove: Object.keys(moveVals).length ? moveVals : null
       // 2026-09-29 加固：affectsStock 不再恒写 true，见下方分支（仅新建时给 true）。
       // 否则编辑一条历史上非库存单会把它强行纳入库存计算 → 凭空增减。
     };
@@ -443,18 +574,34 @@
     submitPush(rec, wasEditing)["catch"](function () {})["finally"](function () { setSubmitting(false); });
   }
 
+  /** 一条入库记录「应锁进仓库」的明细 = 入库量 − 其中转入现场的量。
+      2026-10-19：填了「转现场」，就只有剩下的部分需要锁进仓库（那部分已天然留在现场）。 */
+  function lockItemsOf(rec) {
+    var mv = (rec && rec.zoneMove) || {};
+    return ((rec && rec.items) || []).map(function (it) {
+      var q = Math.max(0, Math.round(Number(it.qty) || 0));
+      var m = Math.max(0, Math.min(q, Math.round(Number(mv[it.name]) || 0)));
+      return { name: it.name, qty: q - m };
+    });
+  }
+
   /** 把「入库去向」落成仓库锁定事件（2026-10-18，主理人需求）。
       「进现场」→ 什么都不写：入库记录本身让总库存 +qty，现场数自然跟着涨（原口径不变）。
       「进仓库锁定」→ 按记录 id 打 ref 写一条 to_wh：总库存照样 +qty、仓库锁定也 +qty，
                       两相抵消 → 现场数不动，货算在仓库里。
+                      2026-10-19：只锁「入库量 − 其中转入现场」，转过去的那部分现场立刻可用。
       幂等：重复提交/改为进现场/删单，都由 Zones.reconcileInbound 按差额冲抵，不会写重复锁定。 */
   function syncZoneLock(rec, zSel, operator, wasEditing) {
     if (!rec || !rec.id) return;
     var Z = window.App.Zones;
     if (!Z || !Z.reconcileInbound) return;
     try {
-      Z.reconcileInbound(rec.id, zSel === "wh" ? (rec.items || []) : [], {
-        note: (sourceVal ? sourceVal + " · " : "") + (zSel === "wh" ? "入库锁定" : "入库进现场"),
+      var mvSum = 0;
+      var _mv = (rec.zoneMove || {});
+      Object.keys(_mv).forEach(function (k) { mvSum += Math.round(Number(_mv[k]) || 0); });
+      Z.reconcileInbound(rec.id, zSel === "wh" ? lockItemsOf(rec) : [], {
+        note: (sourceVal ? sourceVal + " · " : "") + (zSel === "wh" ? "入库锁定" : "入库进现场") +
+          (zSel === "wh" && mvSum > 0 ? "（其中 " + mvSum + " 转现场）" : ""),
         operator: operator || "",
         /* 新建时把事件时间对齐到记录时间，现场流水里「当时剩余」才不会错位；
            编辑时用当前时间，避免把冲抵事件塞回过去、被之后的「设定仓库数」抹掉。 */
@@ -557,6 +704,7 @@
     els.purpose.value = "";
     sourceVal = "";
     zoneVal = "wh";            // 复位为默认：进仓库锁定
+    moveMap = {};              // 复位「其中转入现场」
     editingTransfer = false;
     picker.setSelected([]);
     photos.setPhotos([]);
@@ -566,6 +714,7 @@
     renderPreview();
     renderSourceChips();
     renderZoneSeg();
+    renderZoneMove();
     clearDraft();
   }
 
@@ -581,6 +730,11 @@
     /* 2026-10-18 去向：老记录没有 zone 字段（当年入库一律计入现场）→ 按「现场」回显，
        避免一编辑旧单就被凭空锁进仓库、把现场数扣没。 */
     zoneVal = (r.zone === "wh") ? "wh" : "site";
+    /* 「其中转入现场」回显：记录里存过才带出，没有就空着 */
+    moveMap = {};
+    if (r.zoneMove && typeof r.zoneMove === "object") {
+      Object.keys(r.zoneMove).forEach(function (k) { moveMap[k] = Math.round(Number(r.zoneMove[k]) || 0); });
+    }
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);
     els.submit.textContent = "保存修改";
@@ -588,6 +742,7 @@
     renderPreview();
     renderSourceChips();
     renderZoneSeg();
+    renderZoneMove();
     Util.toast("正在编辑该记录，修改后点「保存修改」");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }

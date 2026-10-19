@@ -798,3 +798,52 @@ html[data-theme="dark"] .preview-site { color: #94A19C; }
   .iz-btn { flex: 1 1 auto; justify-content: center; padding: 10px 12px; }
   .preview-site { display: none; }   /* 窄屏预览条本来就挤，现场数留给仪表盘看 */
 }
+
+/* ===== 2026-10-19「其中转入现场」小表 =====
+   仓库锁定模式下逐项填：这单里有多少直接转到现场（可出库），不填 = 全部锁仓库。
+   独立类名，与 .iz-* 一套配色；网格左列自适应，箱数/单位/建议按钮都不换行。 */
+.zm-wrap {
+  margin-top: 10px; padding: 8px 10px 10px;
+  border: 1px solid #DDEBE4; border-radius: 10px; background: #FBFDFC;
+}
+.zm-head { font-size: 12px; font-weight: 700; color: #3C4845; margin-bottom: 6px; }
+.zm-sub { font-weight: 400; color: #7A8A84; }
+.zm-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 84px auto auto;
+  gap: 8px; align-items: center;
+  padding: 5px 0; border-top: 1px dashed #E4EFE9; font-size: 13px;
+}
+.zm-row:first-of-type { border-top: none; }
+.zm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #3C4845; }
+.zm-qty { color: #7A8A84; white-space: nowrap; }
+.zm-in {
+  width: 100%; box-sizing: border-box; text-align: center;
+  border: 1px solid #C6DAD1; border-radius: 8px; padding: 4px 6px;
+  font-size: 13px; background: #fff; color: #3C4845; font-family: inherit;
+}
+.zm-in:focus { outline: none; border-color: #8FCDB6; box-shadow: 0 0 0 2px rgba(143, 205, 182, .25); }
+.zm-unit { color: #7A8A84; white-space: nowrap; }
+.zm-sug {
+  border: 1px solid #BCD2EA; background: #EEF4FB; color: #2C5C8F;
+  border-radius: var(--radius-pill, 999px); padding: 3px 10px;
+  font-size: 12px; line-height: 1.6; cursor: pointer; white-space: nowrap; font-family: inherit;
+}
+.zm-sug:hover { background: #E0EDF9; }
+.zm-warn { color: #B96A4A; font-size: 12px; white-space: nowrap; }
+.zm-ok { color: #8B9893; font-size: 12px; white-space: nowrap; }
+html[data-theme="dark"] .zm-wrap { background: #202724; border-color: #34403B; }
+html[data-theme="dark"] .zm-head { color: #DCE6E2; }
+html[data-theme="dark"] .zm-sub,
+html[data-theme="dark"] .zm-qty,
+html[data-theme="dark"] .zm-unit,
+html[data-theme="dark"] .zm-ok { color: #94A19C; }
+html[data-theme="dark"] .zm-row { border-top-color: #2C3632; }
+html[data-theme="dark"] .zm-name { color: #DCE6E2; }
+html[data-theme="dark"] .zm-in { background: #1E2523; border-color: #3A4642; color: #DCE6E2; }
+html[data-theme="dark"] .zm-sug { background: rgba(80, 130, 190, .20); border-color: #5A7FA8; color: #A8C4E6; }
+html[data-theme="dark"] .zm-warn { color: #E8A48C; }
+@media (max-width: 720px) {
+  .zm-row { grid-template-columns: minmax(0, 1fr) auto 84px; row-gap: 4px; }
+  .zm-unit { display: none; }
+  .zm-warn, .zm-ok { grid-column: 1 / -1; }
+}

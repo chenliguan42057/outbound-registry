@@ -332,7 +332,14 @@
       /* 2026-10-18：入库去向小标 —— 一眼看出这单货是锁在仓库里还是直接进现场了。
          走独立的拼接（不早退），保证老单/无来源的单也能带上这个标记。 */
       if (r && r.zone === "wh") {
-        html += (html ? ' ' : '') + '<span class="iz-tag" title="本单货进了仓库锁定，现场可用数不变">🏬 仓库</span>';
+        var mvSum = 0;
+        var mvMap = r.zoneMove || {};
+        Object.keys(mvMap).forEach(function (k) { mvSum += Math.round(Number(mvMap[k]) || 0); });
+        var tip = mvSum > 0
+          ? '本单货进了仓库锁定，其中 ' + mvSum + ' 个当场转现场'
+          : '本单货进了仓库锁定，现场可用数不变';
+        html += (html ? ' ' : '') + '<span class="iz-tag" title="' + tip + '">🏬 仓库' +
+          (mvSum > 0 ? ' <b style="font-weight:700;">+' + mvSum + '🏪</b>' : '') + '</span>';
       }
       return html || "-";
     }
@@ -808,10 +815,17 @@
       if (srcShown) {
         rows += '<div class="detail-row"><span class="k">来源</span><span class="v"><span class="src-tag">' + Util.esc(srcShown) + '</span></span></div>';
       }
-      /* 入库去向（2026-10-18）：仓库锁定 / 现场库存。老记录没有该字段，不显示这一行。 */
+      /* 入库去向（2026-10-18）：仓库锁定 / 现场库存。老记录没有该字段，不显示这一行。
+         2026-10-19：仓库锁定模式下还可能有一部分「当场转入现场」，一并标出来。 */
       if (isRecIn && r.zone) {
-        rows += '<div class="detail-row"><span class="k">去向</span><span class="v">' +
-          (r.zone === "wh" ? "🏬 仓库锁定（现场数不变）" : "🏪 现场库存（可直接出库）") + '</span></div>';
+        var mvSum = 0;
+        var mvMap = r.zoneMove || {};
+        Object.keys(mvMap).forEach(function (k) { mvSum += Math.round(Number(mvMap[k]) || 0); });
+        var zoneTxt = (r.zone === "wh") ? "🏬 仓库锁定（现场数不变）" : "🏪 现场库存（可直接出库）";
+        if (r.zone === "wh" && mvSum > 0) {
+          zoneTxt = "🏬 仓库锁定，其中 🏪 " + mvSum + " 个当场转现场";
+        }
+        rows += '<div class="detail-row"><span class="k">去向</span><span class="v">' + zoneTxt + '</span></div>';
       }
       if (!isRecIn) {
         rows += '<div class="detail-row"><span class="k">状态</span><span class="v">' + statusBadge(r) + '</span></div>';
