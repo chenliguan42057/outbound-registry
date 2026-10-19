@@ -1,0 +1,14 @@
+{
+  "id": "zmvemrnqwrds34",
+  "kind": "zone",
+  "warehouse": "shenzhen",
+  "mode": "set",
+  "product": "大号蝴蝶结礼盒",
+  "qty": 174,
+  "note": "撤回 10-19 10:12 批量按箱误写（恢复为操作前 174，当时被改成 6）",
+  "operator": "系统恢复",
+  "_ts": 1792376631036,
+  "time": "2026-10-19T10:23",
+  "_local": false,
+  "_pushed": true
+}

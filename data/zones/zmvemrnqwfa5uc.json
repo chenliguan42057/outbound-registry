@@ -1,0 +1,14 @@
+{
+  "id": "zmvemrnqwfa5uc",
+  "kind": "zone",
+  "warehouse": "shenzhen",
+  "mode": "set",
+  "product": "精华液 20支装",
+  "qty": 60,
+  "note": "撤回 10-19 10:12 批量按箱误写（恢复为操作前 60，当时被改成 30）",
+  "operator": "系统恢复",
+  "_ts": 1792376631044,
+  "time": "2026-10-19T10:23",
+  "_local": false,
+  "_pushed": true
+}

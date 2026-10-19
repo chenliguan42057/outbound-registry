@@ -1,0 +1,14 @@
+{
+  "id": "zmvemrnqw8kywe",
+  "kind": "zone",
+  "warehouse": "shenzhen",
+  "mode": "set",
+  "product": "精粹乳 30ml",
+  "qty": 125,
+  "note": "撤回 10-19 10:12 批量按箱误写（恢复为操作前 125，当时被改成 100）",
+  "operator": "系统恢复",
+  "_ts": 1792376631046,
+  "time": "2026-10-19T10:23",
+  "_local": false,
+  "_pushed": true
+}

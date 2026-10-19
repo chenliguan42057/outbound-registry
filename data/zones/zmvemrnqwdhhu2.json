@@ -1,0 +1,14 @@
+{
+  "id": "zmvemrnqwdhhu2",
+  "kind": "zone",
+  "warehouse": "shenzhen",
+  "mode": "set",
+  "product": "员工帆布袋",
+  "qty": 0,
+  "note": "撤回 10-19 10:12 批量按箱误写（恢复为操作前 0，当时被改成 10）",
+  "operator": "系统恢复",
+  "_ts": 1792376631034,
+  "time": "2026-10-19T10:23",
+  "_local": false,
+  "_pushed": true
+}

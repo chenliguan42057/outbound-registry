@@ -1,0 +1,14 @@
+{
+  "id": "zmvemrnqw3wkg3",
+  "kind": "zone",
+  "warehouse": "shenzhen",
+  "mode": "set",
+  "product": "大号蝴蝶结拎袋",
+  "qty": 168,
+  "note": "撤回 10-19 10:12 批量按箱误写（恢复为操作前 168，当时被改成 100）",
+  "operator": "系统恢复",
+  "_ts": 1792376631035,
+  "time": "2026-10-19T10:23",
+  "_local": false,
+  "_pushed": true
+}
