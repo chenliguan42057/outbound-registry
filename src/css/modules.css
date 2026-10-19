@@ -710,9 +710,11 @@ html[data-theme="dark"] .ce-calc b, html[data-theme="dark"] .ce-after { color: #
   padding: 7px 10px; font-size: 13px; background: #FBFCFA; color: #3C4845;
 }
 .cb-bar #cbVal { width: 110px; }
+.cb-bar-l { font-size: 13px; color: #4A5A55; white-space: nowrap; }
+.cb-safe { color: #1E6B2E !important; }
 .cb-table { max-height: 50vh; overflow: auto; border: 1px solid #E1ECE7; border-radius: 12px; }
 .cb-row {
-  display: grid; grid-template-columns: 26px minmax(140px, 1fr) 96px 84px 76px 84px 76px;
+  display: grid; grid-template-columns: 26px minmax(180px, 1fr) 120px 100px 96px;
   gap: 6px; align-items: center; padding: 6px 10px; font-size: 13px;
   border-bottom: 1px solid #EEF4F1;
 }
@@ -729,6 +731,8 @@ html[data-theme="dark"] .ce-calc b, html[data-theme="dark"] .ce-after { color: #
 .cb-in:focus { outline: none; border-color: #8FCDB6; box-shadow: 0 0 0 2px rgba(143,205,182,.25); }
 .cb-qty, .cb-after { color: #2F6B57; font-weight: 600; }
 .cb-cur { color: #7A8A84; }
+/* 换算结果（只读）：个数 → 箱数，主理人要看的就是这一列 */
+.cb-case { color: #2F6B57; font-weight: 600; white-space: nowrap; }
 html[data-theme="dark"] .cb-table { border-color: #2F3A36; }
 html[data-theme="dark"] .cb-row { border-bottom-color: #2A3330; }
 html[data-theme="dark"] .cb-head { background: #26302C; color: #B7C4BF; }

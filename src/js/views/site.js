@@ -41,9 +41,11 @@
 
   /** 个数 → 箱数展示，**允许小数箱**（90 个 / 20 = 4.5 箱）；箱规为 0 时返回空串 */
   function fmtBoxes(qty, size) {
-    if (!size || !(qty > 0)) return "";
-    var b = Math.round((qty / size) * 100) / 100;
-    return b + " 箱";
+    if (!size) return "";
+    var q = Number(qty) || 0;
+    if (q <= 0) return "0箱";
+    var b = Math.round((q / size) * 100) / 100;
+    return b + "箱";
   }
 
   function pct(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; }
@@ -120,8 +122,7 @@
       '</div>' +
       '<div class="zone-toolbar">' +
         chip("all", "全部") + chip("site", "仅现场有货") + chip("low", "仅预警") +
-        '<button type="button" class="btn sm zone-set-btn" data-act="caseentry">📦 按箱录锁定</button>' +
-        '<button type="button" class="btn ghost sm" data-act="casebatch">📦 批量按箱</button>' +
+        '<button type="button" class="btn sm zone-set-btn" data-act="caseentry" title="只设「每箱多少个」，用来把个数换算成箱数显示；不会改动任何库存数字">📦 箱规设置</button>' +
         '<button type="button" class="btn sm zone-set-btn" data-act="batchset">⚙ 分区设置（单个 / 批量）</button>' +
       '</div>' +
       (shown.length ? renderGroups(shown)
@@ -173,7 +174,7 @@
       '<div class="zc-main">' +
         '<div class="zc-figure"><b' + (s.site < 0 ? ' class="neg"' : (s.low ? ' class="warn"' : '')) + '>' + s.site + '</b><span>' + (s.site < 0 ? '现场为负' : '现场可用') + '</span></div>' +
         '<div class="zc-meta">' +
-          '<span>仓库锁定 <b>' + s.warehouse + '</b>' + (cs > 0 ? ' <i class="zc-case">' + fmtBoxes(s.warehouse, cs) + '</i>' : '') + '</span>' +
+          '<span>仓库锁定 <b>' + s.warehouse + '</b>' + (cs > 0 ? '（<i class="zc-case">' + fmtBoxes(s.warehouse, cs) + '</i>）' : '') + '</span>' +
           (s.inTransit > 0 ? '<span class="zc-trans">在途 <b>' + s.inTransit + '</b></span>' : '') +
           '<span title="总可用 = 总量 − 在途（已出未提单）：仓库锁定的货也能转出来用，所以算在可用里">总可用 <b>' + (s.total - s.inTransit) + '</b></span>' +
           '<span>总量 <b>' + s.total + '</b></span>' +
@@ -235,8 +236,9 @@
     var btn = e.target.closest ? e.target.closest("[data-act]") : null;
     if (!btn) return;
     var act = btn.getAttribute("data-act");
-    if (act === "caseentry") return openCaseEntry();
-    if (act === "casebatch") return openCaseBatch();
+    /* 2026-10-19：原「按箱录锁定 / 批量按箱」会把箱数×箱规写进仓库锁定（主理人不需要、已误伤过），
+       两个入口合并成一个「箱规设置」——只设每箱多少个，只影响换算显示，不写任何库存。 */
+    if (act === "caseentry" || act === "casebatch") return openBatchCaseSize();
     if (act === "batchset") return openBatch();
     if (act === "filter") {
       filter = btn.getAttribute("data-f") || "all";
@@ -277,101 +279,14 @@
   }
 
   /** 单产品设置弹窗：总库存（可手动设定）+ 仓库锁定数 + 现场警示线 */
-  /* ================= 按箱录仓库锁定（2026-10-18） ================= */
-  /** 用「箱」录仓库锁定：填「每箱多少个」（箱规）+「几箱」，自动换算成个数写入仓库锁定。
-      箱规记进货品目录 product.caseSize（随 catalog.json 云端同步），卡片上反向显示"共几箱"。
-      两个动作：＋累加（在现有锁定上加）/ ＝设为（直接改成这个数，适合实物盘点）。 */
-  function openCaseEntry() {
+  /* ================= 箱规设置（2026-10-19 重做，主理人定稿） =================
+     主理人要的只是「看换算」：卡片上显示「仓库锁定 150（5 箱）」。
+     所以这里**只设「每箱多少个」**，箱数是算出来的展示值，绝不写任何库存 / 分区事件。
+     旧版「按箱录锁定 / 批量按箱」会把「箱数 × 箱规」当成仓库锁定写进分区事件，
+     2026-10-19 曾一次性误改 28 个产品（已回滚），那两个入口就此废弃。 */
+  function openBatchCaseSize() {
     var Cat = window.App.Catalog;
-    var names = (Config.PRODUCTS || []).slice();
-    if (!names.length) { Util.toast("货品目录还没加载好，请稍后重试", true); return; }
-    var body =
-      '<div class="hint" style="margin:-2px 0 12px">按<b>箱</b>录仓库锁定：填「每箱多少个」+「几箱」，自动换算成个数。箱规会记住，下次自动带出；<b>箱数可以是小数</b>（如 1.5 箱）。</div>' +
-      '<div class="field"><label>货品</label>' +
-        '<select id="ceName" class="ce-in">' + names.map(function (n) {
-          return '<option value="' + Util.esc(n) + '">' + Util.esc(n) + '</option>';
-        }).join("") + '</select></div>' +
-      '<div class="ce-row">' +
-        '<div class="field"><label>每箱多少个</label><input type="number" id="ceSize" min="1" step="1" class="ce-in" placeholder="如 20" /></div>' +
-        '<div class="field"><label>箱数（可填小数）</label><input type="number" id="ceBoxes" min="0.01" step="0.01" class="ce-in" value="1" /></div>' +
-      '</div>' +
-      '<div class="ce-calc" id="ceCalc"></div>' +
-      '<div class="modal-actions" style="margin-top:14px">' +
-        '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
-        '<button type="button" class="btn ghost sm" id="ceSet">＝ 设为该数值</button>' +
-        '<button type="button" class="btn sm" id="ceAdd">＋ 累加到仓库锁定</button>' +
-      '</div>';
-    UI.Modal.show("📦 按箱录仓库锁定", body, { width: "540px" });
-    var m = UI.Modal.body();
-    var selEl = m.querySelector("#ceName");
-    var sizeEl = m.querySelector("#ceSize");
-    var boxEl = m.querySelector("#ceBoxes");
-    var calcEl = m.querySelector("#ceCalc");
-    var setBtn = m.querySelector("#ceSet");
-    var addBtn = m.querySelector("#ceAdd");
-
-    function curWh(name) {
-      var list = Zones.summary();
-      for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i].warehouse;
-      return 0;
-    }
-    function vals() {
-      var size = Math.max(0, Math.round(Number(sizeEl.value) || 0));   // 箱规：整数个/箱
-      var boxes = Math.max(0, Number(boxEl.value) || 0);              // 箱数：允许小数（0.5 / 1.5 箱）
-      return { size: size, boxes: boxes, qty: Math.round(size * boxes) };   // 个数四舍五入取整
-    }
-    function draw() {
-      var v = vals();
-      var name = selEl.value;
-      var cur = curWh(name);
-      var csNow = caseSizeOf(name);
-      var l1 = v.qty > 0
-        ? (v.boxes + " 箱 × " + v.size + " 个/箱 ＝ <b>" + v.qty + "</b> 个")
-        : '<span class="ce-warn">先填「每箱多少个」和「箱数」</span>';
-      /* 当前锁定的箱数优先用「本次填的箱规」换算 —— 否则新货品没存过箱规时这行看不到箱数，容易误读成"180 箱" */
-      var boxSize = v.size > 0 ? v.size : csNow;
-      var l2 = "当前仓库锁定 <b>" + cur + "</b> 个" + (boxSize > 0 ? "（" + fmtBoxes(cur, boxSize) + "）" : "");
-      /* 两个按钮两种结果，都预览出来，避免只显示"累加后"被当成唯一结果 */
-      var l3 = v.qty > 0
-        ? '<div class="ce-after">点「＋ 累加」→ ' + (cur + v.qty) + ' 个（' + fmtBoxes(cur + v.qty, v.size) + '）</div>' +
-          '<div class="ce-after">点「＝ 设为」→ ' + v.qty + ' 个（' + fmtBoxes(v.qty, v.size) + '）</div>'
-        : "";
-      calcEl.innerHTML = '<div>' + l1 + '</div><div>' + l2 + '</div>' + l3;
-      setBtn.disabled = !(v.qty > 0);
-      addBtn.disabled = !(v.qty > 0);
-    }
-    function commit(mode) {
-      var v = vals();
-      if (!(v.qty > 0)) { Util.toast("请先填写每箱多少个和箱数", true); return; }
-      var name = selEl.value;
-      var cur = curWh(name);
-      var target = (mode === "add") ? cur + v.qty : v.qty;
-      /* 箱规变了就顺手存进目录（云端同步，下次换设备也带得出来） */
-      if (Cat && Cat.setCaseSize && caseSizeOf(name) !== v.size) Cat.setCaseSize(name, v.size, function () {});
-      Zones.setWarehouse(name, target);
-      UI.Modal.hide();
-      Util.toast((mode === "add" ? "已累加 " : "已设为 ") + name + "：仓库锁定 " + target + " 个（" + v.boxes + " 箱 × " + v.size + "）");
-      refresh();
-    }
-    function fillSize() {
-      var cs = caseSizeOf(selEl.value);
-      sizeEl.value = cs > 0 ? cs : "";
-      draw();
-    }
-    selEl.addEventListener("change", fillSize);
-    sizeEl.addEventListener("input", draw);
-    boxEl.addEventListener("input", draw);
-    setBtn.addEventListener("click", function () { commit("set"); });
-    addBtn.addEventListener("click", function () { commit("add"); });
-    fillSize();
-  }
-
-  /* ================= 批量按箱录锁定（2026-10-18） ================= */
-  /** 一张表给多个货品填「每箱多少个 + 箱数」，一次写进仓库锁定。
-      只在「箱数」> 0 的行生效；箱规空着就用目录里记住的值。箱规有变化的行合成一次目录保存。 */
-  function openCaseBatch() {
-    var Cat = window.App.Catalog;
-    var sum = Zones.summary();
+    var sum = sortRows(Zones.summary());          // 与卡片同序，找货快
     if (!sum.length) { Util.toast("货品目录还没加载好，请稍后重试", true); return; }
     var rowsHtml = sum.map(function (s) {
       var cs = caseSizeOf(s.name);
@@ -379,105 +294,87 @@
         '<span class="cb-ckw"><input type="checkbox" class="cb-ck" /></span>' +
         '<span class="cb-name" title="' + Util.esc(s.name) + '">' + Util.esc(s.name) + '</span>' +
         '<span><input type="number" min="0" step="1" class="cb-in" data-f="size" value="' + (cs > 0 ? cs : "") + '" placeholder="个/箱" /></span>' +
-        '<span><input type="number" min="0" step="0.01" class="cb-in" data-f="boxes" placeholder="箱数(可小数)" /></span>' +
-        '<span class="cb-qty">—</span>' +
         '<span class="cb-cur">' + s.warehouse + '</span>' +
-        '<span class="cb-after">—</span>' +
+        '<span class="cb-case">' + (cs > 0 ? (s.warehouse > 0 ? fmtBoxes(s.warehouse, cs) : "0箱") : "—") + '</span>' +
       '</div>';
     }).join("");
     var body =
-      '<div class="cb-tip">批量按箱：只在<b>「箱数」</b>填了数字的行才生效（每箱多少个空着 → 用目录里记住的箱规）。' +
-        '换算个数 ＝ 箱数 × 每箱多少个，写进「仓库锁定」。可以先用上排批量填，再逐行微调。</div>' +
+      '<div class="cb-tip">这里<b>只设「每箱多少个」</b>，用来把个数换算成箱数显示。' +
+        '<b class="cb-safe">不会改动任何库存数字</b>（仓库锁定、现场可用、总量都不动）。</div>' +
       '<div class="cb-bar">' +
         '<label class="cb-all"><input type="checkbox" id="cbAll" /> 全选</label>' +
-        '<select id="cbField"><option value="size">每箱多少个</option><option value="boxes">箱数</option></select>' +
-        '<input type="number" min="0" step="1" id="cbVal" placeholder="批量值" />' +
+        '<span class="cb-bar-l">每箱多少个</span>' +
+        '<input type="number" min="1" step="1" id="cbVal" placeholder="如 20" />' +
         '<button type="button" class="btn sm" data-cb="toSel">应用到勾选</button>' +
         '<button type="button" class="btn ghost sm" data-cb="toAll">应用到全部</button>' +
       '</div>' +
       '<div class="cb-table">' +
-        '<div class="cb-row cb-head"><span></span><span>货品</span><span>每箱多少个</span><span>箱数</span><span>换算</span><span>当前锁定</span><span>变更后</span></div>' +
+        '<div class="cb-row cb-head"><span></span><span>货品</span><span>每箱多少个</span><span>仓库锁定</span><span>换算</span></div>' +
         rowsHtml +
       '</div>' +
       '<div class="modal-actions">' +
         '<button type="button" class="btn ghost sm" data-cb="cancel">取消</button>' +
-        '<button type="button" class="btn ghost sm" data-cb="set">＝ 全部设为该数值</button>' +
-        '<button type="button" class="btn sm" data-cb="add">＋ 全部累加到仓库锁定</button>' +
+        '<button type="button" class="btn sm" data-cb="save">保存箱规</button>' +
       '</div>';
-    UI.Modal.show("📦 批量按箱录锁定", body, { width: "92vw" });
+    UI.Modal.show("📦 箱规设置（只影响换算显示）", body, { width: "78vw" });
     var m = UI.Modal.body();
 
     function rows() { return Array.prototype.slice.call(m.querySelectorAll(".cb-row[data-name]")); }
-    function rowVal(row, f, isInt) {
-      var el = row.querySelector('[data-f="' + f + '"]');
-      var v = Number(el && el.value);
-      if (!isFinite(v) || v <= 0) return 0;
-      return isInt ? Math.round(v) : v;   // 箱规取整；箱数允许小数（0.5 / 1.5 箱）
-    }
+
+    /** 换算只读：个数 ÷ 每箱多少个 */
     function recalc(row) {
-      var size = rowVal(row, "size", true), boxes = rowVal(row, "boxes", false);
+      var raw = Number(row.querySelector('[data-f="size"]').value);
+      var size = (isFinite(raw) && raw > 0) ? Math.round(raw) : 0;
       var cur = Number(row.querySelector(".cb-cur").textContent) || 0;
-      var qty = (size > 0 && boxes > 0) ? Math.round(size * boxes) : 0;
-      row.querySelector(".cb-qty").textContent = qty > 0 ? (qty + " 个") : "—";
-      row.querySelector(".cb-after").textContent = qty > 0 ? String(cur + qty) : "—";
+      row.querySelector(".cb-case").textContent = size > 0 ? (cur > 0 ? fmtBoxes(cur, size) : "0箱") : "—";
     }
     rows().forEach(function (row) {
-      Array.prototype.forEach.call(row.querySelectorAll(".cb-in"), function (inp) {
-        inp.addEventListener("input", function () { recalc(row); });
-      });
+      row.querySelector('[data-f="size"]').addEventListener("input", function () { recalc(row); });
     });
     var all = m.querySelector("#cbAll");
     if (all) all.onchange = function () {
       Array.prototype.forEach.call(m.querySelectorAll(".cb-ck"), function (c) { c.checked = all.checked; });
     };
     function bulk(onlyChecked) {
-      var f = m.querySelector("#cbField").value;
       var raw = m.querySelector("#cbVal").value;
-      if (raw === "") { Util.toast("请先填写批量值", true); return; }
-      var rawN = Number(raw);
-      if (!isFinite(rawN)) { Util.toast("批量值必须是数字", true); return; }
-      var n = (f === "boxes") ? Math.max(0, rawN) : Math.max(0, Math.round(rawN));
+      if (raw === "") { Util.toast("请先填写「每箱多少个」", true); return; }
+      var n = Math.round(Number(raw));
+      if (!isFinite(n) || n <= 0) { Util.toast("每箱多少个要填大于 0 的整数", true); return; }
       var cnt = 0;
       rows().forEach(function (row) {
         var ck = row.querySelector(".cb-ck");
         if (onlyChecked && !(ck && ck.checked)) return;
-        row.querySelector('[data-f="' + f + '"]').value = n;
+        row.querySelector('[data-f="size"]').value = n;
         recalc(row); cnt++;
       });
-      Util.toast("已为 " + cnt + " 行填入 " + n);
+      Util.toast("已为 " + cnt + " 行填入：每箱 " + n + " 个");
     }
-    function commit(mode) {
-      var list = [];
+    /** 保存箱规：只写 product.caseSize（顺手清掉没填的），一条库存事件都不写 */
+    function save() {
+      var map = {}, n = 0;
       rows().forEach(function (row) {
+        var raw = Number(row.querySelector('[data-f="size"]').value);
+        if (!isFinite(raw) || raw < 0) return;
+        var size = Math.round(raw);
         var name = row.getAttribute("data-name");
-        var size = rowVal(row, "size", true) || caseSizeOf(name);
-        var boxes = rowVal(row, "boxes", false);
-        if (!(boxes > 0) || !(size > 0)) return;
-        list.push({
-          name: name, size: size, boxes: boxes, qty: Math.round(size * boxes),
-          cur: Number(row.querySelector(".cb-cur").textContent) || 0
-        });
+        if (size === caseSizeOf(name)) return;   // 没变的不写，省 API 额度
+        map[name] = size;                        // 0 = 清除箱规
+        n++;
       });
-      if (!list.length) { Util.toast("还没有「箱数」大于 0 的行", true); return; }
-      var sizeMap = {};
-      list.forEach(function (r) { sizeMap[r.name] = r.size; });
-      if (Cat && Cat.setCaseSizes) Cat.setCaseSizes(sizeMap, function () {});
-      var totalQty = 0;
-      list.forEach(function (r) {
-        Zones.setWarehouse(r.name, mode === "add" ? (r.cur + r.qty) : r.qty);
-        totalQty += r.qty;
+      if (!n) { Util.toast("箱规没有变化"); UI.Modal.hide(); return; }
+      if (!(Cat && Cat.setCaseSizes)) { UI.Modal.hide(); Util.toast("目录模块未就绪，箱规没保存", true); return; }
+      Util.toast("正在保存 " + n + " 个货品的箱规…");
+      Cat.setCaseSizes(map, function (ok) {
+        UI.Modal.hide();
+        Util.toast(ok ? ("已保存 " + n + " 个货品的箱规（库存一个都没动）") : "箱规保存失败，请稍后重试", !ok);
+        refresh();
       });
-      UI.Modal.hide();
-      Util.toast((mode === "add" ? "已累加 " : "已设为 ") + list.length + " 个货品，合计 " + totalQty + " 个");
-      refresh();
     }
     m.querySelector('[data-cb="toSel"]').onclick = function () { bulk(true); };
     m.querySelector('[data-cb="toAll"]').onclick = function () { bulk(false); };
     m.querySelector('[data-cb="cancel"]').onclick = function () { UI.Modal.hide(); };
-    m.querySelector('[data-cb="set"]').onclick = function () { commit("set"); };
-    m.querySelector('[data-cb="add"]').onclick = function () { commit("add"); };
+    m.querySelector('[data-cb="save"]').onclick = save;
   }
-
   function openSettings(name) {
     var cur = Zones.summary().filter(function (x) { return x.name === name; })[0] || {};
     var total = (cur.total != null) ? cur.total : (Zones.siteStock(name) + Zones.warehouseLocked(name));
