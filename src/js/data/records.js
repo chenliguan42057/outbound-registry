@@ -123,12 +123,26 @@
     return borrowRec.id;
   }
 
+  /** 解开某条记录造成的「仓库锁定」（2026-10-18 入库去向功能配套）。
+      入库可勾「进仓库锁定」，那份锁定以 ref = 记录 id 挂在分区事件上；
+      记录被删/被清空时把它冲抵回 0，保证「总库存」与「仓库锁定」同步减，现场数不被误扣。
+      无 Zones 模块或本机未启用时静默跳过，不影响既有删除流程。 */
+  function releaseZoneLock(id) {
+    try {
+      var Z = window.App.Zones;
+      if (Z && Z.reconcileInbound && id) Z.reconcileInbound(id, []);
+    } catch (e) {}
+  }
+
   /** 删除记录（本地） */
   function remove(id) {
     var gone = null;
     State.list.forEach(function (r) { if (r.id === id) gone = r; });
     State.list = State.list.filter(function (r) { return r.id !== id; });
     State.save();
+    /* 2026-10-18：入库记录若曾「锁进仓库」，删单要把那份锁定一并解掉，
+       否则总库存减了、仓库锁定还挂着 → 现场数被凭空扣成负数。 */
+    releaseZoneLock(id);
     if (window.App.Stock) window.App.Stock.markDirty();
     try {
       if (window.App.Audit && gone) window.App.Audit.log("delete", {
@@ -161,6 +175,9 @@
 
   /** 清空本地记录 */
   function clear() {
+    /* 2026-10-18：先把每条入库记录挂着的「仓库锁定」解掉，再清列表，
+       否则锁定事件会变成一堆无主事件，把现场数长期扣在负数。 */
+    (State.list || []).forEach(function (r) { if (r && r.id) releaseZoneLock(r.id); });
     State.list = [];
     State.save();
     try { if (window.App.Audit) window.App.Audit.log("clear-all", {}); } catch (e) {}

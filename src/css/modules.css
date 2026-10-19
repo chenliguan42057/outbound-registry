@@ -749,3 +749,52 @@ html[data-theme="dark"] .zc-flag.neg { color: #E88C7D; background: rgba(232,140,
   .zb-head, .zb-row { grid-template-columns: 28px 1fr 70px 76px 48px 70px; gap: 5px; padding: 6px 8px; font-size: 12px; }
   .zb-in { padding: 5px 6px; font-size: 12px; }
 }
+
+/* ===== 2026-10-18 入库去向（先锁进仓库 / 直接进现场）=====
+   独立类名，不复用 .src-chip（那个被主题皮肤全局改写成实心药丸，且部分样式写在
+   移动端媒体查询里，宽屏下不生效）。 */
+.iz-seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.iz-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px; line-height: 1;
+  border: 1px solid #D6E4DD; border-radius: 10px;
+  background: #F8FBF9; color: #3C4845;
+  font-family: inherit; font-size: 13px; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+  user-select: none;
+}
+.iz-btn:hover { border-color: #8FCDB6; color: #2F6B57; }
+.iz-btn i { font-style: normal; font-size: 15px; line-height: 1; }
+/* 选中态：仓库锁定=绿系（默认项，货安安静静锁在仓里） */
+.iz-btn.on {
+  background: #E9F5EC; border-color: #7FBF8F; color: #1E6B2E; font-weight: 700;
+  box-shadow: 0 0 0 3px rgba(46, 139, 87, .10);
+}
+/* 选中态：现场库存=蓝系（一眼区分「这单货直接在现场」） */
+.iz-btn.on[data-zone="site"] {
+  background: #EEF4FB; border-color: #9DB9D8; color: #2C5C8F;
+  box-shadow: 0 0 0 3px rgba(80, 130, 190, .10);
+}
+.iz-hint { margin-top: 8px; font-size: 12px; line-height: 1.6; color: #7A8A84; }
+.iz-hint b { color: #2F6B57; }
+.iz-tag {
+  display: inline-block; margin-left: 8px; padding: 2px 9px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 12px; font-weight: 600; line-height: 1.6;
+  color: #1E6B2E; background: #E9F5EC; border: 1px solid #BCE3C8;
+}
+.iz-tag.site { color: #2C5C8F; background: #EEF4FB; border-color: #BCD2EA; }
+.preview-site { color: #7A8A84; font-size: 12px; white-space: nowrap; }
+html[data-theme="dark"] .iz-btn { background: #232B28; border-color: #3A4642; color: #DCE6E2; }
+html[data-theme="dark"] .iz-btn:hover { border-color: #4E8A66; color: #9ED8B0; }
+html[data-theme="dark"] .iz-btn.on { background: rgba(46,139,87,.20); border-color: #4E8A66; color: #9ED8B0; }
+html[data-theme="dark"] .iz-btn.on[data-zone="site"] { background: rgba(80,130,190,.20); border-color: #5A7FA8; color: #A8C4E6; }
+html[data-theme="dark"] .iz-hint { color: #94A19C; }
+html[data-theme="dark"] .iz-hint b { color: #9ED8B0; }
+html[data-theme="dark"] .iz-tag { background: rgba(46,139,87,.20); border-color: #4E8A66; color: #9ED8B0; }
+html[data-theme="dark"] .iz-tag.site { background: rgba(80,130,190,.20); border-color: #5A7FA8; color: #A8C4E6; }
+html[data-theme="dark"] .preview-site { color: #94A19C; }
+@media (max-width: 720px) {
+  .iz-btn { flex: 1 1 auto; justify-content: center; padding: 10px 12px; }
+  .preview-site { display: none; }   /* 窄屏预览条本来就挤，现场数留给仪表盘看 */
+}

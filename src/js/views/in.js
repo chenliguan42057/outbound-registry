@@ -26,6 +26,10 @@
       避免用户在识别填入后又手动登记时被误标成「自动识别」。值为 "in"（=本视图类型）。 */
   var recognizeConfirm = null;
   var sourceVal = "";       // 当前选中的入库来源
+  /** 2026-10-18：入库去向 —— "wh" = 进仓库锁定（默认），"site" = 直接进现场库存。
+      默认锁进仓库，是主理人定稿口径：货到先整箱上架，要出库时才「转入现场」，
+      避免现场账面数字虚高（现场的每一件都必须是随时能拿走的）。 */
+  var zoneVal = "wh";
   var editingTransfer = false; // 编辑的是调拨/回滚生成的入库单 → 来源由系统固定，禁止改
 
   function render(container) {
@@ -45,6 +49,14 @@
               '<button type="button" class="btn ghost sm" id="inSourceAdd" style="white-space:nowrap;">＋ 自定义</button>' +
             '</div>' +
           '</div>' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>入库去向<span class="req">*</span></label>' +
+          '<div class="iz-seg" id="inZoneSeg">' +
+            '<button type="button" class="iz-btn on" data-zone="wh"><i>🏬</i>仓库锁定</button>' +
+            '<button type="button" class="iz-btn" data-zone="site"><i>🏪</i>现场库存</button>' +
+          '</div>' +
+          '<div class="iz-hint" id="inZoneHint"></div>' +
         '</div>' +
         '<div class="field">' +
           '<label for="inPurpose">用途 / 补充说明</label>' +
@@ -76,7 +88,9 @@
       cancelEdit: Util.$("inCancelEdit"),
       preview: Util.$("inPreview"),
       srcBox: Util.$("inSourceChips"),
-      srcCustom: Util.$("inSourceCustom")
+      srcCustom: Util.$("inSourceCustom"),
+      zoneSeg: Util.$("inZoneSeg"),
+      zoneHint: Util.$("inZoneHint")
     };
 
     // 经办人默认带出上次值
@@ -129,7 +143,22 @@
     Util.$("inSourceCustom").addEventListener("keydown", function (e) {
       if (e.key === "Enter") { e.preventDefault(); addCustomSource(); }
     });
+    // 入库去向：仓库锁定 / 现场库存（默认仓库锁定，2026-10-18）
+    if (els.zoneSeg) {
+      els.zoneSeg.addEventListener("click", function (ev) {
+        var b = ev.target && ev.target.closest ? ev.target.closest(".iz-btn") : null;
+        if (!b) return;
+        var z = b.getAttribute("data-zone");
+        if (z !== "wh" && z !== "site") return;
+        if (z === zoneVal) return;
+        zoneVal = z;
+        renderZoneSeg();
+        renderPreview();
+        saveDraft();
+      });
+    }
     renderSourceChips();
+    renderZoneSeg();
     renderPreview();
     var _d = restoreDraft();
     if (_d) showDraftBar(_d);
@@ -213,22 +242,53 @@
     Util.toast("已删除自定义来源「" + name + "」");
   }
 
+  /** 入库去向分段控件（2026-10-18）：仓库锁定（默认）/ 现场库存 */
+  function renderZoneSeg() {
+    var seg = els && els.zoneSeg;
+    if (!seg) return;
+    var btns = seg.querySelectorAll(".iz-btn");
+    for (var i = 0; i < btns.length; i++) {
+      var z = btns[i].getAttribute("data-zone");
+      if (z === zoneVal) btns[i].classList.add("on");
+      else btns[i].classList.remove("on");
+    }
+    if (els.zoneHint) {
+      els.zoneHint.innerHTML = (zoneVal === "wh")
+        ? '先<b>整箱锁进仓库</b>，现场可用数不变；要出库时到仪表盘对应货品点「转入现场」。'
+        : '<b>直接进现场</b>，立即可出库——适合临时到货、当天就要发的货。';
+    }
+  }
+
   /** 库存变化预览：当前库存 → 入库后 */
   function renderPreview() {
     var items = picker.getItems();
     if (!items.length) { els.preview.innerHTML = ""; els.preview.style.display = "none"; return; }
     var rows = items.map(function (it) {
       var cur = window.App.Stock.getStock(it.name);
-      var after = cur + it.qty;
+      var q = Number(it.qty) || 0;
+      var after = cur + q;
+      /* 现场数变化（2026-10-18）：进仓库锁定时现场不变，直接进现场时现场 +qty。
+         用 Zones.siteStock 取，与仪表盘卡片上的「现场可用」严格同口径。 */
+      var siteNow = null, siteAfter = null;
+      try {
+        if (window.App.Zones && window.App.Zones.siteStock) {
+          siteNow = window.App.Zones.siteStock(it.name, cur);
+          siteAfter = (zoneVal === "wh") ? siteNow : siteNow + q;
+        }
+      } catch (e) { siteNow = null; }
       return '<div class="preview-row">' +
         '<span>' + Util.esc(it.name) + '</span>' +
         '<span class="preview-cur">当前 ' + cur + '</span>' +
         '<span class="preview-arrow">→</span>' +
         '<span class="preview-after">入库后 ' + after + '</span>' +
+        (siteNow === null ? '' :
+          '<span class="preview-site">现场 ' + siteNow + (siteAfter === siteNow ? '（不变）' : ' → ' + siteAfter) + '</span>') +
       '</div>';
     }).join("");
-    els.preview.innerHTML = '<div class="preview-title">库存变化预览</div>' + rows;
-    els.preview.style.display = "";
+    els.preview.innerHTML = '<div class="preview-title">库存变化预览' +
+      '<span class="iz-tag' + (zoneVal === "wh" ? "" : " site") + '">' +
+      (zoneVal === "wh" ? '🏬 进仓库锁定' : '🏪 进现场库存') + '</span></div>' + rows;
+    els.preview.style.display = "block";
   }
 
   function saveDraft() {
@@ -237,6 +297,7 @@
       _t: Date.now(),               // 草稿保存时刻（P2 提示条用）
       purpose: els.purpose.value,
       source: sourceVal,
+      zone: zoneVal,
       items: picker.selected,
       photos: photos.getPhotos()
     });
@@ -248,10 +309,12 @@
     if (!d) return null;
     els.purpose.value = d.purpose || "";
     sourceVal = d.source || "";
+    zoneVal = (d.zone === "site") ? "site" : "wh";
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
     renderPreview();
     renderSourceChips();
+    renderZoneSeg();
     return d;
   }
 
@@ -322,7 +385,8 @@
         okText: "确认入库",
         meta: [
           ["经办人", handlerVal],
-          ["入库来源", editingTransfer ? "（调拨自动带入，不可改）" : (sourceVal || "")]
+          ["入库来源", editingTransfer ? "（调拨自动带入，不可改）" : (sourceVal || "")],
+          ["入库去向", zoneVal === "wh" ? "🏬 进仓库锁定（现场不变）" : "🏪 直接进现场库存"]
         ],
         items: items
       }).then(function (ok) {
@@ -338,6 +402,7 @@
     setSubmitting(true);
     var purpose = els.purpose.value.trim();
     var wasEditing = !!editingId;
+    var zSel = zoneVal;          // 去向：wh = 进仓库锁定 / site = 进现场
     var payload = {
       /* 2026-09-29：来源标记落进记录本身（口径同出库），供后续状态确认时补推钉钉 */
       fromRecognize: !!recognizeConfirm,
@@ -346,7 +411,9 @@
       items: items,
       purpose: purpose,
       picker: handlerVal,
-      photos: photos.getPhotos()
+      photos: photos.getPhotos(),
+      /* 2026-10-18：入库去向（wh/site）随记录落库，删单/编辑时据此冲抵仓库锁定 */
+      zone: zSel
       // 2026-09-29 加固：affectsStock 不再恒写 true，见下方分支（仅新建时给 true）。
       // 否则编辑一条历史上非库存单会把它强行纳入库存计算 → 凭空增减。
     };
@@ -360,6 +427,7 @@
     } else {
       rec = Records.create(payload);
     }
+    syncZoneLock(rec, zSel, handlerVal, wasEditing);
     resetForm();
     // 顺捷感一（乐观 UI）：本地已落库 = 这件事已经成了，不必等云端回话。
     // 立刻解锁按钮、给提示、把记录放进同步队列（列表行会显示转圈），云端推送转后台慢慢跑。
@@ -373,6 +441,26 @@
     // 先上传照片并写回 photoUrls（首推即含图）；再统一推送。
     // submitPush 是 async，无论成功/失败/无令牌早退，都要在 finally 里解锁。
     submitPush(rec, wasEditing)["catch"](function () {})["finally"](function () { setSubmitting(false); });
+  }
+
+  /** 把「入库去向」落成仓库锁定事件（2026-10-18，主理人需求）。
+      「进现场」→ 什么都不写：入库记录本身让总库存 +qty，现场数自然跟着涨（原口径不变）。
+      「进仓库锁定」→ 按记录 id 打 ref 写一条 to_wh：总库存照样 +qty、仓库锁定也 +qty，
+                      两相抵消 → 现场数不动，货算在仓库里。
+      幂等：重复提交/改为进现场/删单，都由 Zones.reconcileInbound 按差额冲抵，不会写重复锁定。 */
+  function syncZoneLock(rec, zSel, operator, wasEditing) {
+    if (!rec || !rec.id) return;
+    var Z = window.App.Zones;
+    if (!Z || !Z.reconcileInbound) return;
+    try {
+      Z.reconcileInbound(rec.id, zSel === "wh" ? (rec.items || []) : [], {
+        note: (sourceVal ? sourceVal + " · " : "") + (zSel === "wh" ? "入库锁定" : "入库进现场"),
+        operator: operator || "",
+        /* 新建时把事件时间对齐到记录时间，现场流水里「当时剩余」才不会错位；
+           编辑时用当前时间，避免把冲抵事件塞回过去、被之后的「设定仓库数」抹掉。 */
+        ts: wasEditing ? 0 : (Number(rec._ts) || 0)
+      });
+    } catch (e) {}
   }
 
   /** 异步推送：先写回 photoUrls，再推记录，确保通知含图。
@@ -468,6 +556,7 @@
     UI.clearFieldErrors(els.submit.closest(".card") || document);
     els.purpose.value = "";
     sourceVal = "";
+    zoneVal = "wh";            // 复位为默认：进仓库锁定
     editingTransfer = false;
     picker.setSelected([]);
     photos.setPhotos([]);
@@ -476,6 +565,7 @@
     els.cancelEdit.style.display = "none";
     renderPreview();
     renderSourceChips();
+    renderZoneSeg();
     clearDraft();
   }
 
@@ -488,12 +578,16 @@
     // 来源：调拨/回滚生成的入库单锁定系统来源（编辑旧调拨单时顺带补上 source 字段），普通单带出原值
     editingTransfer = !!(r.transferRole);
     sourceVal = Records.InSource.of(r) || "";
+    /* 2026-10-18 去向：老记录没有 zone 字段（当年入库一律计入现场）→ 按「现场」回显，
+       避免一编辑旧单就被凭空锁进仓库、把现场数扣没。 */
+    zoneVal = (r.zone === "wh") ? "wh" : "site";
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);
     els.submit.textContent = "保存修改";
     els.cancelEdit.style.display = "inline-flex";
     renderPreview();
     renderSourceChips();
+    renderZoneSeg();
     Util.toast("正在编辑该记录，修改后点「保存修改」");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }

@@ -322,10 +322,19 @@
     function srcCellHtml(r) {
       var s = Records.InSource.of(r);
       var dept = (r && r.dept) || "";
-      if (!s) return Util.esc(dept || "-");
-      var html = '<span class="src-tag"' + (dept ? ' title="' + Util.esc(dept) + '"' : '') + '>' + Util.esc(s) + '</span>';
-      if (dept && dept !== s) html += ' <span class="cell-sub">' + Util.esc(dept) + '</span>';
-      return html;
+      var html = "";
+      if (s) {
+        html = '<span class="src-tag"' + (dept ? ' title="' + Util.esc(dept) + '"' : '') + '>' + Util.esc(s) + '</span>';
+        if (dept && dept !== s) html += ' <span class="cell-sub">' + Util.esc(dept) + '</span>';
+      } else {
+        html = Util.esc(dept);
+      }
+      /* 2026-10-18：入库去向小标 —— 一眼看出这单货是锁在仓库里还是直接进现场了。
+         走独立的拼接（不早退），保证老单/无来源的单也能带上这个标记。 */
+      if (r && r.zone === "wh") {
+        html += (html ? ' ' : '') + '<span class="iz-tag" title="本单货进了仓库锁定，现场可用数不变">🏬 仓库</span>';
+      }
+      return html || "-";
     }
 
     /** 云端同步后刷新（保留搜索框，重建表格） */
@@ -798,6 +807,11 @@
       var srcShown = isRecIn ? Records.InSource.of(r) : "";
       if (srcShown) {
         rows += '<div class="detail-row"><span class="k">来源</span><span class="v"><span class="src-tag">' + Util.esc(srcShown) + '</span></span></div>';
+      }
+      /* 入库去向（2026-10-18）：仓库锁定 / 现场库存。老记录没有该字段，不显示这一行。 */
+      if (isRecIn && r.zone) {
+        rows += '<div class="detail-row"><span class="k">去向</span><span class="v">' +
+          (r.zone === "wh" ? "🏬 仓库锁定（现场数不变）" : "🏪 现场库存（可直接出库）") + '</span></div>';
       }
       if (!isRecIn) {
         rows += '<div class="detail-row"><span class="k">状态</span><span class="v">' + statusBadge(r) + '</span></div>';

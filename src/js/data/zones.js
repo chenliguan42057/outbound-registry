@@ -250,6 +250,90 @@
     return rec;
   }
 
+  /* ================= 入库去向（2026-10-18 追加，主理人需求） =================
+     主理人要求：入库时可选「进现场库存」还是「进仓库锁定」，默认仓库锁定。
+     实现口径（不碰出库/报表/钉钉，零侵入）：
+       总库存由入库记录本身自动 +qty（原有逻辑不动）；
+       · 选「仓库锁定」→ 为每条明细补一条 to_wh 事件（货进仓库 → 现场数不变）；
+       · 选「现场库存」→ 什么都不写（现场数自然 +qty，即原口径）。
+     事件带 ref = 入库记录 id，编辑/删除该记录时按差额冲抵，可追溯、可撤销。 */
+
+  /** 某条入库记录在某产品上「当前仍锁着的数量」（按 ref 聚合 to_wh − to_site）。
+      遇到 mode:"set"（绝对基准重置）就清零——之前的 ref 锁定已被手动设定抹平，
+      再拿它算差额会双算，这一步必须与 warehouseLockedAt 的折算口径一致。 */
+  function lockedOfRef(ref, name) {
+    if (!ref || !name) return 0;
+    var s = 0;
+    var evs = eventsOf(name);
+    for (var i = 0; i < evs.length; i++) {
+      var e = evs[i];
+      if (e.mode === "set") { s = 0; continue; }
+      if (e.ref !== ref) continue;
+      if (e.dir === "to_wh") s += num(e.qty);
+      else if (e.dir === "to_site") s -= num(e.qty);
+    }
+    return s;
+  }
+
+  /** 该记录写的锁定事件是否已经被「设定仓库锁定数」吞掉。
+      判据走同一套排序后的序列位置（不比较时间戳——多设备时钟有偏移，比时间会判错）：
+      只要该 ref 最后一条事件之后还出现过 mode:"set"，就说明它已被并进那个绝对数字里，
+      再去为它补/减锁定就是双算 → 编辑/删除时跳过。 */
+  function refAbsorbed(ref, name) {
+    if (!ref) return false;
+    var evs = eventsOf(name), lastRef = -1, lastSet = -1;
+    for (var i = 0; i < evs.length; i++) {
+      if (evs[i].ref === ref) lastRef = i;
+      if (evs[i].mode === "set") lastSet = i;
+    }
+    return lastRef >= 0 && lastSet > lastRef;
+  }
+
+  /** 把「某条入库记录应锁的明细」同步到分区事件（幂等）。
+      @param {string} ref   入库记录 id（事件上的 ref 标记）
+      @param {Array<{name:string,qty:number}>} items  该记录当前应锁进仓库的货品；空数组 = 全解锁
+      @param {{note?:string,operator?:string,ts?:number}} [meta]
+      @returns {Array} 本次新增的事件（无差额时为空）
+      用法：新建 = reconcileInbound(rec.id, items)；编辑 = 同一句重算；
+           删除/改为进现场 = reconcileInbound(rec.id, [])。 */
+  function reconcileInbound(ref, items, meta) {
+    if (!ref) return [];
+    meta = meta || {};
+    var want = {};
+    (items || []).forEach(function (it) {
+      var n = normName(it && it.name);
+      var q = Math.round(num(it && it.qty));
+      if (!n || !(q > 0)) return;
+      want[n] = (want[n] || 0) + q;
+    });
+    // 需要检查的产品 = 本次应有的 + 以前锁过但现在不在明细里的（换货/删行要解开）
+    var names = Object.keys(want);
+    var wid = Config.Sys.current().id;
+    all().forEach(function (r) {
+      if (!r || r.ref !== ref || !r.product) return;
+      if (r.warehouse && r.warehouse !== wid) return;
+      if (names.indexOf(r.product) === -1) names.push(r.product);
+    });
+    var out = [];
+    names.forEach(function (n) {
+      /* 这个产品后来被「设定仓库锁定量」绝对覆盖过：这条记录锁的货已经并进那个数字里了，
+         再补一次就是双算 → 跳过（要改就请到仪表盘按箱录入/盘点平账重设）。 */
+      if (refAbsorbed(ref, n)) return;
+      var d = (want[n] || 0) - lockedOfRef(ref, n);
+      if (!d) return;
+      out.push(append(baseRec({
+        dir: d > 0 ? "to_wh" : "to_site",
+        product: n,
+        qty: Math.abs(d),
+        ref: ref,
+        note: meta.note || "入库登记",
+        operator: meta.operator || "",
+        _ts: meta.ts || Date.now()
+      })));
+    });
+    return out;
+  }
+
   /* ================= 现场流水 ================= */
 
   /** 现场流水：该产品的出入库流水 + 逐条「出/入库后现场剩余」，倒序（最新在前）。
@@ -305,6 +389,9 @@
     applyBaseOverrides: applyBaseOverrides,
     siteFlow: siteFlow,
     eventsOf: eventsOf,
+    lockedOfRef: lockedOfRef,
+    refAbsorbed: refAbsorbed,
+    reconcileInbound: reconcileInbound,
     _countsAsStock: countsAsStock
   };
 })();
