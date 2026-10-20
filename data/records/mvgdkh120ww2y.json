@@ -1,0 +1,1 @@
+{"id":"mvgdkh120ww2y","_ts":1792482111543,"time":"2026-10-20T15:41","type":"out","warehouse":"shenzhen","items":[{"name":"面膜5片装（未入库版）","qty":8,"stock":198}],"purpose":"撤回调拨出库（韩若冰）","picker":"赛迪斯（撤销）","dept":"赛迪斯","note":"撤回调拨：韩若冰","affectsStock":true,"transferId":"mvgdj5curlhkt","transferRole":"rollback-out","transferNo":"韩若冰"}
