@@ -1,0 +1,1 @@
+{"_ts":1792655998123,"type":"remind","kind":"borrow","warehouse":"shenzhen","orders":[{"id":"mvj87drnazx2o","type":"out","time":"2026-10-22T15:34","picker":"谢晓茵","dept":"细胞接待组","purpose":"客户销售","entity":"深圳细胞法人","note":"","status":"pending","borrowed":true,"borrowStage":"closed","items":[{"name":"精华液 5支装","qty":10}],"returned":{"精华液 5支装":10},"photoUrls":[]}]}
