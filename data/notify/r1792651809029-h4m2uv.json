@@ -1,0 +1,1 @@
+{"_ts":1792651809029,"type":"remind","kind":"borrow","warehouse":"shenzhen","orders":[{"id":"mvizfnjmxr5fx","type":"out","time":"2026-10-22T11:29","picker":"谢晓茵（陈利冠）","dept":"接待组","purpose":"客户销售","entity":"深圳细胞法人","note":"","status":"submitted","borrowed":true,"borrowStage":"borrowed","items":[{"name":"面膜 1片装","qty":5},{"name":"抽绳袋","qty":1}],"returned":{},"photoUrls":[]}]}
