@@ -4235,5 +4235,14 @@
     "reason": "borrow_diff",
     "fp": "0debed01ccd4cd5c",
     "at": "2026-10-22T08:08:15Z"
+  },
+  "mvjaqlo8mjeg4": {
+    "ok": 1,
+    "fail": 0,
+    "fp": "1df78a94bd39abe8",
+    "at": "2026-10-22T08:46:08Z",
+    "rows": {
+      "2026时空鹿茸库存": 780
+    }
   }
 }
