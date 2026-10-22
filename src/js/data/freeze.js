@@ -65,10 +65,38 @@
     });
   }
 
+  /** 该借出单是否已被「差额单」接管（2026-10-22 主理人实测口径修正）。
+      背景：部分归还后 borrow.js 会生成一张差额出库单（fromBorrowId=借出单id，freezeStock:true），
+      而原借出单仍按「剩余未还」冻结 → 同一笔货被两单各算一遍。
+      实测：借 40×2、还 36 → 现场显示 −48，正确应为 −44（多算 4，正是差额单那 4）。
+      规则：一旦存在承接差额单，剩余量的冻结**只由差额单承担**，借出单一律归零。
+      这样差额单提交提单（转实扣库存、freezeStock=false）之后口径依旧连续：
+      总库存 −4、冻结只剩未还借出 → 现场仍是 −44。 */
+  function hasDiffSuccessor(borrowId, itemName) {
+    var key = norm(itemName);
+    return (State.list || []).some(function (x) {
+      if (!x || x.fromBorrowId !== borrowId) return false;
+      if ((x.type || "out") === "in") return false;
+      if (x.affectsStock !== true) return false;
+      return (x.items || []).some(function (it) { return norm(it.name) === key; });
+    });
+  }
+
+  /** 差额单是否已成「孤儿」：原借出单后来被还清（borrowDone === true）。
+     成因：doReturn 再次归还时只更新原单、不回收旧差额单，残留一张冻结单会凭空占货。
+      正常流程里 borrowDone=true 时不会生成差额单，故「已结清 + 存在差额单」必是残留 → 冻结归零。 */
+  function isOrphanDiff(r) {
+    if (!r.fromBorrowId) return false;
+    var p = (State.list || []).find(function (x) { return x && x.id === r.fromBorrowId; });
+    return !!(p && p.borrowed === true && p.borrowDone === true);
+  }
+
   /** 某在途出库单的**应冻结数量**（按货品计）。
       先借后还：
         · 已全部还清（borrowDone === true）→ 冻结 0（借出已结清，不再占用）；
+        · 已生成差额单 → 冻结 0（剩余量由差额单承接，避免重复占用，2026-10-22 修正）；
         · 借出中 → 只冻结剩余未还量（借出2还1剩1，只冻1）；
+      差额单：原借出单已结清 → 视为孤儿，冻结 0；
       普通未提单出库单 → 冻结全额。
       ⚠️ 2026-09-29 修复：原实现只在 borrowDone!==true 时扣减已还量，
          全部还清时反而 fall through 返回【全额】→ 归还完冻结不归零。
@@ -78,9 +106,11 @@
     if (!it) return 0;
     var q = Number(it.qty) || 0;
     if (q <= 0) return 0;
-    // 先借后还：已结清 → 不占用；借出中 → 扣掉已归还部分
+    if (isOrphanDiff(r)) return 0;            // ★ 孤儿差额单：原单已结清，残留冻结作废
+    // 先借后还：已结清 → 不占用；已被差额单接管 → 不占用；否则扣掉已归还部分
     if (r.borrowed === true) {
-      if (r.borrowDone === true) return 0;   // ★ 全部还清：冻结归零
+      if (r.borrowDone === true) return 0;    // ★ 全部还清：冻结归零
+      if (hasDiffSuccessor(r.id, itemName)) return 0;  // ★ 差额单已承接剩余量，禁止重复冻结
       var ret = 0;
       (r.borrowReturned || []).forEach(function (x) {
         if (x && norm(x.name) === norm(itemName)) ret += (Number(x.qty) || 0);
