@@ -397,6 +397,16 @@
       // 历史旧单（无此字段）不补标记 —— 保证「不翻旧账」。
       if (r.affectsStock === true && typeof r.freezeStock === "boolean") {
         patch.freezeStock = (next === "pending");
+      } else if (r.fromBorrowId && (r.type || "out") !== "in") {
+        /* 2026-10-23 差额单「死状态」自愈（主理人实测踩坑）：
+           曾出现 affectsStock:false + freezeStock:true 的差额单 —— 既不扣库存也不占冻结，
+           那批货等于凭空消失（面膜5片装（未入库版）4 盒：实际库存虚高 4、冻结多 4，可用 −36）。
+           差额单是真实的出库凭据，切状态时把口径纠正回来：
+             提单 = 实扣库存（affectsStock:true + freezeStock:false）
+             未提单 = 只占不扣（affectsStock:true + freezeStock:true）
+           ⚠️ 只对「带 fromBorrowId 的出库类差额单」生效；普通历史单、入库单绝不触碰（不翻旧账）。 */
+        patch.affectsStock = true;
+        patch.freezeStock = (next === "pending");
       }
       var rec = Records.update(id, patch);
       if (!rec) { Util.toast("记录不存在", true); return; }
