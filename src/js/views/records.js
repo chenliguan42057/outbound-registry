@@ -395,17 +395,17 @@
       // 已提单 → 释放冻结（实际扣减）；未提单 → 重新冻结（只占不扣）
       // 仅限「本身就参与冻结体系」的单（freezeStock 字段已存在才跟随切换），
       // 历史旧单（无此字段）不补标记 —— 保证「不翻旧账」。
-      if (r.affectsStock === true && typeof r.freezeStock === "boolean") {
-        patch.freezeStock = (next === "pending");
-      } else if (r.fromBorrowId && (r.type || "out") !== "in") {
-        /* 2026-10-23 差额单「死状态」自愈（主理人实测踩坑）：
-           曾出现 affectsStock:false + freezeStock:true 的差额单 —— 既不扣库存也不占冻结，
-           那批货等于凭空消失（面膜5片装（未入库版）4 盒：实际库存虚高 4、冻结多 4，可用 −36）。
-           差额单是真实的出库凭据，切状态时把口径纠正回来：
-             提单 = 实扣库存（affectsStock:true + freezeStock:false）
-             未提单 = 只占不扣（affectsStock:true + freezeStock:true）
+      if (r.fromBorrowId && (r.type || "out") !== "in") {
+        /* 2026-10-24 主理人定稿「冻结跟随借出单」口径：
+           差额单只是纸质凭据，剩余量的冻结始终由借出单承担（借出40→还28→冻12）。
+             未提单（纸质）= affectsStock:false + freezeStock:false → 既不扣库存也不占冻结
+             已提单（实扣）= affectsStock:true  + freezeStock:false → 真正扣减库存
+           ⚠️ 本分支必须排在普通单分支【之前】：否则反切回未提单时会被普通分支
+              补上 freezeStock:true，与借出单的 12 重复冻结（变成 24）。
            ⚠️ 只对「带 fromBorrowId 的出库类差额单」生效；普通历史单、入库单绝不触碰（不翻旧账）。 */
-        patch.affectsStock = true;
+        patch.affectsStock = (next === "submitted");
+        patch.freezeStock = false;
+      } else if (r.affectsStock === true && typeof r.freezeStock === "boolean") {
         patch.freezeStock = (next === "pending");
       }
       var rec = Records.update(id, patch);
