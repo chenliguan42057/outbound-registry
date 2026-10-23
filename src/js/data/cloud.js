@@ -402,6 +402,67 @@
 
   /** 推送单条记录（存在则更新，不存在则新增）；云端仅存 photoUrls，剥离 photos base64
       2026-09-28：支持 opts.timeoutMs 短超时（调拨「快速失败」用） */
+  /* ================= 维护窗口只读锁 + 推送前版本比对（2026-10-24） =================
+     背景①：助理在云端修数据时，任何一台开着页面的设备都会把本地旧数据推回去，
+            与修复无限拉锯（2026-10-23 晚：22:36 修完 → 设备立刻改回 false）。
+     背景②：同 id 记录是「整条覆盖」合并（updatedAt 大者胜），两台设备同时改同一条
+            → 另一台的改动静默丢失（先借后还两处同时归还只留一次 → 冻结虚高）。
+     设计：
+       · 维护锁：data/maintenance.json（或 data-saidis/）带 {on:true} 时，
+                 本仓一切云端写入（push/putJsonFile）直接拒绝，改动留在本机队列等维护结束。
+       · 版本比对：推之前先读远端同 id 记录，远端 updatedAt 比本地新 → 判定冲突，
+                 交注册的冲突处理器（main.js 弹窗三选一）决定：
+                   remote=采纳云端 / local=保留本地强推 / merge=合并归还量 / abort=暂不处理（留队列）
+                 无处理器时默认 abort（绝不静默覆盖，改动留在队列等用户处理）。 */
+
+  var MAINT = {};                 // { "data": {on, note, at}, "data-saidis": {...} }
+  var CONFLICT_HANDLER = null;    // 由 main.js 注册
+  var LAST_CONFLICT = null;       // { id, action } —— 供 pushRecord 判断是否要入队列
+
+  function dataRoot() {
+    try {
+      var id = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
+      return id === "saidis" ? "data-saidis" : "data";
+    } catch (e) { return "data"; }
+  }
+
+  /** 读取维护标记（30s 缓存，避免每次写入都多打一次 API） */
+  async function maintenanceState(dir) {
+    dir = String(dir || dataRoot()).replace(/[\\/]+$/, "");
+    var m = MAINT[dir];
+    if (m && (Date.now() - m.at) < 30000) return m;
+    var d = null;
+    try { d = await fetchJsonFile({ dataDir: dir, id: "maintenance" }); } catch (e) {}
+    m = { on: !!(d && d.on === true), note: (d && d.note) || "", at: Date.now() };
+    MAINT[dir] = m;
+    return m;
+  }
+
+  /** 供 UI 展示/预加载：{on, note}；不抛错 */
+  async function loadMaintenance() {
+    try { var m = await maintenanceState(dataRoot()); return { on: m.on, note: m.note }; }
+    catch (e) { return { on: false, note: "" }; }
+  }
+
+  function setMaintenanceFlag(dir, on) {
+    MAINT[String(dir || dataRoot()).replace(/[\\/]+$/, "")] = { on: !!on, note: "", at: Date.now() };
+  }
+
+  /** 归还量逐货品取较大值（两设备各还一部分时都要留下） */
+  function mergeBorrowReturned(localRet, remoteRet) {
+    var map = {};
+    (remoteRet || []).forEach(function (x) { if (x && x.name) map[x.name] = Number(x.qty) || 0; });
+    (localRet || []).forEach(function (x) {
+      if (!x || !x.name) return;
+      var v = Number(x.qty) || 0;
+      map[x.name] = Math.max(map[x.name] || 0, v);
+    });
+    return Object.keys(map).map(function (k) { return { name: k, qty: map[k] }; });
+  }
+
+  /** 注册冲突处理器：async ({local, remote, borrow}) => "remote"|"local"|"merge"|"abort" */
+  function setConflictHandler(fn) { CONFLICT_HANDLER = (typeof fn === "function") ? fn : null; }
+
   async function push(rec, opts) {
     opts = opts || {};
     var to = opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : null;
@@ -410,7 +471,48 @@
     var content = Util.b64enc(JSON.stringify(slim));
     var getUrl = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path + "?ref=" + Config.GH.branch;
     var sha;
-    try { var ej = await apiJson(getUrl, to); sha = ej.sha; } catch (e) {}
+    var remote = null;
+    var m = await maintenanceState();
+    if (m.on) {
+      // 维护窗口内：拒绝一切云端写入，改动留在本机队列等维护结束
+      throw new Error("423 maintenance");
+    }
+    try {
+      var ej = await apiJson(getUrl, to);
+      sha = ej.sha;
+      if (ej && ej.content) { try { remote = JSON.parse(Util.b64dec(ej.content)); } catch (e2) {} }
+    } catch (e) {}
+    // ★ 推送前版本比对：远端比本地新 → 冲突，绝不静默覆盖
+    if (remote && Number(remote.updatedAt || remote._ts || 0) > Number(slim.updatedAt || slim._ts || 0)) {
+      var act = "abort";
+      if (CONFLICT_HANDLER) {
+        try {
+          act = (await CONFLICT_HANDLER({
+            local: slim,
+            remote: remote,
+            borrow: !!(slim.borrowed === true && (remote.borrowed === true || remote.borrowReturned))
+          })) || "abort";
+        } catch (e2) { act = "abort"; }
+      }
+      if (act === "merge") {
+        slim.borrowReturned = mergeBorrowReturned(slim.borrowReturned, remote.borrowReturned);
+        slim.updatedAt = Date.now();
+        content = Util.b64enc(JSON.stringify(slim));
+      } else if (act === "remote") {
+        // 采纳云端：本地记录改为云端版本，本次不推送、也不需要补推
+        try {
+          if (window.App && window.App.Records && window.App.Records.adoptRemote) {
+            window.App.Records.adoptRemote(remote);
+          }
+        } catch (e2) {}
+        LAST_CONFLICT = { id: slim.id, action: "remote" };
+        throw new Error("409 conflict-remote");
+      } else if (act === "abort") {
+        LAST_CONFLICT = { id: slim.id, action: "abort" };
+        throw new Error("409 conflict-abort");
+      }
+      LAST_CONFLICT = { id: slim.id, action: "local" };
+    }
     var body = sha
       ? { message: "update " + slim.id, content: content, sha: sha, branch: Config.GH.branch }
       : { message: "add " + slim.id, content: content, branch: Config.GH.branch };
@@ -1019,6 +1121,8 @@
       catch (e) {
         var msg = String((e && e.message) || "");
         if (/^401 |^403 /.test(msg)) break;           // 令牌失效：不再重试，交队列等下次
+        // 维护窗口（423）/ 版本冲突（409）：重试没有意义，直接停手交上层处理
+        if (/^423 |^409 /.test(msg)) break;
         if (i < attempts - 1) await new Promise(function (r) { setTimeout(r, 800 * Math.pow(2, i)); });
       }
     }
@@ -1043,8 +1147,17 @@
       enqueue(rec.id); return false;
     }
     var ok = await pushWithRetry(rec, opts.fast ? 1 : 3, fastOpt);
-    if (ok) { dequeue(rec.id); return true; }
+    if (ok) { dequeue(rec.id); LAST_CONFLICT = null; return true; }
     if (opts.noQueue) return false;                 // 调拨：失败即失败，绝不落本地队列
+    var cf = (LAST_CONFLICT && LAST_CONFLICT.id === rec.id) ? LAST_CONFLICT.action : "";
+    LAST_CONFLICT = null;
+    if (cf === "remote") { dequeue(rec.id); return false; }   // 已采纳云端，无需补推
+    if (cf === "abort") {                                     // 冲突未决：留队列等用户处理
+      enqueue(rec.id);
+      try { if (window.App.Util) window.App.Util.toast("这条记录别人改过，暂不覆盖，已留待处理", true); } catch (e) {}
+      return false;
+    }
+    if (cf === "merge") { dequeue(rec.id); return true; }     // 已合并后推送成功
     enqueue(rec.id);
     return false;
   }
@@ -1131,6 +1244,10 @@
     if (!opts || !opts.dataDir || !opts.id) return false;
     if (!hasToken()) return false;
     var dir = String(opts.dataDir).replace(/[\\/]+$/, "");
+    // 维护窗口只读锁：维护期间连 catalog / 事件文件也一并拒写（维护标记自身除外）
+    if (String(opts.id) !== "maintenance") {
+      try { if ((await maintenanceState(dir)).on) return false; } catch (e) {}
+    }
     var subdir = String(opts.subdir || "").replace(/^[\\/]+|[\\/]+$/g, "");
     var id = String(opts.id);
     var payload = opts.payload;
@@ -1824,6 +1941,10 @@
     pushMemo: pushMemo,
     delMemo: delMemo,
     pushAllMemos: pushAllMemos,
-    flushZonesPending: flushZonesPending
+    flushZonesPending: flushZonesPending,
+    loadMaintenance: loadMaintenance,
+    maintenanceState: maintenanceState,
+    setMaintenanceFlag: setMaintenanceFlag,
+    setConflictHandler: setConflictHandler
   };
 })();
