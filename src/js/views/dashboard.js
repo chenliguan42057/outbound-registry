@@ -136,7 +136,9 @@
     var todayOut = 0, todayIn = 0;
     var today = Util.todayLocal();
     list.forEach(function (r) {
-      if (r.affectsStock !== true) return;
+      // 2026-10-24：改用库存模块唯一判据。原先只过滤 affectsStock，把「未提单只冻结」的单
+      // 也算进今日出库量 → 看板数字 > 实际库存扣减，与同页的 trend30（走 countsAsStock）打架。
+      if (!Stock.countsAsStock(r)) return;
       var q = (r.items || []).reduce(function (s, it) { return s + (Number(it.qty) || 0); }, 0);
       if (String(r.time || "").slice(0, 10) !== today) return;
       if ((r.type || "out") === "in") todayIn += q; else todayOut += q;
