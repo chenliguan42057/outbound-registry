@@ -456,19 +456,34 @@
     var diffItems = (r.items || []).map(function (it) {
       return { name: it.name, qty: Math.max(0, (Number(it.qty) || 0) - (newRet[it.name] || 0)) };
     }).filter(function (x) { return x.qty > 0 });
-    // 3) 差额>0 → 差额出库记录（未提单，affectsStock:true + freezeStock:true）。
-    //    口径乙（2026-09-29）：差额单不真扣库存，只挂「冻结占用」→ 与待取货/借出同口径；
-    //    提交提单时 records.js toggleStatus 会置 freezeStock=false → 该单进入库存计算 → 真扣减。
-    //    （历史差额单 affectsStock:false 无 freezeStock 字段 → 不补标记，保持「不翻旧账」。）
+    // 3) 差额>0 → 差额出库单 =「纸质凭据」（2026-10-24 主理人定稿口径）。
+    //    未提单时 affectsStock:false —— 既不扣实际库存、也不占用冻结（冻结始终挂在借出单上，
+    //    随归还递减）；用户点「已提单」时 records.js toggleStatus 转 affectsStock:true → 真扣减。
+    //    ★ 防重复：同一借出单只保留一张纸质差额单，再次归还是【更新】旧单的数量，绝不新建；
+    //      全部还清时把纸质单删除（走 tombstone 可追溯），避免残留单据被误提单导致重复实扣。
+    var existingDiff = (State.list || []).filter(function (x) {
+      return x && x.fromBorrowId === r.id && (x.type || "out") !== "in" &&
+             x.affectsStock === false && x.status === "pending";
+    }).sort(function (a, b) { return (Number(b._ts) || 0) - (Number(a._ts) || 0); })[0] || null;
     var diffRec = null;
     if (diffItems.length) {
-      diffRec = Records.create({
-        type: "out", status: "pending", affectsStock: true, freezeStock: true, fromBorrowId: r.id,
-        time: Util.nowLocal(), picker: r.picker || "", dept: r.dept || "",
-        purpose: r.purpose || "", entity: r.entity || "",
-        note: ((r.note || "").trim() ? (r.note + "；") : "") + "先借后还差额单（原 " + r.id + "）",
-        items: diffItems.map(function (x) { return { name: x.name, qty: x.qty }; })
-      });
+      if (existingDiff) {
+        diffRec = Records.update(existingDiff.id, {
+          items: diffItems.map(function (x) { return { name: x.name, qty: x.qty }; }),
+          time: Util.nowLocal()
+        });
+      } else {
+        diffRec = Records.create({
+          type: "out", status: "pending", affectsStock: false, fromBorrowId: r.id,
+          time: Util.nowLocal(), picker: r.picker || "", dept: r.dept || "",
+          purpose: r.purpose || "", entity: r.entity || "",
+          note: ((r.note || "").trim() ? (r.note + "；") : "") + "先借后还差额单（原 " + r.id + "）",
+          items: diffItems.map(function (x) { return { name: x.name, qty: x.qty }; })
+        });
+      }
+    } else if (existingDiff) {
+      // 已全部还清：这张纸质差额单没有货可提了，删掉防误点（墓碑可追溯）
+      Records.remove(existingDiff.id);
     }
     // 4) 更新原单
     var done = diffItems.length === 0;
