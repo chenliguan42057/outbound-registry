@@ -413,6 +413,22 @@
       // 先借后还差额单提交后 → 原借出单自动结清
       if (next === "submitted" && Records.tryCloseBorrowFromDiff(rec)) {
         Util.toast("已标记为已提单，对应借出单已结清");
+        // ★ 2026-10-25：结清标记必须同步推云端。原先只改本地 → 设备间分叉
+        //   （冻结跟随借出单口径下，没同步到的设备/本机之后的同步会把冻结算没）。
+        var closedBorrow = State.list.find(function (x) { return x && x.id === rec.fromBorrowId; });
+        if (closedBorrow && Cloud.hasToken()) {
+          try { Cloud.pushRecord(closedBorrow); } catch (e) {}
+        }
+      } else if (next === "pending" && rec.fromBorrowId) {
+        /* ★ 2026-10-25 反切回「未提单」：撤销「自动结清」。
+            tryCloseBorrowFromDiff 把借出单标了 borrowDone=true，反切时不撤销的话：
+            借出单已结清 → 冻结归零，但差额单还欠着货 → 冻结占用凭空消失（实测面膜整列清空）。
+            撤销后借出单恢复「借出中」，按剩余未还量重新冻结；记得推云端。 */
+        var reopened = Records.update(rec.fromBorrowId, { borrowDone: false });
+        if (reopened && Cloud.hasToken()) {
+          try { Cloud.pushRecord(reopened); } catch (e) {}
+        }
+        Util.toast("已标记为未提单，对应借出单恢复借出中");
       } else {
         Util.toast("已标记为" + label);
       }
