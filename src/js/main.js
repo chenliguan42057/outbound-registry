@@ -139,14 +139,22 @@
 
   /** 启动自动修复：已提单的差额单 → 原借出单结清。
       ★ 2026-10-24 移除旧口径修复：原逻辑把所有 fromBorrowId 出库单的 affectsStock 强行改回 false，
-        每次开页都执行 → 与云端数据修复无限拉锯，且会让已提单实扣的差额单凭空回涨库存。 */
+        每次开页都执行 → 与云端数据修复无限拉锯，且会让已提单实扣的差额单凭空回涨库存。
+      ★ 2026-10-25 补：结清后必须把借出单推云端——原先只改本地不推，
+        造成「结清标记只在这台设备」的分叉（冻结跟随借出单口径下，该设备冻结整列消失）。 */
   function runStartupRepair() {
     try {
       var closed = 0;
       (window.App.State.list || []).slice().forEach(function (r) {
         if (!r) return;
         if (r.fromBorrowId && window.App.Records.getStatus(r) === "submitted") {
-          if (window.App.Records.tryCloseBorrowFromDiff(r)) closed++;
+          if (window.App.Records.tryCloseBorrowFromDiff(r)) {
+            closed++;
+            var b = (window.App.State.list || []).find(function (x) { return x && x.id === r.fromBorrowId; });
+            if (b && window.App.Cloud && window.App.Cloud.hasToken && window.App.Cloud.hasToken()) {
+              try { window.App.Cloud.pushRecord(b); } catch (e2) {}
+            }
+          }
         }
       });
       if (closed) console.log("[main] 启动修复：已自动结清 " + closed + " 笔先借后还差额单");
