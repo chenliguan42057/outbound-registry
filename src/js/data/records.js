@@ -106,6 +106,21 @@
     return rec;
   }
 
+  /** 采纳云端版本（推送前版本比对发现冲突、用户选「用云端覆盖本地」时调用）。
+      本地那次改动作废，直接换成云端这条；保留本地 photos 原始凭证（云端是瘦身后版本）。 */
+  function adoptRemote(remote) {
+    if (!remote || !remote.id) return null;
+    var idx = State.list.findIndex(function (r) { return r.id === remote.id; });
+    if (idx < 0) return null;
+    var prev = State.list[idx];
+    var rec = Object.assign({}, remote);
+    if (prev.photos && prev.photos.length && !(rec.photos && rec.photos.length)) rec.photos = prev.photos;
+    State.list[idx] = rec;
+    if (window.App.Stock) window.App.Stock.markDirty();
+    State.save();
+    return rec;
+  }
+
   /**
    * 若 rec 是先借后还的差额出库单且已提单，自动把原借出单标记为已完成。
    * 实现「差额未提单 → 提交后账平」的闭环；多次调用幂等。
@@ -397,6 +412,7 @@
     create: create,
     commit: commit,
     update: update,
+    adoptRemote: adoptRemote,
     remove: remove,
     restore: restore,
     clear: clear,
