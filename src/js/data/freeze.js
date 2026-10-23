@@ -59,6 +59,13 @@
       if ((r.type || "out") === "in") return false;
       if (r.affectsStock !== true) return false;   // 差额单/旧快照：已扣过或不参与，绝不冻结
       if (r.freezeStock !== true) return false;    // ★ 核心：必须是显式标记的活单
+      // ★ 2026-10-23（主理人实测）：已提单（status === "submitted"）= 库存已经实扣，
+      //   绝不能再算冻结。踩坑链：ORD-20261022-002 于 13:15 点「已提单」把 freezeStock 置 false，
+      //   14:50 误在借还页「转入先借后还」、15:00「退回出库记录」，两次都无条件把
+      //   freezeStock 重置回 true → 同一批货扣一次又冻一次，冻结永不释放（面膜 -5 / 抽绳袋 -1）。
+      //   此判据让「已提单 + freezeStock:true」这类脏数据自动失效，无需逐条改数据。
+      //   （全库核查：2026-10-23 时 614 条记录中仅上述 1 条命中，不影响其他数据。）
+      if (r.status === "submitted") return false;
       // ★ 历史隔离：借出单必须有 v2 引擎标记；无标记的 borrowed 单视为历史单，不纳入冻结
       if (r.borrowed === true && r.borrowEngine !== "v2") return false;
       return owns(r);
