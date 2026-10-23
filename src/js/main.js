@@ -45,29 +45,23 @@
       } catch (e) {}
       window.App.State.init();
       // 启动一致性修复（幂等，可安全重复执行）：
-      //   1) 已提单的先借后还差额出库单 → 原借出单自动完成
-      //   2) 历史 bug 兜底：差额单 affectsStock 曾被 Records.update 误置为 true
-      //      （旧版 update 恒写 affectsStock:true，用户点「已提单」就会让这笔差额再扣一次库存）
-      //      → 差额单必须不参与库存计算，这里一律纠正回 false 并补推云端。
+      //   已提单的先借后还差额出库单 → 原借出单自动完成
+      //   ★ 2026-10-24 移除旧口径「差额单 affectsStock 一律纠正回 false」修复：
+      //     该逻辑是 2026-09-29「口径乙」之前的遗留（当年旧版 update 恒写 affectsStock:true 会重复扣库）。
+      //     口径乙之后差额单正确形态 = affectsStock:true + freezeStock:true（未提单只冻结不扣库，
+      //     提单时 toggleStatus 释放冻结转实扣）。本段每次启动都把新口径差额单打回 affectsStock:false
+      //     → 既不扣库存也不占冻结，货凭空消失（实测面膜5片装×12/精华液×8/洁面慕斯×4），
+      //     且与云端数据修复无限拉锯（设备端每次开页写回 false）。已提单实扣过的差额单同样被误伤
+      //     → 已扣库存被凭空撤销。彻底删除，新差额单创建口径已由 borrow.js L466 保证正确。
       try {
-        var closed = 0, fixedAffects = 0;
+        var closed = 0;
         (window.App.State.list || []).slice().forEach(function (r) {
           if (!r) return;
           if (r.fromBorrowId && window.App.Records.getStatus(r) === "submitted") {
             if (window.App.Records.tryCloseBorrowFromDiff(r)) closed++;
           }
-          if (r.fromBorrowId && (r.type || "out") !== "in" && r.affectsStock === true) {
-            var fx = window.App.Records.update(r.id, { affectsStock: false });
-            if (fx) {
-              fixedAffects++;
-              try {
-                if (window.App.Cloud && window.App.Cloud.hasToken()) window.App.Cloud.pushRecord(fx);
-              } catch (e) {}
-            }
-          }
         });
         if (closed) console.log("[main] 启动修复：已自动结清 " + closed + " 笔先借后还差额单");
-        if (fixedAffects) console.log("[main] 启动修复：已纠正 " + fixedAffects + " 笔差额单的库存参与标志（消除重复扣减）");
       } catch (e) {}
       // 首版遗留 #/verify 链接兼容：一律回落 #/（router.parse 亦兜底）
       if (location.hash.indexOf("#/verify") === 0) {
