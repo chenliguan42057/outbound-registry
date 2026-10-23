@@ -44,25 +44,12 @@
         }
       } catch (e) {}
       window.App.State.init();
-      // 启动一致性修复（幂等，可安全重复执行）：
-      //   已提单的先借后还差额出库单 → 原借出单自动完成
-      //   ★ 2026-10-24 移除旧口径「差额单 affectsStock 一律纠正回 false」修复：
-      //     该逻辑是 2026-09-29「口径乙」之前的遗留（当年旧版 update 恒写 affectsStock:true 会重复扣库）。
-      //     口径乙之后差额单正确形态 = affectsStock:true + freezeStock:true（未提单只冻结不扣库，
-      //     提单时 toggleStatus 释放冻结转实扣）。本段每次启动都把新口径差额单打回 affectsStock:false
-      //     → 既不扣库存也不占冻结，货凭空消失（实测面膜5片装×12/精华液×8/洁面慕斯×4），
-      //     且与云端数据修复无限拉锯（设备端每次开页写回 false）。已提单实扣过的差额单同样被误伤
-      //     → 已扣库存被凭空撤销。彻底删除，新差额单创建口径已由 borrow.js L466 保证正确。
-      try {
-        var closed = 0;
-        (window.App.State.list || []).slice().forEach(function (r) {
-          if (!r) return;
-          if (r.fromBorrowId && window.App.Records.getStatus(r) === "submitted") {
-            if (window.App.Records.tryCloseBorrowFromDiff(r)) closed++;
-          }
-        });
-        if (closed) console.log("[main] 启动修复：已自动结清 " + closed + " 笔先借后还差额单");
-      } catch (e) {}
+      installCloudGuards();
+      // 启动一致性修复（幂等）：已提单的先借后还差额出库单 → 原借出单自动完成。
+      // ★ 2026-10-24 移除旧口径「差额单 affectsStock 一律纠正回 false」修复（详见 runStartupRepair 注释）。
+      // ⚠️ 维护窗口内【不跑】：助理在云端修数据时，本设备任何自动写入都会把旧数据推回去，
+      //    与修复无限拉锯（2026-10-23 晚 22:36 修完 → 设备开页立刻改回）。改为由 installCloudGuards()
+      //    确认「非维护窗口」后再调用 runStartupRepair()。
       // 首版遗留 #/verify 链接兼容：一律回落 #/（router.parse 亦兜底）
       if (location.hash.indexOf("#/verify") === 0) {
         location.replace("#/");
@@ -76,6 +63,112 @@
         window.__reportFatal("应用启动失败：" + (err && err.message ? err.message : err));
       }
     }
+  }
+
+  /* ============ 云端写入守卫（2026-10-24 主理人定稿，两条保护措施） ============
+     ① 维护窗口只读锁：data/maintenance.json 带 {on:true} 时，本设备一切云端写入被拒，
+        改动留本机队列；页面顶部挂红色横幅明示，且【不跑启动自动修复】。
+     ② 推送前版本比对：远端同 id 记录比本地新 → 弹窗让用户选，绝不静默覆盖。 */
+
+  /** 时间戳 → 本地可读串（无则显示「-」） */
+  function fmtTs(ts) {
+    var n = Number(ts || 0);
+    if (!n) return "-";
+    try {
+      var d = new Date(n);
+      var p = function (x) { return (x < 10 ? "0" : "") + x; };
+      return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+             " " + p(d.getHours()) + ":" + p(d.getMinutes());
+    } catch (e) { return String(n); }
+  }
+
+  /** 维护横幅：告诉现场的人为什么改了没同步上去 */
+  function showMaintenanceBanner(note) {
+    try {
+      if (document.getElementById("maintBanner")) return;
+      var d = document.createElement("div");
+      d.id = "maintBanner";
+      d.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#A32D2D;color:#fff;" +
+        "padding:7px 12px;text-align:center;font-size:13px;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,.18);";
+      d.textContent = "系统维护中：本设备暂不写入云端，你做的登记会先存在本机，维护结束后自动补推" +
+        (note ? "（" + note + "）" : "");
+      document.body.appendChild(d);
+    } catch (e) {}
+  }
+
+  /** 冲突弹窗：返回 "remote"|"local"|"merge"|"abort"；90s 无操作按 abort（绝不无限挂起推送） */
+  function askConflict(ctx) {
+    return new Promise(function (resolve) {
+      var l = ctx.local || {}, r = ctx.remote || {};
+      var done = false;
+      var finish = function (act) { if (done) return; done = true; resolve(act); };
+      var timer = setTimeout(function () { finish("abort"); }, 90000);
+      try {
+        if (!window.App.UI || !window.App.UI.Modal) { finish("abort"); clearTimeout(timer); return; }
+        var pick = (r.picker || l.picker || "-");
+        var body =
+          '<div class="detail-row"><span class="k">货品</span><span class="v">' +
+            ((l.items || []).map(function (it) { return window.App.Util.esc(it.name) + "×" + it.qty; }).join("、") || "-") +
+          '</span></div>' +
+          '<div class="detail-row"><span class="k">领取人</span><span class="v">' + window.App.Util.esc(pick) + '</span></div>' +
+          '<div class="detail-row"><span class="k">云端版本</span><span class="v">' + fmtTs(r.updatedAt || r._ts) + '（别处改的）</span></div>' +
+          '<div class="detail-row"><span class="k">本机版本</span><span class="v">' + fmtTs(l.updatedAt || l._ts) + '（你改的）</span></div>' +
+          '<div class="hint" style="margin-top:8px;">云端比本机新，推上去会盖掉别人的改动。你想怎么处理？</div>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn ghost sm" data-act="abort">稍后处理</button>' +
+            (ctx.borrow ? '<button type="button" class="btn ghost sm" data-act="merge">合并归还量</button>' : '') +
+            '<button type="button" class="btn ghost sm" data-act="local">保留我的</button>' +
+            '<button type="button" class="btn sm" data-act="remote">用云端的</button>' +
+          '</div>';
+        window.App.UI.Modal.show("这条记录别人改过", body, { width: "540px" });
+        var box = window.App.UI.Modal.body().querySelector(".modal-actions");
+        if (!box) { finish("abort"); clearTimeout(timer); return; }
+        // 绑在每次新建的 .modal-actions 上（旧节点已随 innerHTML 销毁），不存在监听叠加
+        box.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-act]");
+          if (!b) return;
+          try { window.App.UI.Modal.hide(); } catch (e2) {}
+          finish(b.getAttribute("data-act"));
+          clearTimeout(timer);
+        });
+      } catch (e) {
+        finish("abort"); clearTimeout(timer);
+      }
+    });
+  }
+
+  /** 启动自动修复：已提单的差额单 → 原借出单结清。
+      ★ 2026-10-24 移除旧口径修复：原逻辑把所有 fromBorrowId 出库单的 affectsStock 强行改回 false，
+        每次开页都执行 → 与云端数据修复无限拉锯，且会让已提单实扣的差额单凭空回涨库存。 */
+  function runStartupRepair() {
+    try {
+      var closed = 0;
+      (window.App.State.list || []).slice().forEach(function (r) {
+        if (!r) return;
+        if (r.fromBorrowId && window.App.Records.getStatus(r) === "submitted") {
+          if (window.App.Records.tryCloseBorrowFromDiff(r)) closed++;
+        }
+      });
+      if (closed) console.log("[main] 启动修复：已自动结清 " + closed + " 笔先借后还差额单");
+    } catch (e) {}
+  }
+
+  /** 装载两条守卫：维护锁 + 冲突处理器；非维护窗口才跑启动修复 */
+  function installCloudGuards() {
+    var Cloud = (window.App && window.App.Cloud) || null;
+    if (!Cloud) { runStartupRepair(); return; }
+    if (Cloud.setConflictHandler) {
+      Cloud.setConflictHandler(function (ctx) { return askConflict(ctx); });
+    }
+    if (!Cloud.loadMaintenance) { runStartupRepair(); return; }
+    Cloud.loadMaintenance().then(function (info) {
+      if (info && info.on) {
+        showMaintenanceBanner(info.note);
+        console.warn("[main] 维护窗口开启：本设备云端写入已停用");
+        return;                       // ★ 维护中：不跑任何启动自动修复
+      }
+      runStartupRepair();
+    }).catch(function () { runStartupRepair(); });
   }
 
   if (document.readyState === "loading") {
