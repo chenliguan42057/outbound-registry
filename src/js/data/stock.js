@@ -230,6 +230,8 @@
 
   window.App = window.App || {};
   window.App.Stock = {
+    // 2026-10-24：对外暴露唯一库存判据，供看板/库位等模块复用，杜绝各写一份导致口径漂移
+    countsAsStock: countsAsStock,
     getStock: getStock,
     getRecordStock: getRecordStock,
     markDirty: markDirty,
