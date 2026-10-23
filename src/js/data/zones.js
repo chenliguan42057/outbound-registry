@@ -40,9 +40,12 @@
   function evTs(r) { return num(r && r._ts); }
   function normName(n) { var m = Config.NAME_MAP || {}; return m[n] || n; }
 
-  /** 与 stock.js 的 countsAsStock 完全同口径（是否计入实际库存）。
-      本模块只读判断，不改库存逻辑；两处口径必须一致，否则流水「当时剩余」会漂。 */
+  /** 2026-10-24：口径唯一化——直接复用 Stock.countsAsStock，不再本地抄一份。
+      此前本模块是 stock.js 的副本，两处任改其一就会漂移（流水「当时剩余」算错）。
+      运行时通过 window.App.Stock 取值（zones 与 stock 同在 bundle 内，加载顺序无关）。 */
   function countsAsStock(r) {
+    var S = window.App.Stock;
+    if (S && S.countsAsStock) return S.countsAsStock(r);
     if (!r || r.affectsStock !== true) return false;
     if (r.freezeStock === true && !(r.borrowed === true && r.borrowEngine !== "v2")) return false;
     return true;
@@ -86,7 +89,8 @@
   /** 在途出库冻结量（**不含待取货**）：未提单出库单全额 + 先借后还未还剩余量。
       复用 Freeze.detail（src === "out" 的项）—— 与全站「冻结占用」同口径、自动跟随其改进。
       主理人 2026-10-09 定稿：现场库存要扣「已出库/未提单」，但**不扣待取货**（货还在现场）。
-      先借后还与盘点天然涵盖：借出单 affectsStock+freezeStock → 计入；盘点调整在 Stock 实际库存里。 */
+      先借后还与盘点自然涵盖：借出单（aS+freezeStock）由 Freeze 统一按剩余未还量计入冻结，
+      不进实际库存；盘点调整体现在 Stock 实际库存里（不参与冻结）。 */
   function outFrozenOf(name) {
     var F = window.App.Freeze;
     if (!F || !F.detail) return 0;
