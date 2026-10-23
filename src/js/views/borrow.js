@@ -78,6 +78,10 @@
       if (r.borrowed === true) return false;          // 已转入
       if (r.fromBorrowId) return false;               // 差额单/归还单不可再转
       if (r.transferId) return false;                 // 两仓调拨记录不可再转借出
+      // 2026-10-23（主理人实测）：**已提单（submitted）的单禁止转入先借后还**。
+      // 已提单 = 库存已经实扣，再打 freezeStock:true 会让同一批货「扣一次 + 冻一次」，
+      // 冻结永不释放（实测 ORD-20261022-002：面膜1片装 -5、抽绳袋 -1 一直挂着）。
+      if (Records.getStatus(r) !== "pending") return false;
       return true;
     }).sort(function (a, b) {
       var pa = Records.getStatus(a) === "pending" ? 0 : 1;
@@ -499,7 +503,10 @@
     // 2026-09-29 加固：退回时一并清掉 borrowEngine 残留标记。
     // 否则该单再次被打入先借后还时，会带着「上次是 v2」的旧标记，
     // 导致 freeze.js 的引擎分支误判（v2 单借出不动库存的口径被错误沿用）→ 冻结/库存口径错乱。
-    var updated = Records.update(id, { borrowed: false, borrowReturned: [], borrowDone: false, borrowEngine: null, freezeStock: r.affectsStock === true });
+    // 2026-10-23 修复（主理人实测）：退回时**只有未提单的单**才重新冻结。
+    // 原实现 freezeStock: r.affectsStock === true 无条件置 true —— 若退回的是已提单
+    //（submitted，库存早已实扣）的单，就会凭空多占一批货，冻结永久挂住不再释放。
+    var updated = Records.update(id, { borrowed: false, borrowReturned: [], borrowDone: false, borrowEngine: null, freezeStock: (Records.getStatus(r) === "pending" && r.affectsStock === true) });
     if (!updated) { Util.toast("记录不存在", true); return; }
     renderList();
     Util.toast("已退回出库记录页");
