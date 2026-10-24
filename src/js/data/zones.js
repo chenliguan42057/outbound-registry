@@ -113,7 +113,7 @@
   function summary() {
     var Stock = window.App.Stock;
     var ov = baseOverlayMap();
-    return (Config.PRODUCTS || []).map(function (name) {
+    var res = (Config.PRODUCTS || []).map(function (name) {
       var total = Stock.getStock(name);
       var wh = warehouseLocked(name);
       var tr = outFrozenOf(name);                       // 在途（已出未提单）
@@ -125,6 +125,15 @@
         manuallySet: Object.prototype.hasOwnProperty.call(ov, name)
       };
     });
+    /* 自举跨仓快照（2026-10-24）：任何页面算过一次汇总，就把本仓数字写进共享键，
+       供「打印库存表」的双仓模板用。放在这里而不是只靠 app.js mount 调用 ——
+       切仓后云端同步是异步的，mount 可能早于数据到位（实测赛迪斯 7s 内还没 remount，
+       结果另一仓的快照永远写不进去）。_snapping 防重入，writeCross 不再回调 summary。 */
+    if (!_snapping) {
+      _snapping = true;
+      try { writeCross(res); } catch (e) {} finally { _snapping = false; }
+    }
+    return res;
   }
 
   /** 现场库存低于警示线的产品（登入警示 / 徽标用） */
@@ -385,21 +394,26 @@
      只写 localStorage 的界面缓存，不写业务数据、不上云、不影响任何库存计算。 */
 
   var CROSS_KEY = "outbound_cross_wh_summary_v1";
+  var _snapping = false;
 
-  /** 把本仓当前库存汇总写入跨仓快照（幂等，覆盖本仓那一格） */
-  function saveCrossSnapshot() {
+  /** 把一份汇总结果写进跨仓快照（**不回调 summary**，避免递归） */
+  function writeCross(rows) {
     try {
       var wid = Config.Sys.current().id;
       var whole = {};
       try { whole = JSON.parse(localStorage.getItem(CROSS_KEY) || "{}") || {}; } catch (e) { whole = {}; }
       var items = {};
-      summary().forEach(function (s) {
-        items[s.name] = { site: s.site, wh: s.warehouse, total: s.total };
+      (rows || []).forEach(function (s) {
+        if (!s || !s.name) return;
+        items[s.name] = { site: num(s.site), wh: num(s.warehouse), total: num(s.total) };
       });
       whole[wid] = { ts: Date.now(), items: items };
       localStorage.setItem(CROSS_KEY, JSON.stringify(whole));
     } catch (e) {}
   }
+
+  /** 把本仓当前库存汇总写入跨仓快照（幂等，覆盖本仓那一格） */
+  function saveCrossSnapshot() { writeCross(summary()); }
 
   /** 读跨仓快照 { shenzhen:{ts,items}, saidis:{ts,items} } */
   function crossSnapshot() {
