@@ -314,6 +314,7 @@
         currentView = null;
       }
       mount(cur);
+      snapCross();   // 挂载后再写一次：此时本仓数据已同步到位（供双仓打印表）
     };
     if (Cloud && Cloud.hasToken && Cloud.hasToken()) {
       Cloud.syncPull({ onStatus: function () {} }).then(remount)["catch"](function () { remount(); });
@@ -471,6 +472,14 @@
 
   var currentView = null;   // 当前挂载的视图对象，用于切换前回收资源
 
+  /** 写本仓「跨仓库存快照」，供「打印库存表」的双仓合并模板读另一仓（见 data/zones.js）。
+      必须放在**同步完成之后**调用：切仓/首屏的云端拉取是异步的，
+      mount 里调到的那次可能早于数据到位；而「库存查询」等页面只走 Stock.summarize()、
+      不经过 Zones.summary()，光靠自举也覆盖不到。只写 localStorage 界面缓存，不碰业务数据。 */
+  function snapCross() {
+    try { if (window.App.Zones && window.App.Zones.saveCrossSnapshot) window.App.Zones.saveCrossSnapshot(); } catch (e) {}
+  }
+
   /** 挂载模块：切换内容区 + 高亮导航 + 记忆最后停留项 */
   function mount(moduleName) {
     var viewName = VIEW_MAP[moduleName] || "stock";
@@ -513,7 +522,7 @@
     checkSiteWarnings();
     /* 双仓快照：供「打印库存表」的双仓合并模板读取本仓数字（见 data/zones.js）。
        只写 localStorage 界面缓存，不写业务数据、不影响库存口径。 */
-    try { if (window.App.Zones && window.App.Zones.saveCrossSnapshot) window.App.Zones.saveCrossSnapshot(); } catch (e) {}
+    snapCross();
   }
 
   /* 底部状态栏：就绪｜共N条｜已同步HH:MM（含待同步队列计数）
@@ -628,6 +637,7 @@
       if (res.ok) {
         netMark(true);
         setSyncStatus("就绪", false);
+        snapCross();   // 数据到位后刷新本仓跨仓快照（供双仓打印表）
         var added = State.list.length - before;
         if (added > 0) Util.toast("已同步 " + added + " 条新记录");
         // 补断点（2026-09-14）：增量同步靠「云端文件 sha 是否变过」判断要不要拉，
