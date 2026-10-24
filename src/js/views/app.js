@@ -20,6 +20,7 @@
      desc = 板块页头的一句话说明（渲染在模块内容区顶部，12 个板块统一，见 mount()） */
   var NAV_ITEMS = [
     { id: "stock", icon: "stock", label: "库存查询", tone: 1, desc: "全部货品的实时库存，低于 95 件自动标红提醒" },
+    { id: "print", icon: "stock", label: "打印库存表", tone: 1, desc: "A4 横向库存表：现场可用 / 仓库锁定 / 全部库存 / 备注，一键打印" },
     { id: "dashboard", icon: "report", label: "仪表盘", tone: 5, desc: "出入库总览、库存分布、低库存分布与业绩榜" },
     { id: "in", icon: "in", label: "入库管理", tone: 0, desc: "登记补货入库，经办人与入库来源可追溯" },
     { id: "pickups", icon: "box", label: "待取货", tone: 3, desc: "已提单但还没出库的货品，出库后自动核销" },
@@ -94,6 +95,7 @@
   var VIEW_MAP = {
     dashboard: "dashboard",
     stock: "stock",
+    print: "printsheet",
     in: "in",
     pickups: "pickups",
     memos: "memos",
@@ -112,7 +114,7 @@
   };
 
   var MODULE_TITLES = {
-    dashboard: "仪表盘", stock: "库存查询", in: "入库管理", pickups: "待取货", memos: "备忘录", sync: "云端同步",
+    dashboard: "仪表盘", stock: "库存查询", print: "打印库存表", in: "入库管理", pickups: "待取货", memos: "备忘录", sync: "云端同步",
     "in-records": "入库记录", "out-records": "出库记录", report: "报表统计", ai: "自动识别",
     borrow: "先借后还", transfer: "调拨", push: "推送信息", trash: "回收站",
     "in-remind": "入库提醒", "out-remind": "出库提醒",
