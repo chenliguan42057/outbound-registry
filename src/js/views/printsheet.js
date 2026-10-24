@@ -34,6 +34,9 @@
   var sortMode = "catalog";
   /* 模板：single 本仓一张表（默认） | dual 双仓合并盘点表 */
   var tpl = "single";
+  /* 另一仓快照超过这个时长就标红提醒（2026-10-24 主理人要求）：
+     数字本身不会错，但可能不是最新 —— 盘点前得知道要不要先同步一次。 */
+  var AGE_WARN_MS = 2 * 60 * 60 * 1000;
 
   function Zones() { return window.App.Zones; }
   function Freeze() { return window.App.Freeze; }
@@ -180,6 +183,8 @@
       otherId: oId,
       otherName: sysName(oId),
       otherTs: o ? num(o.ts) : 0,
+      /* 另一仓快照是否偏旧（超过 2 小时）→ 表头与页面提示标红 */
+      otherStale: !!(o && num(o.ts) && (Date.now() - num(o.ts) > AGE_WARN_MS)),
       hasOther: !!(o && o.items),
       myName: sysName(curSys().id)
     };
@@ -353,7 +358,8 @@
     var meta = '<span>制表时间：' + stampText() + '</span>' +
                '<span>货品数：' + rs.length + ' 项</span>' +
                (d.hasOther
-                 ? '<span>' + B + '数据更新：' + stampText(d.otherTs) + '</span>'
+                 ? '<span' + (d.otherStale ? ' class="warn"' : '') + '>' + B + '数据更新：' + stampText(d.otherTs) +
+                   (d.otherStale ? '（偏旧，建议先同步）' : '') + '</span>'
                  : '<span class="warn">⚠ 本机暂无' + B + '数据，请先打开一次' + B + '系统再回来打印</span>');
 
     return buildDoc({
@@ -449,9 +455,13 @@
       if (tpl === "dual") {
         var d = dualData();
         tip.innerHTML = d.hasOther
-          ? '💡 双仓合并表：现场各自一列，仓库两仓各一列 + 合计；' + Util.esc(d.otherName) +
-            '数据更新于 <b>' + stampText(d.otherTs) + '</b>（取自本机最近一次打开' + Util.esc(d.otherName) + '系统时的快照）。盘点数三列留空，两仓一起盘时手写。'
-          : '⚠️ 本机还没有 <b>' + Util.esc(d.otherName) + '</b> 的库存快照：请先用这台设备打开一次' + Util.esc(d.otherName) + '系统（任意页面停留一下），再回到这里。当前表格里' + Util.esc(d.otherName) + '一列会显示「—」。';
+          ? (d.otherStale
+              ? '⚠️ <b>' + Util.esc(d.otherName) + '数据偏旧</b>：更新于 <b>' + stampText(d.otherTs) +
+                '</b>（超过 2 小时）。数字是那次同步时的真实值、不会算错，但可能不是最新 —— 建议先切到' +
+                Util.esc(d.otherName) + '系统等同步完成，再回来打印。'
+              : '💡 双仓合并表：现场各自一列，仓库两仓各一列 + 合计；' + Util.esc(d.otherName) +
+                '数据更新于 <b>' + stampText(d.otherTs) + '</b>（取自本机最近一次打开' + Util.esc(d.otherName) + '系统时的快照）。盘点数三列留空，两仓一起盘时手写。')
+          : '⚠️ 本机还没有 <b>' + Util.esc(d.otherName) + '</b> 的库存快照：请先用这台设备打开一次' + Util.esc(d.otherName) + '系统（任意页面停留一下、等右上角变「就绪」），再回到这里。当前表格里' + Util.esc(d.otherName) + '一列会显示「—」。';
       } else {
         tip.innerHTML = '💡 本仓表：顺序与「库存查询」一致；现场取仪表盘「现场可用」，仓库取「仓库锁定」，全部取库存查询实际库存；每个数量列右侧的「实地盘点数」留空给现场手写；备注列出待取货、未提单出库、先借未还与冻结合计。';
       }
