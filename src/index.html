@@ -322,7 +322,8 @@
        弱网/微信内置浏览器更久，扫码用户会误判成「没扫上」。
        源文件全部完整保留在 src/js/ 下，未删除任何功能；bundle 由脚本生成，请勿手改（改源文件后重新生成）。
        下列文件名保留在本注释中，供 deploy.yml 防回滚守卫 grep 校验（对应功能均在 bundle 内）：
-         js/views/trash.js（回收站视图）、js/views/push.js（推送信息视图）、sw.js（见页首内联注册脚本）
+         js/views/trash.js（回收站视图）、js/views/push.js（推送信息视图）、
+         js/views/printsheet.js（打印库存表视图，2026-10-24 新增）、sw.js（见页首内联注册脚本）
        原注释备忘（合并顺序已保持）：js/data/product-map.js 为商品映射「单一真相源」，须在 config.js 前加载；
        js/ui/icons.js 为 V2 试点 emoji→SVG 图标替换，真判断 <html class="v2"> 后 return；
        js/ui/dingtalk.js、js/views/report.js、js/ai/* 原为 fetchpriority="low"；
