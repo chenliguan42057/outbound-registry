@@ -396,7 +396,23 @@
   var CROSS_KEY = "outbound_cross_wh_summary_v1";
   var _snapping = false;
 
-  /** 把一份汇总结果写进跨仓快照（**不回调 summary**，避免递归） */
+  /** 箱规（每箱多少个）：从本仓货品目录 product.caseSize 读，没设过返回 0（与 site.js 同口径）。
+      只用于打印页把个数换算成箱数显示，不参与任何库存计算。 */
+  function caseSizeOf(name) {
+    try {
+      var C = window.App.Catalog;
+      var c = (C && C.get) ? C.get() : null;
+      if (c && c.products) {
+        for (var i = 0; i < c.products.length; i++) {
+          if (c.products[i].name === name) return num(c.products[i].caseSize);
+        }
+      }
+    } catch (e) {}
+    return 0;
+  }
+
+  /** 把一份汇总结果写进跨仓快照（**不回调 summary**，避免递归）。items 里带 cs＝箱规，
+      这样双仓打印表另一仓的箱数也能直接显示，不用再读另一仓目录。 */
   function writeCross(rows) {
     try {
       var wid = Config.Sys.current().id;
@@ -405,7 +421,7 @@
       var items = {};
       (rows || []).forEach(function (s) {
         if (!s || !s.name) return;
-        items[s.name] = { site: num(s.site), wh: num(s.warehouse), total: num(s.total) };
+        items[s.name] = { site: num(s.site), wh: num(s.warehouse), total: num(s.total), cs: caseSizeOf(s.name) };
       });
       whole[wid] = { ts: Date.now(), items: items };
       localStorage.setItem(CROSS_KEY, JSON.stringify(whole));

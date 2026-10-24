@@ -136,6 +136,7 @@
         site: num(s.site),
         wh: num(s.warehouse),
         total: num(s.total != null ? s.total : s.site),
+        cs: caseSizeOf(String(s.name || "")),
         note: noteOf(s)
       };
     });
@@ -167,6 +168,9 @@
         siteB: x ? num(x.site) : null,
         whB: x ? num(x.wh) : null,
         totalB: x ? num(x.total) : null,
+        csA: r.cs,
+        /* 另一仓箱规取快照里带的 cs；它没设过就用本仓的（同一产品的包装规格是一致的） */
+        csB: x ? (num(x.cs) || r.cs) : r.cs,
         note: r.note
       });
     });
@@ -174,7 +178,8 @@
       if (!n || seen[n]) return;
       out.push({
         name: n, siteA: null, whA: null, totalA: null,
-        siteB: num(oItems[n].site), whB: num(oItems[n].wh), totalB: num(oItems[n].total), note: ""
+        siteB: num(oItems[n].site), whB: num(oItems[n].wh), totalB: num(oItems[n].total),
+        csA: 0, csB: num(oItems[n].cs), note: ""
       });
     });
 
@@ -219,6 +224,8 @@
     'table.tbl th:first-child, table.tbl td:first-child { padding-left: 0.8mm; padding-right: 1mm; }',
     '/* 实地盘点数 = 现场手写列，留白不填 */',
     'table.tbl td.chk { text-align: right; }',
+    '/* 箱数 / 箱规小字（2026-10-24）：挂在主数字或货品名下面一行，8pt 灰字，不抢主数字 */',
+    'table.tbl .boxline { display: block; font-size: 7.5pt; line-height: 1.2; color: #555; margin-top: 0.4mm; font-weight: 400; }',
     'table.tbl td.nt { text-align: left; font-size: 8.5pt; color: #222; }',
     'table.tbl tr { page-break-inside: avoid; }',
     'table.tbl tr.sum td { background: #f2f5f4; font-weight: 700; }',
@@ -240,9 +247,66 @@
     return '<td class="' + cls + '">' + body + '</td>';
   }
 
+  /* ---------- 箱数换算（2026-10-24 主理人要求） ----------
+     箱规来自货品目录 product.caseSize（仪表盘「📦 箱规设置」写的值），没设过就是 0 → 不显示箱数。
+     展示用「整箱 + 散件」而不是小数箱：现场数的是 5 整箱 + 6 个散的，
+     写成 5.2 箱反而要你反算一遍，违背「不用再自己算」的初衷。 */
+  function caseSizeOf(name) {
+    try {
+      var C = window.App.Catalog;
+      var c = (C && C.get) ? C.get() : null;
+      if (c && c.products) {
+        for (var i = 0; i < c.products.length; i++) {
+          if (c.products[i].name === name) return num(c.products[i].caseSize);
+        }
+      }
+    } catch (e) {}
+    return 0;
+  }
+
+  /** 个数 + 箱规 → 「5 箱」「5 箱+6」「不足 1 箱(12)」；箱规 0 或数量 0 → 空串
+      （0 的时候不显示「0 箱」—— 左边数字已经是 0，再印一遍只是碍眼） */
+  function boxText(qty, cs) {
+    var n = Math.round(num(qty));
+    cs = num(cs);
+    if (!cs || cs <= 0) return "";
+    if (n <= 0) return "";
+    var box = Math.floor(n / cs), rest = n % cs;
+    if (!box) return "不足 1 箱(" + n + ")";
+    return rest ? (box + " 箱+" + rest) : (box + " 箱");
+  }
+
+  /** 箱规小字（挂在货品名称下面那行） */
+  function caseNote(cs) {
+    cs = num(cs);
+    return cs > 0 ? (cs + " 个/箱") : "";
+  }
+
+  /** 货品名称单元格：名称 + 箱规小字（空白处利用起来，主理人要求把「几瓶一箱」写在表上） */
+  function nmCell(name, cs) {
+    var t = caseNote(cs);
+    return '<td class="nm">' + Util.esc(name) +
+      (t ? '<span class="boxline">' + t + '</span>' : '') + '</td>';
+  }
+
+  /** 数字单元格 + 下面一行箱数小字 */
+  function cellBox(v, cs) {
+    var n = num(v);
+    var body = fmtNum(n);
+    if (n < 0) body = '<span class="neg">' + body + '</span>';
+    var bt = boxText(n, cs);
+    if (bt) body += '<span class="boxline">' + bt + '</span>';
+    return '<td class="num">' + body + '</td>';
+  }
+
   /** 另一仓缺该货品时打「—」，不冒充 0 */
   function cellOrDash(v) {
     return (v === null || v === undefined) ? '<td class="na">—</td>' : cell(v, 'num');
+  }
+
+  /** 同上，但带箱数小字 */
+  function cellOrDashBox(v, cs) {
+    return (v === null || v === undefined) ? '<td class="na">—</td>' : cellBox(v, cs);
   }
 
   var CHK = '<td class="chk">&nbsp;</td>';
@@ -286,9 +350,9 @@
 
     var body = rs.map(function (r) {
       return '<tr>' +
-        '<td class="nm">' + Util.esc(r.name) + '</td>' +
+        nmCell(r.name, r.cs) +
         cell(r.site, 'num') + CHK +
-        cell(r.wh, 'num') + CHK +
+        cellBox(r.wh, r.cs) + CHK +
         cell(r.total, 'num') + CHK +
         '<td class="nt">' + (r.note ? Util.esc(r.note) : '—') + '</td>' +
         '</tr>';
@@ -318,8 +382,9 @@
         '<th>备注</th>' +
       '</tr>',
       body: body + sumRow + blanks(8, 8),
-      foot: '现场库存＝仪表盘「现场可用」（已扣在途出库与先借未还）；仓库封锁＝仓库锁定；' +
-            '全部库存＝库存查询实际库存。三个「实地盘点数」留空，供现场手写对照。末尾空行供补充。'
+      foot: '现场库存＝仪表盘「现场可用」（已扣在途出库与先借未还）；仓库封锁＝仓库锁定，' +
+            '下方小字是按箱规换算的箱数（整箱 + 散件，如「5 箱+6」＝5 整箱 6 个）；' +
+            '全部库存＝库存查询实际库存。货品名下方小字为该货品箱规。三个「实地盘点数」留空，供现场手写对照。末尾空行供补充。'
     });
   }
 
@@ -336,10 +401,12 @@
       sWA += num(r.whA); sWB += num(r.whB);
       sTA += num(r.totalA); sTB += num(r.totalB);
       return '<tr>' +
-        '<td class="nm">' + Util.esc(r.name) + '</td>' +
+        nmCell(r.name, r.csA || r.csB) +
         cellOrDash(r.siteA) + cellOrDash(r.siteB) + CHK +
-        cellOrDash(r.whA) + cellOrDash(r.whB) +
-        (whSum === null ? '<td class="na">—</td>' : cell(whSum, 'num')) + CHK +
+        cellOrDashBox(r.whA, r.csA) + cellOrDashBox(r.whB, r.csB) +
+        (whSum === null
+          ? '<td class="na">—</td>'
+          : (num(r.csA) > 0 && num(r.csA) === num(r.csB) ? cellBox(whSum, r.csA) : cell(whSum, 'num'))) + CHK +
         (totSum === null ? '<td class="na">—</td>' : cell(totSum, 'num')) + CHK +
         '<td class="nt">' + (r.note ? Util.esc(r.note) : '—') + '</td>' +
         '</tr>';
@@ -382,6 +449,7 @@
         '</tr>',
       body: body + sumRow + blanks(6, 11),
       foot: '现场库存＝各仓仪表盘「现场可用」；仓库封锁＝各仓「仓库锁定」，合计＝两仓相加；' +
+            '仓库数字下方小字是按箱规换算的箱数（整箱 + 散件）；货品名下方小字为该货品箱规。' +
             '全部库存合计＝两仓实际库存之和。三个「盘点数」留空，供两仓一起盘点时手写。' +
             (d.hasOther ? '' : ' ⚠ 另一仓数字缺失，请先在该设备打开一次对应系统。')
     });
@@ -459,11 +527,13 @@
               ? '⚠️ <b>' + Util.esc(d.otherName) + '数据偏旧</b>：更新于 <b>' + stampText(d.otherTs) +
                 '</b>（超过 2 小时）。数字是那次同步时的真实值、不会算错，但可能不是最新 —— 建议先切到' +
                 Util.esc(d.otherName) + '系统等同步完成，再回来打印。'
-              : '💡 双仓合并表：现场各自一列，仓库两仓各一列 + 合计；' + Util.esc(d.otherName) +
+              : '💡 双仓合并表：现场各自一列，仓库两仓各一列 + 合计（<b>下方小字＝箱数</b>，箱规印在货品名下方）；' + Util.esc(d.otherName) +
                 '数据更新于 <b>' + stampText(d.otherTs) + '</b>（取自本机最近一次打开' + Util.esc(d.otherName) + '系统时的快照）。盘点数三列留空，两仓一起盘时手写。')
           : '⚠️ 本机还没有 <b>' + Util.esc(d.otherName) + '</b> 的库存快照：请先用这台设备打开一次' + Util.esc(d.otherName) + '系统（任意页面停留一下、等右上角变「就绪」），再回到这里。当前表格里' + Util.esc(d.otherName) + '一列会显示「—」。';
       } else {
-        tip.innerHTML = '💡 本仓表：顺序与「库存查询」一致；现场取仪表盘「现场可用」，仓库取「仓库锁定」，全部取库存查询实际库存；每个数量列右侧的「实地盘点数」留空给现场手写；备注列出待取货、未提单出库、先借未还与冻结合计。';
+        tip.innerHTML = '💡 本仓表：顺序与「库存查询」一致；现场取仪表盘「现场可用」，仓库取「仓库锁定」，全部取库存查询实际库存。' +
+          '<b>仓库封锁数的下方小字就是箱数</b>（如「5 箱+6」＝5 整箱 6 个），箱规取自货品目录「📦 箱规设置」，会印在货品名下方；' +
+          '每个数量列右侧的「实地盘点数」留空给现场手写；备注列出待取货、未提单出库、先借未还与冻结合计。';
       }
     }
 
