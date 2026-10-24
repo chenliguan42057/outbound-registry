@@ -374,6 +374,38 @@
     return rows.slice(0, limit);
   }
 
+  /* ================= 跨仓快照（2026-10-24，双仓合并打印表用） =================
+     两仓数据物理隔离（data/ 与 data-saidis/），但盘点时是两仓一起盘的。
+     「打印库存表」的双仓模板要在一张表里同时看到两仓数字，又不能跨仓读流水重算
+     （口径容易漂、还要拉另一仓全量数据）。做法：
+       各仓自己把 summary() 结果写进一个**不带系统前缀**的共享键，
+       打印页读两份快照并排即可 —— 每个数字就是该仓仪表盘上的数字，口径零偏差。
+     快照随每次进入模块刷新（app.js mount 末尾调用 saveCrossSnapshot），带时间戳，
+     打印页显示数据时间，过旧时提示先打开另一仓系统刷一下。
+     只写 localStorage 的界面缓存，不写业务数据、不上云、不影响任何库存计算。 */
+
+  var CROSS_KEY = "outbound_cross_wh_summary_v1";
+
+  /** 把本仓当前库存汇总写入跨仓快照（幂等，覆盖本仓那一格） */
+  function saveCrossSnapshot() {
+    try {
+      var wid = Config.Sys.current().id;
+      var whole = {};
+      try { whole = JSON.parse(localStorage.getItem(CROSS_KEY) || "{}") || {}; } catch (e) { whole = {}; }
+      var items = {};
+      summary().forEach(function (s) {
+        items[s.name] = { site: s.site, wh: s.warehouse, total: s.total };
+      });
+      whole[wid] = { ts: Date.now(), items: items };
+      localStorage.setItem(CROSS_KEY, JSON.stringify(whole));
+    } catch (e) {}
+  }
+
+  /** 读跨仓快照 { shenzhen:{ts,items}, saidis:{ts,items} } */
+  function crossSnapshot() {
+    try { return JSON.parse(localStorage.getItem(CROSS_KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+
   window.App = window.App || {};
   window.App.Zones = {
     summary: summary,
@@ -396,6 +428,8 @@
     lockedOfRef: lockedOfRef,
     refAbsorbed: refAbsorbed,
     reconcileInbound: reconcileInbound,
+    saveCrossSnapshot: saveCrossSnapshot,
+    crossSnapshot: crossSnapshot,
     _countsAsStock: countsAsStock
   };
 })();
