@@ -511,6 +511,9 @@
     view.render(viewEl);
     updateStatusBar();
     checkSiteWarnings();
+    /* 双仓快照：供「打印库存表」的双仓合并模板读取本仓数字（见 data/zones.js）。
+       只写 localStorage 界面缓存，不写业务数据、不影响库存口径。 */
+    try { if (window.App.Zones && window.App.Zones.saveCrossSnapshot) window.App.Zones.saveCrossSnapshot(); } catch (e) {}
   }
 
   /* 底部状态栏：就绪｜共N条｜已同步HH:MM（含待同步队列计数）
