@@ -24,7 +24,9 @@
   var Config = window.App.Config;
 
   var container = null;
-  var sortMode = "total_desc";     // total_desc 全部库存降序 | catalog 目录顺序
+  /* 排序：默认 catalog = 库存查询页的排列（Config.PRODUCTS 目录原序），主理人 2026-10-24 定；
+     total_desc = 全部库存从多到少（备用）。 */
+  var sortMode = "catalog";
   var BLANK_ROWS = 8;              // 末尾留白行，供现场手写补充
 
   function Zones() { return window.App.Zones; }
@@ -109,9 +111,9 @@
         note: noteOf(s)
       };
     });
-    if (sortMode === "catalog") {
-      out.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "zh"); });
-    } else {
+    /* catalog：保持 Zones.summary() 返回顺序 —— 它即 Config.PRODUCTS 目录顺序，
+       与「库存查询」表格完全一致（主理人 2026-10-24 要求：打印顺序照库存查询来）。 */
+    if (sortMode === "total_desc") {
       out.sort(function (a, b) { return (b.total - a.total) || String(a.name).localeCompare(String(b.name), "zh"); });
     }
     return out;
@@ -138,6 +140,10 @@
     'table.tbl th { background: #e7edef; font-weight: 700; text-align: center; }',
     'table.tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }',
     'table.tbl td.nm { text-align: left; word-break: break-word; }',
+    '/* 货品名称列左右边距收窄（主理人 2026-10-24），把宽度让给右侧盘点列 */',
+    'table.tbl th:first-child, table.tbl td:first-child { padding-left: 0.8mm; padding-right: 1mm; }',
+    '/* 实地盘点数 = 现场手写列，留白不填 */',
+    'table.tbl td.chk { text-align: right; }',
     'table.tbl td.nt { text-align: left; font-size: 8.5pt; color: #222; }',
     'table.tbl tr { page-break-inside: avoid; }',
     'table.tbl tr.sum td { background: #f2f5f4; font-weight: 700; }',
@@ -163,24 +169,30 @@
     var sumSite = 0, sumWh = 0, sumTotal = 0;
     rs.forEach(function (r) { sumSite += r.site; sumWh += r.wh; sumTotal += r.total; });
 
+    /* 实地盘点数：现场手写列，紧贴每个库存数字列的左侧（主理人 2026-10-24 要求） */
+    var CHK = '<td class="chk">&nbsp;</td>';
+
     var body = rs.map(function (r) {
       return '<tr>' +
         '<td class="nm">' + Util.esc(r.name) + '</td>' +
-        cell(r.site, 'num') +
-        cell(r.wh, 'num') +
-        cell(r.total, 'num') +
+        CHK + cell(r.site, 'num') +
+        CHK + cell(r.wh, 'num') +
+        CHK + cell(r.total, 'num') +
         '<td class="nt">' + (r.note ? Util.esc(r.note) : '—') + '</td>' +
         '</tr>';
     }).join("");
 
     var blanks = "";
     for (var i = 0; i < BLANK_ROWS; i++) {
-      blanks += '<tr class="blank"><td class="nm"></td><td></td><td></td><td></td><td></td></tr>';
+      blanks += '<tr class="blank"><td class="nm"></td>' + CHK + '<td></td>' + CHK + '<td></td>' +
+        CHK + '<td></td><td></td></tr>';
     }
 
     var sumRow = '<tr class="sum">' +
       '<td class="nm">合计（' + rs.length + ' 项）</td>' +
-      cell(sumSite, 'num') + cell(sumWh, 'num') + cell(sumTotal, 'num') +
+      CHK + cell(sumSite, 'num') +
+      CHK + cell(sumWh, 'num') +
+      CHK + cell(sumTotal, 'num') +
       '<td class="nt">现场 + 仓库 = 全部库存</td>' +
       '</tr>';
 
@@ -195,10 +207,15 @@
           '<span>数量单位：件</span>' +
         '</div>' +
         '<table class="tbl">' +
-          '<colgroup><col style="width:29%"><col style="width:14%"><col style="width:15%">' +
-          '<col style="width:14%"><col style="width:28%"></colgroup>' +
+          '<colgroup><col style="width:23%"><col style="width:8.5%"><col style="width:11%">' +
+          '<col style="width:8.5%"><col style="width:11%"><col style="width:8.5%">' +
+          '<col style="width:10%"><col style="width:19.5%"></colgroup>' +
           '<thead><tr>' +
-            '<th>货品名称</th><th>现场库存数量</th><th>仓库封锁数量</th><th>全部库存</th><th>备注</th>' +
+            '<th>货品名称</th>' +
+            '<th>实地<br>盘点数</th><th>现场库存数量</th>' +
+            '<th>实地<br>盘点数</th><th>仓库封锁数量</th>' +
+            '<th>实地<br>盘点数</th><th>全部库存</th>' +
+            '<th>备注</th>' +
           '</tr></thead>' +
           '<tbody>' + body + sumRow + blanks + '</tbody>' +
         '</table>' +
@@ -207,7 +224,7 @@
           '<span>核对人：____________</span>' +
           '<span>日期：______年____月____日</span>' +
         '</div>' +
-        '<div class="foot">现场库存＝仪表盘「现场可用」（已扣在途出库与先借未还）；仓库封锁＝仓库锁定；全部库存＝库存查询实际库存。末尾空行供现场手写补充。</div>' +
+        '<div class="foot">现场库存＝仪表盘「现场可用」（已扣在途出库与先借未还）；仓库封锁＝仓库锁定；全部库存＝库存查询实际库存。三个「实地盘点数」留空，供现场手写对照。末尾空行供补充。</div>' +
       '</div></div>' +
       '</body></html>';
   }
@@ -224,13 +241,13 @@
           '<button type="button" class="btn sm" id="psPrintBtn">🖨 立即打印</button>' +
           '<button type="button" class="btn ghost sm" id="psNewTabBtn">↗ 新窗口打开</button>' +
           '<select id="psSort" style="margin-left:6px;width:auto;max-width:220px;flex:0 0 auto">' +
+            '<option value="catalog">按库存查询顺序（默认）</option>' +
             '<option value="total_desc">按全部库存从多到少</option>' +
-            '<option value="catalog">按货品名称顺序</option>' +
           '</select>' +
           '<span class="tool-spacer"></span>' +
           '<span class="hint">纸张选 <b>A4 横向</b> · 缩放 100% · 勾选「背景图形」边框更清楚</span>' +
         '</div>' +
-        '<div class="hint" style="margin:0 0 10px">💡 下面是打印预览（所见即打印所得）：现场库存数量取仪表盘「现场可用」，仓库封锁数量取「仓库锁定」，全部库存取库存查询的实际库存；备注列出待取货、未提单出库、先借未还与冻结合计。</div>' +
+        '<div class="hint" style="margin:0 0 10px">💡 下面是打印预览（所见即打印所得）：顺序与「库存查询」一致；现场库存数量取仪表盘「现场可用」，仓库封锁数量取「仓库锁定」，全部库存取库存查询的实际库存；每个数字列左侧的「实地盘点数」留空给现场手写；备注列出待取货、未提单出库、先借未还与冻结合计。</div>' +
         '<iframe id="psIfr" title="打印预览" style="width:100%;height:calc(100vh - 300px);min-height:560px;' +
           'border:1px solid #d7ded9;border-radius:10px;background:#eef1f0;display:block"></iframe>' +
       '</div>';
