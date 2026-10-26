@@ -1,0 +1,1 @@
+{"type":"recognize-confirm","warehouse":"shenzhen","kind":"pickup","stage":"confirmed","confirmedAt":"2026-10-26T06:28:37.575Z","_ts":1792996121657,"order":{"id":"mvonucjp36paf","type":"pickup","time":"2026-10-26T14:28","picker":"JY202610260006","applicant":"","dept":"蓝色彩虹","purpose":"客户销售","entity":"","note":"","items":[{"name":"精华液 20支装","qty":4}]}}
