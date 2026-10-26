@@ -1,0 +1,1 @@
+{"_ts":1793008095092,"type":"remind","kind":"out","warehouse":"shenzhen","orders":[{"id":"rc1793008095092","type":"out","time":"2026-10-26T17:48","picker":"JY202610260012","applicant":"华大智造","dept":"华大智造","purpose":"","note":"自动识别回填","status":"submitted","items":[{"name":"精华液 20支装","qty":10},{"name":"精华液 单支装","qty":100}]}]}
