@@ -1,1 +1,1 @@
-{"id":"mvj79mfvb8azb","_ts":1792652926171,"time":"2026-10-22T15:08","kind":"stocktake","warehouse":"saidis","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +0 / 盘亏 -600","_local":true,"items":[{"name":"抽绳袋","book":1200,"actual":600,"diff":-600}]}
+{"id":"mvj79mfvb8azb","_ts":1792652926171,"time":"2026-10-22T15:08","kind":"stocktake","warehouse":"saidis","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +0 / 盘亏 -600","_local":true,"items":[{"name":"抽绳袋","book":1200,"actual":600,"diff":-600}],"photoUrls":[]}
