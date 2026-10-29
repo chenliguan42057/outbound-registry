@@ -197,14 +197,6 @@
       "err": [
         "2026时空鹿茸库存: <urlopen error _ssl.c:983: The handshake operation timed out>"
       ]
-    },
-    "mvtdljlctnw21": {
-      "fail": 2,
-      "at": "2026-10-29T10:04:58Z",
-      "err": [
-        "2026时空鹿茸库存: <urlopen error _ssl.c:983: The handshake operation timed out>",
-        "2026鹿茸水乳系列: <urlopen error _ssl.c:983: The handshake operation timed out>"
-      ]
     }
   },
   "pilot-1786158041698-fyebf": {
@@ -4574,6 +4566,16 @@
     "rows": {
       "2026时空鹿茸库存": 804,
       "2026鹿茸水乳系列": 167
+    }
+  },
+  "mvtdljlctnw21": {
+    "ok": 2,
+    "fail": 0,
+    "fp": "68a31596895bf9ac",
+    "at": "2026-10-29T11:35:20Z",
+    "rows": {
+      "2026时空鹿茸库存": 805,
+      "2026鹿茸水乳系列": 168
     }
   }
 }
