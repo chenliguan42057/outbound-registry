@@ -184,13 +184,6 @@
         "2026时空鹿茸库存: <urlopen error timed out>"
       ]
     },
-    "mvt9k31q2tgke": {
-      "fail": 1,
-      "at": "2026-10-29T08:11:17Z",
-      "err": [
-        "2026时空鹿茸库存: <urlopen error _ssl.c:983: The handshake operation timed out>"
-      ]
-    },
     "mvt9lj4oamuj3": {
       "fail": 1,
       "at": "2026-10-29T08:12:25Z",
@@ -4576,6 +4569,15 @@
     "rows": {
       "2026时空鹿茸库存": 805,
       "2026鹿茸水乳系列": 168
+    }
+  },
+  "mvt9k31q2tgke": {
+    "ok": 1,
+    "fail": 0,
+    "fp": "6f414008c0af4328",
+    "at": "2026-10-29T13:22:44Z",
+    "rows": {
+      "2026时空鹿茸库存": 806
     }
   }
 }
