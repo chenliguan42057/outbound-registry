@@ -190,6 +190,13 @@
       "err": [
         "2026时空鹿茸库存: <urlopen error _ssl.c:983: The handshake operation timed out>"
       ]
+    },
+    "mvt9lj4oamuj3": {
+      "fail": 1,
+      "at": "2026-10-29T08:12:25Z",
+      "err": [
+        "2026时空鹿茸库存: <urlopen error _ssl.c:983: The handshake operation timed out>"
+      ]
     }
   },
   "pilot-1786158041698-fyebf": {
