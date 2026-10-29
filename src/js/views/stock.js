@@ -350,7 +350,7 @@
     var extra = wps
       ? "\n\n⚠️ 该货品在金山台账子表【" + wps.sheet + "】登记着「" + wps.col + "」一列。删除后，金山文档上对应那一列（含该货品全部历史发放/库存记录）也会一并被删掉，且不可恢复！"
       : "";
-    var msg = "确定删除货品「" + name + "」？\n\n删除后：\n· 系统库存目录移除、库存归 0，全站（出入库登记/库存/报表）不再可选该货品；\n· 钉钉群会收到删除通知；\n· 系统内已产生的出入库历史记录仍保留可查（不影响对账）。" + extra;
+    var msg = "确定删除货品「" + name + "」？\n\n删除后：\n· 系统库存目录移除、库存归 0，全站（出入库登记/库存/报表）不再可选该货品；\n· 钉钉群通知已停用，不会发群消息；\n· 系统内已产生的出入库历史记录仍保留可查（不影响对账）。" + extra;
     if (!window.App.UI || !window.App.UI.confirmDialog) return;
     window.App.UI.confirmDialog(msg, "🗑 删除货品").then(function (ok) {
       if (!ok) return;
@@ -900,7 +900,7 @@
      本弹窗只做"快速新增一条"，覆盖高频轻量场景。 */
   function openQuickAdd() {
     var body =
-      '<div class="hint" style="margin-bottom:10px">新增货品并设置初始库存；保存后立即在出库登记、落地页登记表、库存表中可见，并推送钉钉群通知。</div>' +
+      '<div class="hint" style="margin-bottom:10px">新增货品并设置初始库存；保存后立即在出库登记、落地页登记表、库存表中可见（钉钉推送已停用，不再发群消息）。</div>' +
       '<div class="field"><label for="qaName">货品名称<span class="req">*</span></label>' +
       '<input type="text" id="qaName" maxlength="60" autocomplete="off" placeholder="例：神仙水 150ml" /></div>' +
       '<div class="grid2">' +
@@ -922,7 +922,7 @@
       '<input type="text" id="qaBarcode" maxlength="40" autocomplete="off" /></div>' +
       '<div class="modal-actions" style="margin-top:14px">' +
         '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
-        '<button type="button" class="btn sm" id="qaSave">保存并通知钉钉</button>' +
+        '<button type="button" class="btn sm" id="qaSave">保存</button>' +
       '</div>';
     UI.Modal.show("＋ 新增货品", body, { width: "560px" });
     var mBody = UI.Modal.body();
@@ -948,7 +948,7 @@
         if ((Config.PRODUCTS || []).indexOf(name) !== -1) { Util.toast('该货品已存在，请改用其他名称', true); try { mBody.querySelector('#qaName').focus(); } catch (e) {} return; }
 
         var ok = await UI.confirmDialog(
-          '新增货品「' + Util.esc(name) + '」（初始库存 ' + stock + ' ' + (unit || '件') + '），保存后立即全站生效并推送钉钉通知。确认？',
+          '新增货品「' + Util.esc(name) + '」（初始库存 ' + stock + ' ' + (unit || '件') + '），保存后立即全站生效（钉钉推送已停用，不再发群消息）。确认？',
           '确认新增');
         if (!ok) return;
         UI.Modal.hide();

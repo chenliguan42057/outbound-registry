@@ -994,27 +994,9 @@
     var ok = await copyText(buildCopyText(p));
     Util.toast(ok ? "✅ 已复制，可直接粘贴到聊天框" : "⚠️ 复制失败，请手动选中复制", !ok);
 
-    /* 推送钉钉群：走仓库既有 notify 通道（写 data/notify/*.json → Actions 加签推送） */
-    if (!Cloud.hasToken || !Cloud.hasToken()) {
-      Util.toast("未配置云端令牌，未推送钉钉（内容已复制）", true);
-      return;
-    }
-    try {
-      await Cloud.pushNotifyFile("out-copy", {
-        _ts: Date.now(),
-        type: "out-copy",
-        order: {
-          orderNo: p.orderNo, applicant: p.applicant, picker: p.picker,
-          time: p.time, dept: p.dept, purpose: p.purpose, items: p.items
-        }
-      });
-      Util.toast("📤 已通知钉钉群");
-      if (window.App.Views.app && window.App.Views.app.setSyncStatus) {
-        window.App.Views.app.setSyncStatus("领取信息已提交推送", false);
-      }
-    } catch (e) {
-      Util.toast("钉钉推送失败：" + (e && e.message ? e.message : e) + "（内容已复制，可稍后重试）", true);
-    }
+    /* 2026-10-29 主理人要求：切断钉钉推送。此处只保留「复制」，不再写 notify 事件、
+       不再推群。想通知对方时，把刚复制好的文本直接粘到聊天框发过去即可。 */
+    return;
   }
 
   /**

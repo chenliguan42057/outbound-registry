@@ -1448,12 +1448,25 @@
     return { ok: ok, remain: remain };
   }
 
+  /* ================= 钉钉推送总开关（2026-10-29 主理人要求） =================
+     已切断本系统与钉钉的联系：所有推送出口在此统一短路，不再向云端写 notify 事件文件，
+     GitHub Actions 侧因此不会再有新事件可消费（对应 17 个钉钉 workflow 亦已 job 级停用）。
+     要恢复推送，两处都要改：
+       ① 把下面的 false 改回 true；
+       ② 删掉 .github/workflows 下 17 个钉钉 workflow 里的 `if: false` 行。
+     只改一处会出现「写了没人读」或「读了没得写」的半吊子状态。 */
+  var DINGTALK_PUSH_ENABLED = false;
+
+  /** 供 UI 判断是否还允许推送（页面据此显示「已停用」提示并禁用发送按钮） */
+  function dingtalkPushEnabled() { return DINGTALK_PUSH_ENABLED === true; }
+
   /* ================= 订单提醒推送（data/notify） =================
      前端勾选订单 → 写 data/notify/<id>.json（仅订单紧凑摘要，不含照片）→
      GitHub Action「DingTalk Remind」读取并推送钉钉。文件名唯一，每次发送独立，幂等。 */
 
   /** 推送「提醒」请求；返回文件名。失败抛错（调用方自行提示/重试）。 */
   async function pushRemind(obj) {
+    if (!DINGTALK_PUSH_ENABLED) { console.info("[cloud] 钉钉推送已停用，跳过提醒写入"); return ""; }
     if (!obj || !obj.orders || !obj.orders.length) throw new Error("empty remind payload");
     // 双仓物理隔离（按需）：载荷显式带 warehouse 且与当前仓不符则拒写（不带标记的旧调用照常）
     var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
@@ -1470,6 +1483,7 @@
 
   /** 推送任意 notify 载荷到 data/notify/<prefix>-<id>.json，供 Actions 脚本消费；返回文件名。失败抛错。 */
   async function pushNotifyFile(prefix, payload) {
+    if (!DINGTALK_PUSH_ENABLED) { console.info("[cloud] 钉钉推送已停用，跳过 notify 文件写入"); return ""; }
     if (!payload) throw new Error("empty notify payload");
     // 双仓物理隔离（按需）：载荷显式带 warehouse 且与当前仓不符则拒写（不带标记的旧调用照常）
     var wid = (window.App && window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen";
@@ -1492,6 +1506,7 @@
       失败静默：登记本身已由 pushRecord/pushPickup 落地并推送，这里失败绝不影响登记结果。 */
   async function pushRecognizeConfirm(rec, kind, stage) {
     try {
+      if (!DINGTALK_PUSH_ENABLED) return false;
       if (!rec || !hasToken()) return false;
       var wid = (Config.Sys && Config.Sys.current && Config.Sys.current().id) || "shenzhen";
       var st = stage || "submitted";   // submitted=识别提交后 / confirmed=提单确认完成后
@@ -1532,6 +1547,7 @@
       双仓隔离 + 失败静默，同 pushRecognizeConfirm。 */
   async function pushInNew(rec) {
     try {
+      if (!DINGTALK_PUSH_ENABLED) return false;
       if (!rec || !hasToken()) return false;
       var wid = (Config.Sys && Config.Sys.current && Config.Sys.current().id) || "shenzhen";
       await pushNotifyFile("in-new", {
@@ -1900,6 +1916,7 @@
     dequeueTomb: dequeueTomb,
     flushTombQueue: flushTombQueue,
     getLocalTombIds: getLocalTombIds,
+    dingtalkPushEnabled: dingtalkPushEnabled,
     pushRemind: pushRemind,
     pushNotifyFile: pushNotifyFile,
     pushRecognizeConfirm: pushRecognizeConfirm,

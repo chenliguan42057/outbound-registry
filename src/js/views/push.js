@@ -108,6 +108,27 @@
     return header("待取货待办") + "\n\n🕘 当前待取货 " + pending.length + " 条：\n" + lines.join("\n");
   }
 
+
+  /** 2026-10-29 主理人要求：切断钉钉推送。页面保留作内容预览，但发送能力关闭。 */
+  function pushDisabledBanner() {
+    return '<div class="hint" style="margin:0 0 14px;padding:10px 12px;border:1px solid var(--line-soft,#E3D5C8);' +
+      'border-radius:10px;background:var(--warn-bg,#FDF6EE);line-height:1.85">' +
+      '<b>⛔️ 钉钉推送已停用</b><br>' +
+      '本系统已切断与钉钉的连接，不再向任何钉钉群推送信息。' +
+      '下方内容仍可生成，供你直接复制使用；发送按钮已禁用。' +
+      '</div>';
+  }
+
+  /** 停用态下把所有发送类按钮置灰，避免误以为还能发出去 */
+  function lockAllSendButtons(el) {
+    if (!Cloud || !Cloud.dingtalkPushEnabled || Cloud.dingtalkPushEnabled()) return;
+    Array.prototype.forEach.call(el.querySelectorAll("button"), function (b) {
+      b.disabled = true;
+      b.setAttribute("title", "钉钉推送已停用");
+      try { b.classList.add("is-disabled"); } catch (e) {}
+    });
+  }
+
   /* ---------- 发送 ---------- */
 
   function lockBtn(btn) {
@@ -153,6 +174,10 @@
 
   /** 预览 + 确认 + 写入云端 pushmenu 文件（由 Actions 推群） */
   function askSend(title, text, btn) {
+    if (Cloud && Cloud.dingtalkPushEnabled && !Cloud.dingtalkPushEnabled()) {
+      Util.toast("钉钉推送已停用，不再发送任何消息", true);
+      return;
+    }
     if (!text || !text.trim()) { Util.toast("没有可发送的内容", true); return; }
     if (!Cloud || !Cloud.hasToken()) {
       Util.toast("⚠️ 未配置云端令牌，推送需要云端同步，请先联系管理员", true);
@@ -208,10 +233,11 @@
     container = el;
     el.innerHTML =
       '<div class="card">' +
-        '<h2>推送信息 <span class="tag">群通知</span></h2>' +
+        '<h2>推送信息 <span class="tag">已停用</span></h2>' +
+        pushDisabledBanner() +
         '<div class="hint" style="margin:-4px 0 14px;line-height:1.9">' +
-          '把系统里的信息推送到钉钉群。当前推送对象：<b>' + Util.esc(curName()) + '</b> 群 —— 在左侧栏顶部切换仓库即切换推送对象。' +
-          '发送后约 <b>30~60 秒</b>送达（由云端任务转发）。推送内容取自本机已同步数据，若刚在其他设备登记过，请先到「云端同步」拉取最新再推送。' +
+          '以下预设与自定义内容仍可正常生成，供你<b>复制后自行粘贴到任何聊天工具</b>使用。' +
+          '内容取自本机已同步数据，若刚在其他设备登记过，请先到「云端同步」拉取最新。' +
         '</div>' +
         '<div class="field"><label>一键推送</label>' +
           '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">' +
@@ -240,6 +266,7 @@
         askSend(title, text, b);
       });
     };
+    lockAllSendButtons(el);
     bind("pmStock", "库存总览", buildStockText);
     bind("pmLow", "低库存清单", buildLowText);
     bind("pmFlow", "最近流水", buildFlowText);

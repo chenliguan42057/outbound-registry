@@ -677,6 +677,7 @@
     try {
       var Cloud = window.App.Cloud;
       if (!Cloud || !Cloud.pushRemind || !Cloud.hasToken || !Cloud.hasToken()) return;
+      if (Cloud.dingtalkPushEnabled && !Cloud.dingtalkPushEnabled()) return;   // 2026-10-29 钉钉推送已切断
       var wid = (Config.Sys && Config.Sys.current && Config.Sys.current().id) || "shenzhen";
       var nowStr = Util.nowLocal ? Util.nowLocal() : new Date().toISOString();
       var items = (data.items || []).map(function (it) { return { name: it.name, qty: it.qty }; });

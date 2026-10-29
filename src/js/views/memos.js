@@ -42,7 +42,7 @@
         '<div class="field">' +
           '<label for="memoRemindAt">提醒时间（可选）</label>' +
           '<input type="datetime-local" id="memoRemindAt" step="60" aria-label="提醒时间（可选）" />' +
-          '<div class="hint">到点未完成将推送钉钉，推送后失效；留空则不提醒</div>' +
+          '<div class="hint">到点后在本页标记为待办提醒（钉钉推送已停用，不会再发群消息）；留空则不提醒</div>' +
         '</div>' +
         '<div class="actions">' +
           '<button type="button" class="btn" id="memoAdd">添加</button>' +
@@ -305,7 +305,7 @@
       '<div class="field">' +
         '<label>提醒时间（可选）</label>' +
         '<input type="datetime-local" id="memoRemindEdit" step="60" value="' + Util.esc(cur) + '" />' +
-        '<div class="hint">到点未完成将推送钉钉，推送后失效；留空则不提醒</div>' +
+        '<div class="hint">到点后在本页标记为待办提醒（钉钉推送已停用，不会再发群消息）；留空则不提醒</div>' +
       '</div>' +
       '<div class="modal-actions">' +
         '<button type="button" class="btn ghost sm" data-act="remind-clear">清空</button>' +

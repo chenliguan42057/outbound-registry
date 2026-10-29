@@ -18,7 +18,7 @@
   var isIn = false;       // true=入库提醒，false=出库提醒
   var checked = {};       // id -> true
   var list = [];          // 当前过滤后的列表
-  var SEND_LABEL = "\u{1F514} 发送到钉钉";
+  var SEND_LABEL = "\u{1F515} 发送已停用";
 
   function render(el) {
     container = el;
@@ -27,6 +27,7 @@
     el.innerHTML =
       '<div class="card">' +
         '<h2>' + title + ' <span class="badge" id="rmCount">0 条</span></h2>' +
+        pushDisabledBanner() +
         '<div class="actions rec-actions">' +
           '<button type="button" class="btn ghost sm" id="rmBack">&#8592; 返回记录</button>' +
           '<button type="button" class="btn ghost sm" id="rmSelectAll">全选</button>' +
@@ -53,6 +54,8 @@
       checked = {};
       renderList();
     });
+    Util.$("rmSend").disabled = true;
+    Util.$("rmSend").setAttribute("title", "钉钉推送已停用");
     Util.$("rmSend").addEventListener("click", send);
     Util.$("rmQ").addEventListener("input", renderList);
 
@@ -154,8 +157,22 @@
     return urls.slice(0, 3);
   }
 
+
+  /** 2026-10-29 主理人要求：钉钉推送已切断，本页仅保留订单查看能力。 */
+  function pushDisabledBanner() {
+    return '<div class="hint" style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line-soft,#E3D5C8);' +
+      'border-radius:10px;background:var(--warn-bg,#FDF6EE);line-height:1.85">' +
+      '<b>⛔️ 钉钉推送已停用</b>　本系统已切断与钉钉的连接，' +
+      '不再向任何钉钉群推送信息。本页仍可查看订单，发送按钮已禁用。' +
+      '</div>';
+  }
+
   /** 发送：勾选订单（带照片 ≤3 张）→ 紧凑摘要 → data/notify/<id>.json → Actions 推钉钉 */
   async function send() {
+    if (Cloud && Cloud.dingtalkPushEnabled && !Cloud.dingtalkPushEnabled()) {
+      Util.toast("钉钉推送已停用，不再发送任何消息", true);
+      return;
+    }
     var ids = Object.keys(checked);
     if (!ids.length) return Util.toast("请先勾选要推送的订单", true);
     var btn = Util.$("rmSend");

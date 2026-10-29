@@ -50,7 +50,7 @@
   <div class="head">
     <h1>鹿茸精华液 · 领用登记</h1>
     <p>填写后自动同步到金山轻维表（照抄台账格式）</p>
-    <span class="brand-tag">提交同时推送钉钉群 · 陈利冠报备工作群</span>
+    <span class="brand-tag">提交后自动同步金山轻维表（钉钉推送已停用）</span>
   </div>
 
   <div class="card">
@@ -153,7 +153,7 @@ $("f_board").addEventListener("change", refreshProducts);
 refreshProducts();
 $("f_date").value = todayISO();
 
-/* ===== 写 GitHub（保留钉钉群推送：push 触发 dingtalk-notify Action） ===== */
+/* ===== 写 GitHub（触发金山同步 Action；钉钉推送已于 2026-10-29 全站停用） ===== */
 async function pushToGitHub(rec){
   var path = "data/records/" + rec.id + ".json";
   var content = b64enc(JSON.stringify(rec));
@@ -197,7 +197,7 @@ $("btnSubmit").addEventListener("click", async function(){
   var btn = $("btnSubmit");
   btn.disabled = true; btn.textContent = "提交中…";
 
-  // 1) 写 GitHub（钉钉推送靠这个触发；失败不阻断金山写入）
+  // 1) 写 GitHub（金山同步靠这个 trigger 触发；钉钉推送已于 2026-10-29 停用）
   var rec = {
     id: "lurong-" + Date.now() + "-" + Math.floor(Math.random()*1000),
     type: type,
@@ -214,10 +214,10 @@ $("btnSubmit").addEventListener("click", async function(){
   var ghOk = false;
   try { await pushToGitHub(rec); ghOk = true; } catch(e){ ghOk = false; }
 
-  // 金山轻维表 + 钉钉群推送，都由 GitHub Actions 在后台自动完成（基于这次 push）
+  // 金山轻维表由 GitHub Actions 在后台自动完成（基于这次 push）；钉钉群推送已停用
   btn.disabled = false; btn.textContent = "提交登记";
   if (ghOk) {
-    showStatus(true, "✅ 已提交：" + board + " / " + product + " 已记录，金山轻维表与钉钉群将在几秒内自动同步。");
+    showStatus(true, "✅ 已提交：" + board + " / " + product + " 已记录，金山轻维表将在几秒内自动同步。");
   } else {
     showStatus(false, "❌ 提交失败（GitHub 写入异常），请稍后重试。");
   }

@@ -9,6 +9,7 @@ on:
 
 jobs:
   audit:
+    if: false   # ⛔ 2026-10-29 主理人要求：切断钉钉推送（恢复：把 false 改回 true 或删本行）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

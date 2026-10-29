@@ -200,7 +200,7 @@
         '<td>' +
           (!isDone(r) ? '<button type="button" class="btn sm" data-act="return" data-id="' + r.id + '">归还</button> ' : '') +
           (!isDone(r) && !hasReturned(r) ? '<button type="button" class="btn ghost sm" data-act="unborrow" data-id="' + r.id + '">退回</button> ' : '') +
-          '<button type="button" class="btn ghost sm" data-act="notify" data-id="' + r.id + '" title="把这张借出单详情推送到钉钉群">&#128276; 推送</button> ' +
+          '<button type="button" class="btn ghost sm" data-act="notify" data-id="' + r.id + '" disabled title="钉钉推送已停用">&#128276; 推送</button> ' +
           '<button type="button" class="btn ghost sm" data-act="detail" data-id="' + r.id + '">详细</button>' +
         '</td>' +
       '</tr>';
@@ -250,6 +250,7 @@
       silent=true：静默模式（自动推送用，失败不弹窗打扰主流程）。返回是否成功。 */
   async function pushBorrowStage(r, stage, silent) {
     if (!r) return false;
+    if (Cloud.dingtalkPushEnabled && !Cloud.dingtalkPushEnabled()) return false;
     if (!Cloud.hasToken || !Cloud.hasToken()) return false;
     try {
       await Cloud.pushRemind({
@@ -266,6 +267,9 @@
 
   /** 把某张借出单详情推送到钉钉（列表上的 🔔 手动按钮）。 */
   async function notifyOne(id) {
+    if (Cloud.dingtalkPushEnabled && !Cloud.dingtalkPushEnabled()) {
+      return Util.toast("钉钉推送已停用，不再发送任何消息", true);
+    }
     var r = State.list.find(function (x) { return x.id === id; });
     if (!r) return Util.toast("记录不存在，请刷新后重试", true);
     if (!Cloud.hasToken()) return Util.toast("未配置云端令牌，无法推送", true);

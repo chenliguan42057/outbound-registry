@@ -153,7 +153,7 @@
           '<td>' + Util.esc(r.transferNo || "-") + '</td>' +
           '<td class="items-cell">' + itemsHtml + '</td>' +
           '<td>' + dir + '</td>' +
-          '<td><button type="button" class="btn ghost sm" data-act="notify" data-id="' + Util.esc(r.id) + '" title="把这张调拨单详情推送到钉钉群">&#128276; 推送</button></td>' +
+          '<td><button type="button" class="btn ghost sm" data-act="notify" data-id="' + Util.esc(r.id) + '" disabled title="钉钉推送已停用">&#128276; 推送</button></td>' +
         '</tr>';
       }).join("") + '</tbody></table></div>';
     // 委托处理行内按钮；onclick 单实例赋值，列表重建不叠加监听
@@ -168,6 +168,9 @@
   /** 把某笔调拨记录详情推送到钉钉（复用提醒链路：data/notify/*.json → dingtalk-remind workflow）。
       带 transferNo/transferRole，钉钉侧渲染成「⇄ 调拨出库/入库」+ 调拨单号。 */
   async function notifyTransferOne(id) {
+    if (Cloud.dingtalkPushEnabled && !Cloud.dingtalkPushEnabled()) {
+      return Util.toast("钉钉推送已停用，不再发送任何消息", true);
+    }
     var all = (window.App.State && window.App.State.list) || [];
     var r = all.find(function (x) { return x.id === id; });
     if (!r) return Util.toast("记录不存在，请刷新后重试", true);

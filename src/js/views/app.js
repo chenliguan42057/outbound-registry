@@ -29,7 +29,7 @@
     { id: "borrow", icon: "box", label: "先借后还", tone: 9, desc: "借出后跟踪归还进度，未还差额一眼看清" },
     { id: "transfer", icon: "swap", label: "调拨", tone: 6, desc: "两仓之间转移货品，调出/调入库存自动同步" },
     { id: "memos", icon: "edit", label: "备忘录", tone: 8, desc: "待做事项与到点提醒，每一项可以单独设时间" },
-    { id: "push", icon: "bell", label: "推送信息", tone: 4, desc: "钉钉群推送内容预览，确认发送前先看一眼" },
+    { id: "push", icon: "bell", label: "推送信息", tone: 4, desc: "已停用 · 仅保留内容预览与复制，不再推送钉钉" },
     { id: "trash", icon: "box", label: "回收站", tone: 10, desc: "误删的记录暂存在这里，可以还原" },
     { id: "ai", icon: "clipboard", label: "自动识别", tone: 11, desc: "粘贴吉客云订单文字，自动填好表单" }
   ];
@@ -73,8 +73,8 @@
   /* 非侧栏菜单模块（顶栏按钮/提醒路由直达）的页头说明 */
   var EXTRA_INFO = {
     sync: { label: "云端同步", tone: 1, desc: "与云端同步数据，可全量重建、诊断同步状态" },
-    "in-remind": { label: "入库提醒", tone: 0, desc: "勾选入库订单，发送到钉钉群提醒" },
-    "out-remind": { label: "出库提醒", tone: 2, desc: "勾选出库订单，发送到钉钉群提醒" }
+    "in-remind": { label: "入库提醒", tone: 0, desc: "已停用 · 钉钉推送已切断，仅可查看订单" },
+    "out-remind": { label: "出库提醒", tone: 2, desc: "已停用 · 钉钉推送已切断，仅可查看订单" }
   };
 
   /** 模块 id → 导航项（含非菜单模块兜底） */
