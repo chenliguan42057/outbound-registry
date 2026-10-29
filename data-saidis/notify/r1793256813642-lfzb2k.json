@@ -1,0 +1,1 @@
+{"_ts":1793256813641,"type":"remind","kind":"borrow","warehouse":"saidis","orders":[{"id":"mvt56oidtb4j0","type":"out","time":"2026-10-29T14:06","picker":"张文涛","dept":"产品","purpose":"客户销售","entity":"赛迪斯法人","note":"","status":"pending","borrowed":true,"borrowStage":"borrowed","items":[{"name":"精华液-30支装（员工版）","qty":111}],"returned":{},"photoUrls":[]}]}
