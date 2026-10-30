@@ -183,20 +183,6 @@
       "err": [
         "2026时空鹿茸库存: <urlopen error timed out>"
       ]
-    },
-    "mvudju7woyec0": {
-      "fail": 1,
-      "at": "2026-10-30T02:50:52Z",
-      "err": [
-        "2026时空鹿茸库存: <urlopen error _ssl.c:983: The handshake operation timed out>"
-      ]
-    },
-    "mvudkqgp4mat9": {
-      "fail": 1,
-      "at": "2026-10-30T02:51:44Z",
-      "err": [
-        "2026时空鹿茸库存: <urlopen error _ssl.c:983: The handshake operation timed out>"
-      ]
     }
   },
   "pilot-1786158041698-fyebf": {
@@ -4612,6 +4598,24 @@
     "at": "2026-10-30T02:49:46Z",
     "rows": {
       "2026时空鹿茸库存": 809
+    }
+  },
+  "mvudju7woyec0": {
+    "ok": 1,
+    "fail": 0,
+    "fp": "fb3e2da88dd36c82",
+    "at": "2026-10-30T05:52:50Z",
+    "rows": {
+      "2026时空鹿茸库存": 810
+    }
+  },
+  "mvudkqgp4mat9": {
+    "ok": 1,
+    "fail": 0,
+    "fp": "4a22ba5d4c314fb1",
+    "at": "2026-10-30T05:52:52Z",
+    "rows": {
+      "2026时空鹿茸库存": 811
     }
   }
 }
