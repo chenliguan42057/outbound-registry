@@ -286,6 +286,18 @@
           "recalced": 12
         }
       }
+    },
+    "mvryvrglabrtp": {
+      "ok": 1,
+      "at": "2026-11-03T13:05:26Z",
+      "detail": {
+        "2026时空鹿茸库存": {
+          "rows": [
+            229
+          ],
+          "recalced": 2
+        }
+      }
     }
   },
   "__wpscol__": {
