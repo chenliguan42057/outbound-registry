@@ -1,0 +1,1 @@
+{"id":"mwipw1kws3rpy","_ts":1794800521472,"time":"2026-11-16T11:42","kind":"stocktake","warehouse":"saidis","picker":"盘点校准","dept":"盘点校准","purpose":"盘点调整","note":"盘盈 +12 / 盘亏 -298","_local":true,"items":[{"name":"小鹿牛皮纸袋 大","book":498,"actual":200,"diff":-298},{"name":"小鹿牛皮纸袋 小","book":228,"actual":240,"diff":12}]}
