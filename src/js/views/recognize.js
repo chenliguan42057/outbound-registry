@@ -787,7 +787,7 @@
         if (!ok) return;
         var rec = O.quickCreate(data);
         if (!rec) { Util.toast("没有可出库的货品，请检查数量", true); return; }
-        Util.toast("✅ 已出库 " + (rec.orderNo || "") + "（未提单，可在出库记录里提单）");
+        Util.toast("✅ 已出库 " + (rec.orderNo || "") + "（未审核，可在出库记录里点状态完成审核）");
         try { window.App.Router.navigate("/app/out-records"); } catch (e3) {}
       });
       return;

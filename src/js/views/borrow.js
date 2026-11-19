@@ -289,7 +289,7 @@
     var eligible = eligibleOutRecords();
     if (!eligible.length) { Util.toast("暂无可借出的出库记录", true); return; }
     var rows = eligible.map(function (r, i) {
-      var st = Records.getStatus(r) === "pending" ? "未提单" : "已提单";
+      var st = Records.getStatus(r) === "pending" ? "未审核" : "已审核";
       var goods = (r.items || []).map(function (it) { return Util.esc(it.name) + "×" + it.qty; }).join("，");
       return '<tr>' +
         '<td><input type="checkbox" class="borrow-check" value="' + r.id + '" /></td>' +
@@ -311,7 +311,7 @@
       '</div>' +
       '<div class="modal-actions"><button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
       '<button type="button" class="btn sm" data-act="ok">确认借出</button></div>';
-    UI.Modal.show("选择要转入先借后还的出库记录（未提单优先）", body, { width: "720px" });
+    UI.Modal.show("选择要转入先借后还的出库记录（未审核优先）", body, { width: "720px" });
     var mBody = UI.Modal.body();
     mBody.querySelector("#borrowAll").addEventListener("change", function () {
       mBody.querySelectorAll(".borrow-check").forEach(function (c) { c.checked = mBody.querySelector("#borrowAll").checked; });
@@ -383,7 +383,7 @@
       '<div class="table-wrap"><table class="table"><thead><tr>' +
       '<th>货品</th><th>借出</th><th>已还</th><th>剩余应还</th><th>本次归还</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<div class="hint" style="margin-top:8px;">未归还的差额将自动生成「未提单」出库记录。</div>' +
+      '<div class="hint" style="margin-top:8px;">未归还的差额将自动生成「未审核」出库记录。</div>' +
       '<div class="modal-actions"><button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
       '<button type="button" class="btn sm" data-act="ok">确认归还</button></div>';
     UI.Modal.show("归还 — " + (r.picker || "借出单"), body, { width: "640px" });
@@ -419,7 +419,7 @@
           return;
         }
         if (!returns.length) { Util.toast("请至少归还一项", true); return; }
-        var ok = await UI.confirmDialog("确认归还？系统将自动处理差额并生成未提单出库记录。", "确认归还");
+        var ok = await UI.confirmDialog("确认归还？系统将自动处理差额并生成未审核出库记录。", "确认归还");
         if (!ok) return;
         UI.Modal.hide();
         await doReturn(r, returns);

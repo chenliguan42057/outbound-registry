@@ -164,9 +164,9 @@ def build_reminder_markdown(records_dir=DATA_ROOT + "/records", pickups_dir=DATA
 
     parts = []
     if pending_out:
-        parts.append("\n".join(lines_of("⏳ 出库记录未提单", pending_out, "领取人")))
+        parts.append("\n".join(lines_of("⏳ 出库记录未审核", pending_out, "领取人")))
     if borrow_diff:
-        parts.append("\n".join(lines_of("🔄 借还差额未提单", borrow_diff, "领取人")))
+        parts.append("\n".join(lines_of("🔄 借还差额未审核", borrow_diff, "领取人")))
     if unconfirmed:
         parts.append("\n".join(lines_of("🧾 待取货未确认提单", unconfirmed, "取货人")))
     if unshipped:

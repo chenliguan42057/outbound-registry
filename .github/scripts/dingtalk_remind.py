@@ -113,7 +113,7 @@ def goods_lines_of(order):
 
 
 def status_text_of(order):
-    return "未提单" if order.get("status") == "pending" else "已提单"
+    return "未审核" if order.get("status") == "pending" else "已审核"
 
 
 def photos_lines(o):
@@ -163,7 +163,7 @@ def build_order_blocks(payload):
         - 领取人：xxx
         - 部门/客户：xxx
         - 用途：xxx
-        - 状态：已提单
+        - 状态：已审核
 
         **货品明细（3 项）**
         1. 精华液 单支装 × 2

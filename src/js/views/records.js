@@ -1,7 +1,7 @@
 /**
  * records.js — 出入库记录模块工厂：createRecordsModule(type) 生成「入库记录」/「出库记录」
  * 搜索筛选 + 表格 + 详情/编辑/删除 + 导出 CSV + 清空全部 + 立即同步。
- * 出库记录带「状态」列（未提单/已提单，点击切换 + 同步云端）。
+ * 出库记录带「状态」列（未审核/已审核，点击切换 + 同步云端）。
  * 出库记录编辑 → LandingView.pendingEditId + 跳落地页（保留照片等全字段编辑）；
  * 入库记录编辑 → 入库模块内编辑。
  */
@@ -42,8 +42,8 @@
           // 批量操作条：默认隐藏，勾选任意一行后出现。只确认一次，避免 20 单逐条点确认
           '<div class="bulk-bar" id="recBulkBar" style="display:none;">' +
             '<span class="bulk-count" id="recBulkCount">已选 0 条</span>' +
-            (!isIn ? '<button type="button" class="btn ghost sm" id="recBulkSubmit">批量标为已提单</button>' : '') +
-            (!isIn ? '<button type="button" class="btn ghost sm" id="recBulkPending">批量标为未提单</button>' : '') +
+            (!isIn ? '<button type="button" class="btn ghost sm" id="recBulkSubmit">批量标为已审核</button>' : '') +
+            (!isIn ? '<button type="button" class="btn ghost sm" id="recBulkPending">批量标为未审核</button>' : '') +
             '<button type="button" class="btn danger sm" id="recBulkDel">批量删除</button>' +
             '<button type="button" class="btn ghost sm" id="recBulkCancel">取消选择</button>' +
           '</div>' +
@@ -64,7 +64,7 @@
               '<input type="text" id="recPicker" class="search" placeholder="' + (isIn ? "输入姓名筛选" : "输入姓名筛选") + '" autocomplete="off" />' +
             '</div>' +
             (!isIn
-              ? '<div class="filter-item"><label>提单状态</label><select id="recStatus" class="search" title="按提单状态筛选"><option value="">全部状态</option><option value="pending">● 未提单</option><option value="submitted">● 已提单</option></select></div>'
+              ? '<div class="filter-item"><label>审核状态</label><select id="recStatus" class="search" title="按审核状态筛选"><option value="">全部状态</option><option value="pending">● 未审核</option><option value="submitted">● 已审核</option></select></div>'
               : '') +
             // 货品搜索（2026-09-13）：按货品名称模糊筛记录，命中该记录任意一个货品即保留
             '<div class="filter-item">' +
@@ -349,7 +349,7 @@
       if (listBox) renderList();
     }
 
-    /** 出库状态徽标（可点击切换）：红点=未提单，绿点=已提单 */
+    /** 出库状态徽标（可点击切换）：红点=未审核，绿点=已审核 */
     /** 领取人列（2026-09-24）：出库行显示「领取人 + 申请人副标」——
         申请人 = 向商务发领取申请的人，领取人 = 来现场领取的人，两者并列便于一眼核对。
         入库行没有申请人概念，仍只显示经办人，保持原样。 */
@@ -364,7 +364,7 @@
 
     function statusPill(r) {
       var st = Records.getStatus(r);   // "pending" | "submitted"
-      var label = st === "pending" ? "未提单" : "已提单";
+      var label = st === "pending" ? "未审核" : "已审核";
       return '<button type="button" class="status-pill ' + st + '" data-act="status" data-id="' + r.id + '">' +
         '<span class="dot"></span>' + label + '</button>';
     }
@@ -372,7 +372,7 @@
     /** 出库状态徽标（详情弹窗展示用，不可点击） */
     function statusBadge(r) {
       var st = Records.getStatus(r);
-      var label = st === "pending" ? "未提单" : "已提单";
+      var label = st === "pending" ? "未审核" : "已审核";
       return '<span class="status-pill static ' + st + '"><span class="dot"></span>' + label + '</span>';
     }
 
@@ -388,7 +388,7 @@
       if (!r) return;
       var cur = Records.getStatus(r);
       var next = cur === "pending" ? "submitted" : "pending";
-      var label = next === "pending" ? "未提单" : "已提单";
+      var label = next === "pending" ? "未审核" : "已审核";
       var ok = await UI.confirmDialog("标记为" + label + "？", "更新状态");
       if (!ok) return;
       var patch = { status: next };
@@ -412,7 +412,7 @@
       if (!rec) { Util.toast("记录不存在", true); return; }
       // 先借后还差额单提交后 → 原借出单自动结清
       if (next === "submitted" && Records.tryCloseBorrowFromDiff(rec)) {
-        Util.toast("已标记为已提单，对应借出单已结清");
+        Util.toast("已标记为已审核，对应借出单已结清");
         // ★ 2026-10-25：结清标记必须同步推云端。原先只改本地 → 设备间分叉
         //   （冻结跟随借出单口径下，没同步到的设备/本机之后的同步会把冻结算没）。
         var closedBorrow = State.list.find(function (x) { return x && x.id === rec.fromBorrowId; });
@@ -428,7 +428,7 @@
         if (reopened && Cloud.hasToken()) {
           try { Cloud.pushRecord(reopened); } catch (e) {}
         }
-        Util.toast("已标记为未提单，对应借出单恢复借出中");
+        Util.toast("已标记为未审核，对应借出单恢复借出中");
       } else {
         Util.toast("已标记为" + label);
       }
@@ -581,8 +581,8 @@
           (isIn ? '' :
             '<div class="stat-card ' + (pendN ? "warn" : "ok") + '">' +
               '<span class="stat-num">' + pendN + '</span>' +
-              '<span class="stat-label">未提单</span>' +
-              '<span class="stat-hint">' + (pendN ? "还没标记已提单，记得跟进" : "全部都已提单") + '</span>' +
+              '<span class="stat-label">未审核</span>' +
+              '<span class="stat-hint">' + (pendN ? "还没标记已审核，记得跟进" : "全部都已完成审核") + '</span>' +
             '</div>') +
           '<div class="stat-card">' +
             '<span class="stat-num">' + list.length + '</span>' +
@@ -671,7 +671,7 @@
     async function doBulkStatus(next) {
       var recs = selectedRecords();
       if (!recs.length) return;
-      var label = next === "pending" ? "未提单" : "已提单";
+      var label = next === "pending" ? "未审核" : "已审核";
       var ok = await UI.confirmDialog("将把选中的 " + recs.length + " 条记录标记为" + label + "。", "批量更新状态");
       if (!ok) return;
       var updated = [];
@@ -968,7 +968,7 @@
         return '<tr><td>' + Util.esc(it.name) + '</td><td class="c">' + Util.numFmt(it.qty) + '</td>' +
           '<td class="c">' + Util.numFmt(Stock.getRecordStock(it.name, r, it)) + '</td></tr>';
       }).join("");
-      var statusLabel = isRecIn ? "" : (Records.getStatus(r) === "pending" ? "未提单" : "已提单");
+      var statusLabel = isRecIn ? "" : (Records.getStatus(r) === "pending" ? "未审核" : "已审核");
       return '<div class="print-sheet">' +
         '<h1>出入库登记 · ' + kindLabel + '</h1>' +
         '<div class="sub">单号：' + Util.esc(r.orderNo || r.id) + '　|　时间：' + Util.esc(String(r.time || "").replace("T", " ")) + '</div>' +

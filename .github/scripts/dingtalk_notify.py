@@ -130,7 +130,7 @@ def post_stock_lines(data):
 
 def status_text_of(data):
     status = data.get("status", "submitted")
-    return "未提单" if status == "pending" else "已提单"
+    return "未审核" if status == "pending" else "已审核"
 
 
 def photos_markdown(data):
@@ -212,7 +212,7 @@ def build_new_markdown(data):
     fields.append(("用途", data.get("purpose", "") or "-"))
     tail = [
         ("时间", data.get("time", "") or "-"),
-        ("状态", "未提单" if data.get("status") == "pending" else "已提单")
+        ("状态", "未审核" if data.get("status") == "pending" else "已审核")
     ]
     return _layout_record(title, fields, data, tail_fields=tail)
 
@@ -249,7 +249,7 @@ def _build_borrow_unborrow_markdown(data):
         fields.append(("结算法人单位", entity))
     tail = [
         ("时间", data.get("time", "") or "-"),
-        ("状态", "未提单" if data.get("status") == "pending" else "已提单")
+        ("状态", "未审核" if data.get("status") == "pending" else "已审核")
     ]
     return _layout_record(title, fields, data, tail_fields=tail)
 
@@ -273,7 +273,7 @@ def build_update_markdown(data, old):
         return None
     new_st = data.get("status", "submitted")
     old_st = (old or {}).get("status", "submitted")
-    # 提单动作：出库记录状态从非已提单变为已提单
+    # 审核动作：出库记录状态从非已审核变为已审核
     if new_st == "submitted" and old_st != "submitted":
         fields = [
             ("申请人", data.get("applicant", "") or "-"),
@@ -286,10 +286,10 @@ def build_update_markdown(data, old):
         fields += [("用途", data.get("purpose", "") or "-")]
         tail = [
             ("时间", data.get("time", "") or "-"),
-            ("状态", "✅ 已提单")
+            ("状态", "✅ 已审核")
         ]
-        return _layout_record("### 📤 出入库登记 · 出库已提单", fields, data, tail_fields=tail)
-    # 取消提单（已提单→未提单）
+        return _layout_record("### 📤 出入库登记 · 出库已审核", fields, data, tail_fields=tail)
+    # 撤销审核（已审核→未审核）
     if old_st == "submitted" and new_st == "pending":
         fields = [
             ("申请人", data.get("applicant", "") or "-"),
@@ -300,7 +300,7 @@ def build_update_markdown(data, old):
         if entity:
             fields.append(("结算法人单位", entity))
         tail = [("时间", data.get("time", "") or "-")]
-        return _layout_record("### ↩️ 出入库登记 · 已撤回未提单", fields, data, tail_fields=tail)
+        return _layout_record("### ↩️ 出入库登记 · 已撤回未审核", fields, data, tail_fields=tail)
     # 其他修改（编辑用途/货品等）
     fields = [
         ("申请人", data.get("applicant", "") or "-"),
@@ -312,7 +312,7 @@ def build_update_markdown(data, old):
         fields.append(("结算法人单位", entity))
     tail = [
         ("时间", data.get("time", "") or "-"),
-        ("状态", "未提单" if new_st == "pending" else "已提单")
+        ("状态", "未审核" if new_st == "pending" else "已审核")
     ]
     return _layout_record("### 📝 出入库登记 · 记录已更新", fields, data, tail_fields=tail)
 
