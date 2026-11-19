@@ -1,0 +1,134 @@
+name: 出库流水台账同步 (金山)
+# 出库提交 → data/records/<id>.json（深圳）/ data-saidis/records/<id>.json（赛迪斯）
+#   → 本 Action 把这条记录写进金山「出库流水台账」的对应子表（一货品一行 + 合计行 + 合并单元格）
+# 删除 → data/deleted/<id>.json → 台账标「已撤销」+ 浅灰（不删行，保流水留痕）
+#
+# 与 WPS 轻维表同步（wps-sync.yml）是两条互不影响的链路：
+#   那个是「库存滚动台账」，这个是「出库流水台账」，各写各的表。
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'data/records/*.json'
+      - 'data/deleted/*.json'
+      - 'data-saidis/records/*.json'
+      - 'data-saidis/deleted/*.json'
+  # 兜底扫描：每小时补「因并发被取消/网络失败」漏掉的记录（已同步的靠指纹跳过）
+  # 错开 wps-sync 的 :20，避免两个 workflow 同时抢同一把标记提交
+  schedule:
+    - cron: '40 * * * *'
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: '全量回填：处理两个仓的全部历史出库记录（一次性）'
+        required: false
+        default: 'false'
+
+# 回写同步标记文件需要写权限（标记路径不在上面的 paths 里，不会自我触发）
+permissions:
+  contents: write
+
+# 串行：同一单的追加/改行必须按顺序落表，否则合并区会错位
+concurrency:
+  group: ledger-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # 需要历史 diff 出本次变更的文件
+
+      - name: Get changed files
+        id: changed
+        run: |
+          # 注意：必须用 bash 数组，写成 `P='a' 'b'` 只有第一个会展开
+          PATHS=('data/records/*.json' 'data/deleted/*.json' 'data-saidis/records/*.json' 'data-saidis/deleted/*.json')
+          if [ "${{ github.event_name }}" = "push" ]; then
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- "${PATHS[@]}" || true)
+          elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.backfill }}" = "true" ]; then
+            FILES=$(git ls-tree -r --name-only HEAD -- "${PATHS[@]}" | sed 's/^/A\t/' || true)
+          else
+            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- "${PATHS[@]}" || true)
+          fi
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # ── 深圳细胞 → 子表「深圳细胞」 ──
+      - name: Sync 深圳细胞
+        env:
+          WEBHOOK: ${{ secrets.WPS_LEDGER_WEBHOOK }}
+          AIRSCRIPT_TOKEN: ${{ secrets.WPS_LEDGER_TOKEN }}
+          FILES: ${{ steps.changed.outputs.files }}
+          BACKFILL: ${{ github.event_name == 'schedule' && 'true' || inputs.backfill }}
+          DATA_PREFIX: data
+          LEDGER_SHEET: 深圳细胞
+          MARKER_FILE: .ledger_synced.json
+        run: python3 .github/scripts/ledger_sync.py
+
+      # ── 赛迪斯 → 子表「赛迪斯」 ──
+      - name: Sync 赛迪斯
+        if: always()
+        env:
+          WEBHOOK: ${{ secrets.WPS_LEDGER_WEBHOOK }}
+          AIRSCRIPT_TOKEN: ${{ secrets.WPS_LEDGER_TOKEN }}
+          FILES: ${{ steps.changed.outputs.files }}
+          BACKFILL: ${{ github.event_name == 'schedule' && 'true' || inputs.backfill }}
+          DATA_PREFIX: data-saidis
+          LEDGER_SHEET: 赛迪斯
+          MARKER_FILE: .ledger_synced_saidis.json
+        run: python3 .github/scripts/ledger_sync.py
+
+      - name: Commit sync markers
+        if: always()
+        run: |
+          HAVE=0
+          for f in .ledger_synced.json .ledger_synced_saidis.json; do
+            if [ -f "$f" ]; then HAVE=1; fi
+          done
+          if [ "$HAVE" = "0" ]; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f .ledger_synced.json .ledger_synced_saidis.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "标记无变化，跳过提交"; exit 0
+          fi
+          git commit -m "chore: update ledger sync marker"
+          # 并发时别的 run 可能已推过 → 冲突必须「两边取并集」，否则标记丢失会让兜底扫描重复写表
+          for i in 1 2 3 4 5; do
+            if git push; then echo "标记已提交(第 $i 次尝试)"; exit 0; fi
+            echo "推送冲突，第 $i 次合并重试…"
+            mkdir -p /tmp/mine && cp .ledger_synced.json /tmp/mine/ 2>/dev/null || true
+            cp .ledger_synced_saidis.json /tmp/mine/ 2>/dev/null || true
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          import json, os
+          for name in ('.ledger_synced.json', '.ledger_synced_saidis.json'):
+              mine_p = os.path.join('/tmp/mine', name)
+              if not os.path.exists(mine_p):
+                  continue
+              mine = json.load(open(mine_p, encoding='utf-8'))
+              try:
+                  theirs = json.load(open(name, encoding='utf-8'))
+              except Exception:
+                  theirs = {}
+              merged = dict(theirs)
+              for k, v in mine.items():
+                  if isinstance(v, dict) and isinstance(merged.get(k), dict) and str(k).startswith('__'):
+                      sub = dict(merged[k]); sub.update(v); merged[k] = sub
+                  else:
+                      merged[k] = v
+              json.dump(merged, open(name, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+              print('合并 %s: 本地%d + 远程%d -> %d' % (name, len(mine), len(theirs), len(merged)))
+          PY
+            git add -f .ledger_synced.json .ledger_synced_saidis.json 2>/dev/null || true
+            git diff --cached --quiet && { echo "合并后无差异，无需提交"; exit 0; }
+            git commit -m "chore: update ledger sync marker (merged)"
+            sleep $((i * 2))
+          done
+          echo "::warning::标记提交失败，已同步的记录可能被重复写入，请检查台账是否有重复单"
+          exit 0
