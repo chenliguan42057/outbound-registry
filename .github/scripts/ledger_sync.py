@@ -162,7 +162,7 @@ def build_argv(rec):
             "status": status_txt,
         },
         "items": items,
-        "block_rows": len(items) + 1,
+        "block_rows": len(items),   # 一货品一行，不再有合计行
     }
 
 

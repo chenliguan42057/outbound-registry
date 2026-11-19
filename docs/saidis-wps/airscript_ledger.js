@@ -4,7 +4,8 @@
  * 表结构（第 1 行表头）：
  *   A 日期时间 | B 订单号 | C 类型 | D 部门/客户 | E 货品明细 | F 剩余库存 | G 状态 | H 记录ID(隐藏)
  *
- * 一单占 N+1 行（N=货品数，+1 是「合计 N 件」行），A/B/C/D/G 纵向合并。
+ * 一单占 N 行（N=货品数），每个货品一行、各自带自己的剩余库存；
+ * A/B/C/D/G 纵向合并（单行时自动跳过合并）。
  *
  * 配色（2026-11-19 主理人要求：鲜亮淡色，一眼区分订单）：
  *   出库 / 待取货 → 5 色循环：淡蓝 / 淡绿 / 淡黄 / 淡粉 / 淡紫
@@ -226,11 +227,11 @@ function writeOrderBlock(sh, startRow, arg) {
   var h = arg.header || {};
   var total = 0;
   for (var i = 0; i < items.length; i++) total += toNum(items[i].qty);
-  var blockRows = items.length + 1;
+  var blockRows = items.length;   // 2026-11-19：不再写「合计」行，几个货品就几行
 
   for (var k = 0; k < blockRows; k++) {
     var row = startRow + k;
-    var isTotal = (k === items.length);
+    // 单级字段只在首行写值（合并后其余格会被合并覆盖）
     if (k === 0) {
       setCellValue(sh, 1, row, h.datetime || "");
       setCellValue(sh, 2, row, h.orderNo || "");
@@ -238,14 +239,9 @@ function writeOrderBlock(sh, startRow, arg) {
       setCellValue(sh, 4, row, h.dept || "");
       setCellValue(sh, 7, row, h.status || "");
     }
-    if (isTotal) {
-      setCellValue(sh, 5, row, "合计 " + total + TOTAL_SUFFIX);
-      setCellValue(sh, 6, row, "");
-    } else {
-      var it = items[k];
-      setCellValue(sh, 5, row, it.name + " × " + toNum(it.qty));
-      setCellValue(sh, 6, row, (it.stock === null || it.stock === undefined) ? "" : toNum(it.stock));
-    }
+    var it = items[k];
+    setCellValue(sh, 5, row, it.name + " × " + toNum(it.qty));
+    setCellValue(sh, 6, row, (it.stock === null || it.stock === undefined) ? "" : toNum(it.stock));
     setCellValue(sh, RID_COL, row, arg.rid || "");
   }
 
