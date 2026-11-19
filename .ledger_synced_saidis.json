@@ -1,1 +1,18 @@
-{}
+{
+  "mwlsn9kiki14b": {
+    "fp": "b1f1446f42c2d5b4",
+    "sheet": "赛迪斯",
+    "row": 2,
+    "rows": 1,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 150,
+        "stock": 261
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-19T13:10:00Z"
+  }
+}
