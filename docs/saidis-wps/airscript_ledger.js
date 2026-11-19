@@ -363,3 +363,5 @@ function main() {
     return { ok: false, error: String(err && err.message ? err.message : err) };
   }
 }
+
+return main();
