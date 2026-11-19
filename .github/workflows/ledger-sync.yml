@@ -67,6 +67,7 @@ jobs:
           DATA_PREFIX: data
           LEDGER_SHEET: 深圳细胞
           MARKER_FILE: .ledger_synced.json
+          LEDGER_SINCE: '2026-11-18'
         run: python3 .github/scripts/ledger_sync.py
 
       # ── 赛迪斯 → 子表「赛迪斯」 ──
@@ -80,6 +81,7 @@ jobs:
           DATA_PREFIX: data-saidis
           LEDGER_SHEET: 赛迪斯
           MARKER_FILE: .ledger_synced_saidis.json
+          LEDGER_SINCE: '2026-11-18'
         run: python3 .github/scripts/ledger_sync.py
 
       - name: Commit sync markers

@@ -34,6 +34,8 @@ BACKFILL = (os.environ.get("BACKFILL") or "").strip().lower() in ("1", "true", "
 DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()
 SHEET = (os.environ.get("LEDGER_SHEET") or "深圳细胞").strip()
 MARKER = (os.environ.get("MARKER_FILE") or ".ledger_synced.json").strip()
+# 台账起始日：早于此日的记录不进台账（主理人 2026-11-19 定：只导 2026-11-18 起）
+SINCE = (os.environ.get("LEDGER_SINCE") or "2026-11-18").strip()
 
 
 def log(msg):
@@ -216,6 +218,11 @@ def process_record(path, marker):
     rid = str(rec.get("id") or "").strip()
     if not rid:
         return "bad", "缺 id"
+
+    # 起始日过滤：早于 SINCE 的历史记录不写台账
+    day = str(rec.get("time") or "")[:10]
+    if day and day < SINCE:
+        return "skip", "早于 %s，不进台账" % SINCE
 
     argv = build_argv(rec)
     if not argv:
