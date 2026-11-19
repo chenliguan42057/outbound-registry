@@ -30,6 +30,9 @@ concurrency:
 
 jobs:
   sync:
+    # ⛔ 2026-11-19 主理人要求：旧金山库存滚动台账已弃用（改用 cppXUAzEuptc 流水台账 / ledger-sync.yml）
+    #    保留文件留档。恢复方法：删掉下面这行 if: false。
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
