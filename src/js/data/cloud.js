@@ -1448,14 +1448,14 @@
     return { ok: ok, remain: remain };
   }
 
-  /* ================= 钉钉推送总开关（2026-10-29 主理人要求） =================
-     已切断本系统与钉钉的联系：所有推送出口在此统一短路，不再向云端写 notify 事件文件，
-     GitHub Actions 侧因此不会再有新事件可消费（对应 17 个钉钉 workflow 亦已 job 级停用）。
-     要恢复推送，两处都要改：
-       ① 把下面的 false 改回 true；
-       ② 删掉 .github/workflows 下 17 个钉钉 workflow 里的 `if: false` 行。
-     只改一处会出现「写了没人读」或「读了没得写」的半吊子状态。 */
-  var DINGTALK_PUSH_ENABLED = false;
+  /* ================= 钉钉推送总开关（2026-11-19 主理人要求恢复） =================
+     2026-10-29 曾整体切断；2026-11-19 按主理人要求恢复推送：
+       ① 本开关置回 true；
+       ② .github/workflows 下 17 个钉钉 workflow 的 job 级 `if: false` 已同步删除。
+     注意：定时推送（schedule）早在 2026-09-23 已按主理人要求注释停用，本次没有恢复，
+     所以不会每日/每周定时刷屏 —— 恢复的只是「有事件才推」的登记 / 提醒通知。
+     要再次切断：把下面的 true 改回 false，并给这 17 个 workflow 加回 `if: false`。 */
+  var DINGTALK_PUSH_ENABLED = true;
 
   /** 供 UI 判断是否还允许推送（页面据此显示「已停用」提示并禁用发送按钮） */
   function dingtalkPushEnabled() { return DINGTALK_PUSH_ENABLED === true; }
