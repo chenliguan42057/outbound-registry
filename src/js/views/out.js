@@ -758,8 +758,9 @@
       }
       if (r.pushed) {
         watchWpsReceipt(rec);
-        /* 2026-09-29 方案 A：来自自动识别的单，正式提交成功后再补一条钉钉确认（用最终实际数据） */
-        if (rcKind && Cloud.pushRecognizeConfirm) Cloud.pushRecognizeConfirm(rec, rcKind);
+        /* 2026-11-19 主理人要求「一单只推一条」：取消原「识别确认」补推。
+           pushRecord 的登记通知已把这一单推过一次，再补推就是重复刷屏。
+           rcKind 仍在上方取一次即清，仅为清掉内存标记。 */
       }
     }).catch(function (e) {
       renderRecentBox();   // 失败态：让大框里立刻出现 ⚠️ 未上传成功 + 重试按钮
@@ -1150,6 +1151,53 @@
   window.App = window.App || {};
   window.App.Views = window.App.Views || {};
   /**
+   * 自动识别「直接出库」（2026-11-19 主理人要求）：识别页确认后一步生成出库记录。
+   * 目的：不再把用户丢回出库登记页二次填表 —— 识别完点一下确认，记录直接进「出库记录」。
+   * 口径与 submit() 新建完全一致（改这里必须同步改 submit，否则报表/库存口径分叉）：
+   *   status=pending（未提单）/ freezeStock=true（未提单只冻结占用）/ affectsStock=true / 自动单号
+   *   结算法人 = 当前系统默认（与表单默认值同源，绝不自动跨法人）
+   *   用途 = 首个预设（与 fillRecognized 回填口径一致）
+   * 钉钉：只走 pushRecord 这一条登记通知，不再补推「识别确认」——同一单只推一次。
+   */
+  function quickCreate(d) {
+    d = d || {};
+    var items = (d.items || []).filter(function (it) { return it && it.name && it.qty > 0; });
+    if (!items.length) return null;
+    var rec = Records.create({
+      type: "out",
+      fromRecognize: true,
+      time: Util.nowLocal(),
+      picker: d.picker || "",
+      applicant: d.applicant || d.dept || "",
+      dept: d.dept || "",
+      note: "自动识别",
+      purpose: d.purpose || (Config.PURPOSE_PRESETS || [])[0] || "",
+      entity: DEFAULT_ENTITY(),
+      items: items,
+      photos: [],
+      affectsStock: true,
+      status: "pending",
+      orderNo: genOrderNo(),
+      freezeStock: true
+    });
+    try { Store.addHistory(Config.DEPT_HISTORY_KEY, rec.dept); } catch (e) {}
+    try { Store.addHistory(Config.PICKER_HISTORY_KEY, rec.picker); } catch (e) {}
+    try { Store.addHistory(Config.APPLICANT_HISTORY_KEY, rec.applicant); } catch (e) {}
+    if (Cloud.enqueue) Cloud.enqueue(rec.id);
+    Cloud.pushRecord(rec).then(function (ok) {
+      return Cloud.flushQueue().then(function (fres) {
+        var remain = (fres && fres.remain) || 0;
+        if (!ok || remain > 0) {
+          Util.toast("⚠️ 记录已存本机，" + (remain || 1) + " 条未同步云端，可到「云同步」页一键重推", true);
+        }
+      });
+    })["catch"](function () {
+      Util.toast("⚠️ 记录已存本机，云端同步失败，可到「云同步」页一键重推", true);
+    });
+    return rec;
+  }
+
+  /**
    * 自动识别回填（2026-09-26）：由「自动识别」页经 Views.recognize.takePending 传入。
    * @param {{dept?:string, picker?:string, applicant?:string, purpose?:string, items?:Array<{name:string,qty:number}>}} d
    * 出库页比待取货多出三项，按主理人 2026-09-26 确认的口径处理：
@@ -1181,5 +1229,5 @@
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
   }
 
-  window.App.Views.out = { render: render, edit: edit, fill: fillRecognized };
+  window.App.Views.out = { render: render, edit: edit, fill: fillRecognized, quickCreate: quickCreate };
 })();

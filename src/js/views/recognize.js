@@ -660,7 +660,11 @@
     return data;
   }
 
-  /* ---------- 推送钉钉（2026-09-28 主理人要求） ----------
+  /* ---------- 推送钉钉（2026-09-28 引入 / 2026-11-19 停用） ----------
+     ⛔ 已不再调用：主理人 2026-11-19 要求「自动识别只在钉钉推一次」，
+        识别阶段不再预推，统一由正式登记（pushRecord）那一条通知承担。
+        下列实现仅留档，勿再在识别流程里调用（否则又会一单推好几条）。
+     以下为 2026-09-28 的原始设计说明：
 
      自动识别结果确认「填入表单」时，按目标类型补推一条钉钉通知：
        待取货 → 📦 新待取货登记 / 出库 → 🔔 出库登记 / 入库 → 🔔 入库登记
@@ -750,8 +754,37 @@
       }
     } catch (e) {}
 
-    /* 2026-09-28：填入表单的同时推送钉钉群（出库/入库/调拨三种格式，跟随当前仓库） */
-    pushRecognizedToDingTalk(data);
+    /* 2026-11-19 主理人要求（两条一并办）：
+       ① 出库不再跳到登记页二次填表 —— 识别结果直接小框核对，点「确认出库」就生成出库记录；
+       ② 钉钉一单只推一条 —— 原「识别回填预推」＋「提交后补推确认」全部取消，
+          只保留正式登记那一条通知，不再连推好几次。 */
+    if (activeTarget === "out") {
+      var O = window.App.Views && window.App.Views.out;
+      if (!O || !O.quickCreate) {
+        Util.toast("出库模块未就绪，请刷新页面后重试", true);
+        return;
+      }
+      UI.confirmSubmit({
+        title: "确认这一单直接出库？",
+        okText: "确认出库",
+        meta: [
+          ["领取人", data.picker || ""],
+          ["部门 / 领取单位", data.dept || ""],
+          ["申请人", data.applicant || ""],
+          ["结算法人", (Config.Sys && Config.Sys.entity) ? Config.Sys.entity() : ""],
+          ["领取时间", String(Util.nowLocal() || "").replace("T", " ")]
+        ],
+        items: data.items || [],
+        extras: ['<div class="cf-photo">点「确认出库」后直接记入「出库记录」，不用再填表</div>']
+      }).then(function (ok) {
+        if (!ok) return;
+        var rec = O.quickCreate(data);
+        if (!rec) { Util.toast("没有可出库的货品，请检查数量", true); return; }
+        Util.toast("✅ 已出库 " + (rec.orderNo || "") + "（未提单，可在出库记录里提单）");
+        try { window.App.Router.navigate("/app/out-records"); } catch (e3) {}
+      });
+      return;
+    }
 
     pending = { target: activeTarget, data: data };
     var mod = TARGETS[activeTarget].module;
