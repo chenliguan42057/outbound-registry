@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ledger_sync.py — 把「出库登记」记录推送到金山「出库流水台账」（双仓各一个子表）。
+ledger_sync.py — 把「出入库登记」记录推送到金山「流水台账」（双仓各一个子表）。
 
-触发：GitHub Actions (ledger-sync.yml)
-  - push 到 data/records/*.json 或 data-saidis/records/*.json → 只处理本次变更
-  - schedule / workflow_dispatch(backfill=true) → 全量扫描，已同步的靠指纹跳过
+覆盖的业务操作（与前端一一对应）：
+  出库登记            → 追加一行块，类型「出库」，状态 未审核/已审核，5 色轮转
+  自动识别出库        → 同上，类型标「出库(识别)」
+  待取货转出库        → 同上，类型标「待取货」
+  入库登记            → 类型「⬇ 入库」，整行淡红（醒目）
+  调拨出 / 调拨入     → 类型「调拨出」「⬇ 调拨入」，灰底 / 淡红
+  先借后还·借出       → 类型「借出」，淡紫，状态 借出中/已结清
+  先借后还·差额单     → 类型「差额」，灰底
+  审核 / 撤销审核     → 只改状态列，不新增行
+  编辑已完成的单      → 整块重写（行数变了也能处理）
+  删除（墓碑）        → 状态「已撤销」+ 整行灰，不删行
 
-与 wps_sync.py 的区别（别混）：
-  wps_sync.py    = 库存滚动台账（每货品一对[发放/库存]列，库存由金山脚本推算）
-  ledger_sync.py = 出库流水台账（固定 6 列，一货品一行，剩余库存取系统快照，不做推算）
-
-幂等（内容指纹，照抄 wps_sync 口径）：
-  .ledger_synced.json / .ledger_synced_saidis.json 里按 rec.id 存 fp：
-    fp 一致           → 跳过
-    只有状态变了       → update_ledger_status（只改 F 列，不碰结构）
-    内容变了（含货品） → update_ledger（金山侧拆合并→整块重写→再合并）
-  删除（deleted/）    → revoke_ledger（标「已撤销」+ 浅灰，不删行）
+幂等：.ledger_synced.json / .ledger_synced_saidis.json 按 rec.id 存内容指纹；
+      指纹一致跳过；只有状态变 → update_ledger_status；其它 → update_ledger。
 """
 
 import hashlib
@@ -31,7 +31,6 @@ TOKEN = (os.environ.get("AIRSCRIPT_TOKEN") or "").strip()
 FILES = (os.environ.get("FILES") or "").strip()
 BACKFILL = (os.environ.get("BACKFILL") or "").strip().lower() in ("1", "true", "yes")
 
-# 双仓：深圳默认 data/深圳细胞；赛迪斯 workflow 注入 data-saidis/赛迪斯
 DATA_ROOT = (os.environ.get("DATA_PREFIX") or "data").strip()
 SHEET = (os.environ.get("LEDGER_SHEET") or "深圳细胞").strip()
 MARKER = (os.environ.get("MARKER_FILE") or ".ledger_synced.json").strip()
@@ -65,7 +64,7 @@ def save_marker(m):
 
 
 def fmt_dt(time_str):
-    """'2026-11-19T15:37' -> '2026/11/19 15:37'（无前导零，照金山台账习惯）"""
+    """'2026-11-19T15:37' -> '2026/11/19 15:37'"""
     if not time_str:
         return ""
     s = str(time_str).strip()
@@ -81,29 +80,47 @@ def fmt_dt(time_str):
     return (date_txt + " " + t).strip()
 
 
-def is_out(rec):
-    """出库判定：type 缺省或 'out'（全代码口径 (r.type || 'out')）"""
-    return (rec.get("type") or "out") != "in"
-
-
 def status_text(rec):
+    """状态列文案：pending→未审核，其余→已审核"""
     if (rec.get("status") or "submitted") == "pending":
         return "未审核"
     return "已审核"
 
 
-def is_gray(rec):
-    """非正常出货单据 → 台账整行浅灰：调拨、先借后还差额单"""
-    if rec.get("transferRole") or (rec.get("source") == "调拨出库"):
-        return True
+def kind_of(rec):
+    """返回 (typeText, colorKey, statusText)
+    colorKey: in=淡红 / borrow=淡紫 / gray=淡灰 / cycle=5色轮转
+    优先级：调拨 > 入库 > 差额 > 借出 > 识别 > 待取货 > 普通
+    """
+    is_in = (rec.get("type") or "out") == "in"
+    role = rec.get("transferRole") or ""
+    source = rec.get("source") or ""
+
+    if role == "in" or source == "调拨入库":
+        return ("⬇ 调拨入", "in", "已调拨")
+    if role == "out" or source == "调拨出库":
+        return ("调拨出", "gray", "已调拨")
+
+    if is_in:
+        return ("⬇ 入库", "in", "入库")
+
     if rec.get("fromBorrowId"):
-        return True
-    return False
+        return ("差额", "gray", status_text(rec))
+
+    if rec.get("borrowed"):
+        return ("借出", "borrow", "已结清" if rec.get("borrowDone") else "借出中")
+
+    if rec.get("fromRecognize"):
+        return ("出库(识别)", "cycle", status_text(rec))
+
+    if rec.get("pickupId"):
+        return ("待取货", "cycle", status_text(rec))
+
+    return ("出库", "cycle", status_text(rec))
 
 
 def order_no_of(rec):
-    """台账 B 列「订单号」= 客户 JY 号（即 picker）。
-       没有 picker 时依次回退：调拨单号 → 记录 id 前 8 位，保证这列永远不空。"""
+    """B 列：优先客户 JY 号（picker）；没有则回退 调拨单号 / 记录ID前缀"""
     p = str(rec.get("picker") or "").strip()
     if p:
         return p
@@ -114,7 +131,6 @@ def order_no_of(rec):
 
 
 def build_argv(rec):
-    """组装金山 argv（一单 → N+1 行）"""
     items = []
     for it in (rec.get("items") or []):
         nm = str(it.get("name") or "").strip()
@@ -132,38 +148,38 @@ def build_argv(rec):
         items.append({"name": nm, "qty": qty, "stock": stock})
     if not items:
         return None
-    header = {
-        "datetime": fmt_dt(rec.get("time")),
-        "orderNo": order_no_of(rec),
-        "dept": str(rec.get("dept") or "").strip(),
-        "status": status_text(rec),
-    }
+
+    type_text, color_key, status_txt = kind_of(rec)
     return {
         "sheet_name": SHEET,
         "rid": str(rec.get("id") or ""),
-        "header": header,
+        "colorKey": color_key,
+        "header": {
+            "datetime": fmt_dt(rec.get("time")),
+            "orderNo": order_no_of(rec),
+            "typeText": type_text,
+            "dept": str(rec.get("dept") or "").strip(),
+            "status": status_txt,
+        },
         "items": items,
-        "gray": is_gray(rec),
         "block_rows": len(items) + 1,
     }
 
 
 def fingerprint(argv):
-    """内容指纹：只取会落到台账的字段，sha1 前 16 位"""
     h = {
         "dt": argv["header"]["datetime"],
         "no": argv["header"]["orderNo"],
+        "ty": argv["header"]["typeText"],
         "dept": argv["header"]["dept"],
         "st": argv["header"]["status"],
-        "gray": bool(argv.get("gray")),
+        "ck": argv.get("colorKey"),
         "items": [[i["name"], i["qty"], i["stock"]] for i in argv["items"]],
     }
-    raw = json.dumps(h, ensure_ascii=False, sort_keys=True)
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha1(json.dumps(h, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
 
 def post_to_airscript(argv):
-    """POST 到金山 AirScript webhook；返回解析后的 result（失败抛错）"""
     body = {"Context": {"argv": argv}}
     req = urllib.request.Request(
         WEBHOOK,
@@ -192,7 +208,6 @@ def same_items(a, b):
 
 
 def process_record(path, marker):
-    """处理一条记录文件；返回 (状态, 说明)"""
     try:
         rec = load_json(path)
     except Exception as e:
@@ -201,8 +216,6 @@ def process_record(path, marker):
     rid = str(rec.get("id") or "").strip()
     if not rid:
         return "bad", "缺 id"
-    if not is_out(rec):
-        return "skip", "入库单不进出库台账"
 
     argv = build_argv(rec)
     if not argv:
@@ -211,15 +224,15 @@ def process_record(path, marker):
     fp = fingerprint(argv)
     prev = marker.get(rid) or {}
     prev_fp = prev.get("fp")
-
     if prev_fp == fp:
-        return "skip", "内容未变（指纹一致）"
+        return "skip", "内容未变"
 
-    # 决策：新单 → 追加；只有状态变 → 只改状态；其它 → 整块重写
     mode = "append_ledger"
     if prev_fp:
-        prev_items = prev.get("items") or []
-        if same_items(prev_items, argv["items"]):
+        only_status = (same_items(prev.get("items") or [], argv["items"])
+                       and prev.get("typeText") == argv["header"]["typeText"]
+                       and prev.get("colorKey") == argv["colorKey"])
+        if only_status:
             mode = "update_ledger_status"
             argv["status"] = argv["header"]["status"]
         else:
@@ -229,14 +242,11 @@ def process_record(path, marker):
     try:
         res = post_to_airscript(argv)
     except Exception as e:
-        marker.setdefault("__fail__", {})[rid] = {"at": now_iso(), "err": str(e)[:200],
-                                                  "count": int((marker.get("__fail__", {}).get(rid, {}) or {}).get("count", 0)) + 1}
+        marker.setdefault("__fail__", {})[rid] = {"at": now_iso(), "err": str(e)[:200]}
         return "fail", "推送失败: %s" % e
 
-    ok = res.get("ok", True) is not False
-    if not ok:
-        marker.setdefault("__fail__", {})[rid] = {"at": now_iso(), "err": str(res.get("error"))[:200],
-                                                  "count": int((marker.get("__fail__", {}).get(rid, {}) or {}).get("count", 0)) + 1}
+    if res.get("ok", True) is False:
+        marker.setdefault("__fail__", {})[rid] = {"at": now_iso(), "err": str(res.get("error"))[:200]}
         return "fail", "金山返回失败: %s" % res.get("error")
 
     if isinstance(marker.get("__fail__"), dict):
@@ -248,13 +258,14 @@ def process_record(path, marker):
         "row": res.get("row") or prev.get("row") or 0,
         "rows": res.get("rows") or prev.get("rows") or 0,
         "items": argv["items"],
+        "typeText": argv["header"]["typeText"],
+        "colorKey": argv["colorKey"],
         "at": now_iso(),
     }
-    return "ok", "%s 完成（行 %s）" % (mode, res.get("row"))
+    return "ok", "%s（行 %s）" % (mode, res.get("row"))
 
 
 def process_tombstone(path, marker):
-    """删除记录 → 台账标「已撤销」+ 浅灰（不删行）"""
     try:
         t = load_json(path)
     except Exception as e:
@@ -262,10 +273,11 @@ def process_tombstone(path, marker):
     rid = str(t.get("id") or "").strip()
     if not rid:
         return "bad", "墓碑缺 id"
-    if not (marker.get(rid)):
-        return "skip", "台账里本来就没有，忽略"
-    if (marker.get(rid) or {}).get("revoked"):
-        return "skip", "已标记过撤销"
+    entry = marker.get(rid) or {}
+    if not entry:
+        return "skip", "台账里没有，忽略"
+    if entry.get("revoked"):
+        return "skip", "已标记撤销"
 
     argv = {"mode": "revoke_ledger", "sheet_name": SHEET, "rid": rid}
     try:
@@ -275,7 +287,6 @@ def process_tombstone(path, marker):
     if res.get("ok", True) is False:
         return "fail", "撤销被拒: %s" % res.get("error")
 
-    entry = marker.get(rid) or {}
     entry["revoked"] = True
     entry["at"] = now_iso()
     marker[rid] = entry
@@ -283,11 +294,9 @@ def process_tombstone(path, marker):
 
 
 def main():
-    log("=== 出库流水台账同步开始 === 仓=%s 子表=%s 标记=%s" % (DATA_ROOT, SHEET, MARKER))
+    log("=== 流水台账同步 === 仓=%s 子表=%s" % (DATA_ROOT, SHEET))
     if not WEBHOOK or not TOKEN:
-        # 未配置凭证时「安静退出」而不是报错：代码可以先上线，
-        # 等主理人把 WPS_LEDGER_WEBHOOK / WPS_LEDGER_TOKEN 配好后自动生效，期间不刷红色失败。
-        log("⚠️ 未配置 WPS_LEDGER_WEBHOOK / WPS_LEDGER_TOKEN，本次跳过（不写标记，配好后会自动补）")
+        log("⚠️ 未配置 WPS_LEDGER_WEBHOOK / WPS_LEDGER_TOKEN，本次跳过（不写标记，配好后自动补）")
         return
     if not FILES:
         log("没有变更文件，结束")
@@ -304,10 +313,7 @@ def main():
         parts = line.split("\t")
         action = (parts[0] or "").strip().upper()
         path = (parts[-1] or "").strip()
-        if not path:
-            continue
-        # 只处理本仓文件（深圳 data/ 不会误吃 data-saidis/）
-        if not path.startswith(prefix):
+        if not path or not path.startswith(prefix):
             continue
 
         if path.startswith(prefix + "deleted/"):
@@ -316,7 +322,6 @@ def main():
             st, msg = process_tombstone(path, marker)
         elif path.startswith(prefix + "records/"):
             if action == "D":
-                # records 文件被物理删除但没墓碑：按缺省处理，不动台账（墓碑才是权威）
                 skip_n += 1
                 log("  - %s：记录文件被删但无墓碑，跳过" % path)
                 continue
