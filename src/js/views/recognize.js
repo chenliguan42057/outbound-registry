@@ -20,7 +20,7 @@
   var Config = window.App.Config;
 
   var els = null;
-  var activeTarget = "pickups";
+  var activeTarget = "out";   // 2026-11-19 主理人要求：默认选「出库」（原先默认待取货）
   var result = null;        // 最近一次识别结果 {orders, items, ignored}
   var pending = null;       // 待目标视图消费的数据 {target, data}
 
@@ -34,6 +34,12 @@
     out: { label: "出库", module: "" },
     in: { label: "入库", module: "in" }
   };
+
+  /** 主按钮文案：出库走「小框核对 → 直接落库」，不再叫「填入表单」（2026-11-19）。 */
+  function fillBtnText() {
+    if (activeTarget === "out") return "核对并出库";
+    return "填入" + TARGETS[activeTarget].label + "表单";
+  }
 
   /* ---------- 工具 ---------- */
 
@@ -98,8 +104,8 @@
           '<div class="field">' +
             '<label>要填到哪张单？<span class="req">*</span></label>' +
             '<div class="chip-group" id="rcTargetChips">' +
-              '<button type="button" class="chip selected" data-t="pickups">待取货</button>' +
-              '<button type="button" class="chip" data-t="out">出库</button>' +
+              '<button type="button" class="chip" data-t="pickups">待取货</button>' +
+              '<button type="button" class="chip selected" data-t="out">出库</button>' +
               '<button type="button" class="chip" data-t="in">入库</button>' +
             '</div>' +
           '</div>' +
@@ -144,7 +150,7 @@
           '<h2>识别结果 <span class="badge" id="rcSummary"></span></h2>' +
           '<div id="rcResultBody"></div>' +
           '<div class="actions" style="margin-top:12px">' +
-            '<button type="button" class="btn" id="rcFill">填入表单</button>' +
+            '<button type="button" class="btn" id="rcFill">核对并出库</button>' +
             '<span class="rc-kbd">Ctrl + Enter</span>' +
             '<button type="button" class="btn ghost sm" id="rcClearOut" style="margin-left:auto">清空结果</button>' +
           '</div>' +
@@ -176,7 +182,7 @@
       els.targetChips.querySelectorAll(".chip").forEach(function (c) {
         c.classList.toggle("selected", c === btn);
       });
-      if (els.fill) els.fill.textContent = "填入" + TARGETS[activeTarget].label + "表单";   // 文案始终跟随目标页
+      if (els.fill) els.fill.textContent = fillBtnText();   // 文案始终跟随目标页
       if (result) renderResult();
     });
 
@@ -189,6 +195,7 @@
     els.clearOut.addEventListener("click", clearResult);
     els.fill.addEventListener("click", doFill);
     els.dictBtn.addEventListener("click", openDict);
+    els.fill.textContent = fillBtnText();   // 重进页面时按当前目标页纠正文案（默认出库）
 
     /* 粘贴即识别：两个框都监听 paste，粘贴后自动跑一次（体验对齐「粘完就出结果」） */
     [els.orderText, els.itemText].forEach(function (ta) {
@@ -550,7 +557,7 @@
       });
     }
 
-    els.fill.textContent = "填入" + TARGETS[activeTarget].label + "表单";
+    els.fill.textContent = fillBtnText();
     updateTotal();
   }
 
@@ -561,7 +568,7 @@
       if (r.sysName) ok++; else pick++;
     });
     els.summary.textContent = "货品 " + result.items.length + " 项（已对上 " + ok + " / 待确认 " + pick + "）";
-    els.fill.textContent = "填入" + TARGETS[activeTarget].label + "表单";
+    els.fill.textContent = fillBtnText();
     updateTotal();
   }
 
