@@ -33,6 +33,58 @@ var LEDGER_HEADERS = ["日期时间", "订单号", "部门/客户", "货品明�
 var RID_COL = 7;          // G 列：记录ID 锚点（隐藏，勿删）
 var TOTAL_SUFFIX = " 件";
 
+/* ===== 样式（2026-11-19 主理人要求：字体字号统一、表头加粗、淡色区分单据） =====
+   Interior.Color 用 Excel/VBA 的 RGB 次序：r + g*256 + b*65536 */
+var LEDGER_FONT = "微软雅黑";
+var FONT_HEAD = 12;
+var FONT_BODY = 11;
+var BG_HEAD = rgb(217, 232, 225);    // #D9E8E1 淡薄荷
+var FG_HEAD = rgb(47, 74, 64);       // #2F4A40 深绿字
+var BG_WHITE = rgb(255, 255, 255);
+var BG_ALT = rgb(243, 248, 245);     // #F3F8F5 极淡薄荷（隔单交替）
+var BG_GRAY = rgb(237, 234, 228);    // #EDEAE4 差额/调拨单
+var FG_BODY = rgb(60, 72, 69);       // #3C4845 正文深灰
+
+function rgb(r, g, b) {
+  return r + g * 256 + b * 65536;
+}
+
+/** 整块上样式：字体、字号、加粗、字色、底色、居中、自动换行 */
+function styleBlock(sh, r1, r2, isHead, bg) {
+  try {
+    var rg = sh.Range("A" + r1 + ":" + colLetter(RID_COL) + r2);
+    rg.Font.Name = LEDGER_FONT;
+    rg.Font.Size = isHead ? FONT_HEAD : FONT_BODY;
+    rg.Font.Bold = !!isHead;
+    rg.Font.Color = isHead ? FG_HEAD : FG_BODY;
+    rg.Interior.Color = bg;
+    rg.HorizontalAlignment = -4108;   // xlCenter
+    rg.VerticalAlignment = -4108;
+    rg.WrapText = true;
+  } catch (e) {
+    console.log("样式设置失败（不影响数据）: " + e.message);
+  }
+  // 货品明细列左对齐，便于逐行阅读
+  try {
+    sh.Range("D" + r1 + ":D" + r2).HorizontalAlignment = -4131;   // xlLeft
+  } catch (e2) {}
+}
+
+/** 已写入多少“单”（按记录ID去重）——用于隔单交替底色 */
+function countOrders(sh) {
+  var last = findLastDataRow(sh);
+  var seen = {};
+  var n = 0;
+  for (var r = 2; r <= last; r++) {
+    var v = getCellValue(sh, RID_COL, r);
+    if (v !== null && v !== undefined && v !== "") {
+      var k = String(v);
+      if (!seen[k]) { seen[k] = 1; n++; }
+    }
+  }
+  return n;
+}
+
 function colLetter(n) {
   var s = "";
   while (n > 0) {
@@ -87,6 +139,8 @@ function ensureLedgerSheet(sh) {
   try { sh.Columns(RID_COL).Hidden = true; } catch (e3) {
     console.log("隐藏锚点列失败（请人工隐藏 G 列，勿删除）: " + e3.message);
   }
+  // 表头样式：淡薄荷底 + 深绿字 + 加粗 + 12 号
+  styleBlock(sh, 1, 1, true, BG_HEAD);
 }
 
 /** 真实最后数据行（A 列从下往上找，避免 UsedRange 被底色撑大） */
@@ -171,7 +225,10 @@ function writeOrderBlock(sh, startRow, arg) {
   for (var c = 0; c < cols.length; c++) {
     mergeBlock(sh, cols[c], startRow, startRow + blockRows - 1);
   }
-  return { row: startRow, rows: blockRows, total: total };
+  // 样式：差额/调拨单灰底，普通单白/极淡薄荷交替（一眼区分不同单）
+  var bg = arg.gray ? BG_GRAY : (arg.alt ? BG_ALT : BG_WHITE);
+  styleBlock(sh, startRow, startRow + blockRows - 1, false, bg);
+  return { row: startRow, rows: blockRows, total: total, bg: bg };
 }
 
 /** 整行浅灰（撤销 / 非正常出货单据用） */
@@ -225,13 +282,17 @@ function main() {
     if (a.mode === "append_ledger") {
       var sh1 = ledgerSheet(a);
       var existRow = findRowByRid(sh1, a.rid);
+      var startRow1;
       if (existRow) {
-        // 幂等：已存在就按「整块重写」处理，绝不追加第二份
-        unmergeBlock(sh1, existRow, existRow + toNum(a.block_rows || 1) + 5);
+        // 幂等：已存在 → 原位整块重写，绝不追加第二份
+        unmergeBlock(sh1, existRow, existRow + 30);
+        startRow1 = existRow;
+      } else {
+        startRow1 = findLastDataRow(sh1) + 1;
       }
-      var startRow = findLastDataRow(sh1) + 1;
-      var w1 = writeOrderBlock(sh1, startRow, a);
-      if (a.gray) paintRow(sh1, w1.row, w1.row + w1.rows - 1, 15132390);
+      // 隔单交替底色：写入前统计已有单数（奇数单 → 淡薄荷）
+      a.alt = (countOrders(sh1) % 2 === 1);
+      var w1 = writeOrderBlock(sh1, startRow1, a);
       console.log("===== 追加成功: " + JSON.stringify(w1));
       return { ok: true, sheet: a.sheet_name, row: w1.row, rows: w1.rows, total: w1.total };
     }
@@ -244,7 +305,6 @@ function main() {
       // 从该行往下多拆几行（原来占几行不确定，多拆无害：只拆已合并区）
       unmergeBlock(sh2, r2, r2 + 30);
       var w2 = writeOrderBlock(sh2, r2, a);
-      if (a.gray) paintRow(sh2, w2.row, w2.row + w2.rows - 1, 15132390);
       console.log("===== 重写成功: " + JSON.stringify(w2));
       return { ok: true, sheet: a.sheet_name, row: w2.row, rows: w2.rows, total: w2.total };
     }
