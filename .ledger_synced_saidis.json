@@ -65,5 +65,46 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-20T01:52:25Z"
+  },
+  "mwobsch0xkttg": {
+    "fp": "682cf833a40fe1d6",
+    "sheet": "赛迪斯",
+    "row": 11,
+    "rows": 6,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 2,
+        "stock": 111
+      },
+      {
+        "name": "精华液 5支装",
+        "qty": 1,
+        "stock": 1131
+      },
+      {
+        "name": "精华液 单支装",
+        "qty": 7,
+        "stock": 1615
+      },
+      {
+        "name": "面膜 1片装",
+        "qty": 3,
+        "stock": 1334
+      },
+      {
+        "name": "洁面慕斯 50ml",
+        "qty": 1,
+        "stock": 252
+      },
+      {
+        "name": "小鹿牛皮纸袋 大",
+        "qty": 1,
+        "stock": 200
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-20T01:54:04Z"
   }
 }
