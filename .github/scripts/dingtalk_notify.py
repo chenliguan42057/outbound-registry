@@ -178,7 +178,9 @@ def _layout_record(title, fields, data, status_label=None, tail_fields=None):
         for k, v in list(fields) + list(tail_fields or []):
             if k == "状态":
                 status_value = v
-        auto_fields = [("时间", data.get("time", "") or "-")]
+        # 2026-11-20 主理人要求：时间值把 ISO 里的 T 换成空格（2026-11-20 09:53），群里看着顺眼
+        auto_time = str((data or {}).get("time") or "").replace("T", " ") or "-"
+        auto_fields = [("时间", auto_time)]
         auto_entity = str((data or {}).get("entity") or "").strip()
         if auto_entity:
             auto_fields.append(("结算法人单位", auto_entity))

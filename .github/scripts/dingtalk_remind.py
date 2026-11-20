@@ -647,6 +647,12 @@ def main():
 
     # 5) 自动识别提交确认（2026-09-29 新增：识别结果正式提交后补推，带最终实际数据）
     for rc in recognize_confirms:
+        # 2026-11-20 主理人要求：自动识别只推出库信息，不再推「自动识别提单确认完成」这条终态消息。
+        # 理由：出库记录本身已有「新出库登记」「出库已审核」两条正式登记通知，完成态纯属重复刷屏。
+        # 仅跳过 confirmed 阶段；submitted（自动识别已提交）保持原样。
+        if str(rc.get("stage") or "").strip() == "confirmed":
+            print("SKIP recognize-confirm(confirmed)：自动识别只推出库信息，不推完成信息（主理人 2026-11-20）")
+            continue
         text = build_recognize_confirm_markdown(rc)
         if not text:
             print("SKIP recognize-confirm：无货品明细")
