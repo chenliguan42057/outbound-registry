@@ -153,6 +153,60 @@ def calc_stock(base, data_root):
     return stock, last, warn_at
 
 
+# ===== 排序规则（2026-11-20 主理人定稿）=====
+# 品类顺序：精华液 → 面膜 → 洁面慕斯 → 精粹水 → 精粹乳 → 精粹霜
+#          → 礼盒拎袋（同规格内礼盒在前、拎袋在后）→ 化妆包 → 抽绳袋 → 牛皮纸袋
+# 同品类内规格从大到小；未提及的货品按数量从大到小排最后。
+CAT_ORDER = ["精华液", "面膜", "洁面", "精粹水", "精粹乳", "精粹霜",
+             "礼盒拎袋", "化妆包", "抽绳", "纸袋"]
+
+
+def category_of(nm):
+    """返回品类序号；99 = 未提及（按数量排序）"""
+    if "精华液" in nm:
+        return 0
+    if "面膜" in nm:
+        return 1
+    if "洁面" in nm:
+        return 2
+    if "精粹水" in nm:
+        return 3
+    if "精粹乳" in nm:
+        return 4
+    if "精粹霜" in nm:
+        return 5
+    if "礼盒" in nm or "拎袋" in nm:
+        return 6
+    if "化妆包" in nm:
+        return 7
+    if "抽绳" in nm:
+        return 8
+    if "纸袋" in nm:
+        return 9
+    return 99
+
+
+def spec_of(nm):
+    """规格数值：30支装→30、150ml→150、50g→50、单支装→1"""
+    m = re.search(r"(\d+)", nm)
+    if m:
+        return int(m.group(1))
+    if "单支" in nm:
+        return 1
+    return 0
+
+
+def sort_key(nm, qty):
+    cat = category_of(nm)
+    if cat == 99:
+        return (99, -qty, 0, nm)          # 未提及：数量降序
+    if cat == 6:                          # 礼盒/拎袋：先看号，同号礼盒在前
+        size = 4 if "大号" in nm else (3 if "中号" in nm else (2 if "小号" in nm else 1))
+        kind = 0 if "礼盒" in nm else 1
+        return (6, -size, kind, nm)
+    return (cat, -spec_of(nm), 0, nm)     # 规格降序
+
+
 def build_rows(base, data_root):
     """生成库存 sheet 的行：[货品, 当前库存, 最后变动, 标记]"""
     stock, last, warn_at = calc_stock(base, data_root)
@@ -169,8 +223,8 @@ def build_rows(base, data_root):
         else:
             flag = ""
         rows.append([nm, qty, (last.get(nm) or "").replace("T", " "), flag])
-    # 负数/低库存优先，其余按货品名
-    rows.sort(key=lambda r: (0 if r[1] < 0 else (1 if r[1] < warn_at.get(r[0], WARN_AT_DEFAULT) else 2), r[0]))
+    # 按品类 → 规格降序 → 未提及按数量降序
+    rows.sort(key=lambda r: sort_key(r[0], r[1]))
     return rows
 
 
