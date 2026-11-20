@@ -68,6 +68,16 @@ def counts_as_stock(r):
     return True
 
 
+# 历史旧货品名 → 现行名（仅台账侧使用，不改前端 product-map.js）
+# 2026-11-20：赛迪斯早期把「礼盒+拎袋」当套装录入，后来拆成礼盒/拎袋两个 SKU，
+# 旧名残留在历史记录里，不归一会多出 3 行幽灵库存（看着像重复）。
+EXTRA_ALIAS = {
+    "大号礼盒+拎袋": "大号礼盒",
+    "中号礼盒+拎袋": "中号礼盒",
+    "小号礼盒+拎袋": "小号礼盒",
+}
+
+
 def calc_stock(base, data_root):
     """返回 (stock, last_change, warn_at)
 
@@ -95,7 +105,7 @@ def calc_stock(base, data_root):
     name_map = load_name_map(base)
 
     def norm(n):
-        return name_map.get(n, n)
+        return name_map.get(n) or EXTRA_ALIAS.get(n) or n
 
     latest = {}   # nm -> (ts, stock, time_str)
     for f in sorted(glob.glob(os.path.join(base, data_root, "records", "*.json"))):
@@ -200,10 +210,12 @@ def sort_key(nm, qty):
     cat = category_of(nm)
     if cat == 99:
         return (99, -qty, 0, nm)          # 未提及：数量降序
-    if cat == 6:                          # 礼盒/拎袋：先看号，同号礼盒在前
+    if cat == 6:
+        # 礼盒/拎袋：先按号(大>中>小)，同号内 普通礼盒 → 普通拎袋 → 蝴蝶结礼盒 → 蝴蝶结拎袋
         size = 4 if "大号" in nm else (3 if "中号" in nm else (2 if "小号" in nm else 1))
+        variant = 1 if "蝴蝶结" in nm else 0
         kind = 0 if "礼盒" in nm else 1
-        return (6, -size, kind, nm)
+        return (6, -size, variant * 10 + kind, nm)
     return (cat, -spec_of(nm), 0, nm)     # 规格降序
 
 
