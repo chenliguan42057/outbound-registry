@@ -357,6 +357,81 @@ function main() {
       return { ok: true, sheet: a.sheet_name, row: r4, endRow: endRow, status: "已撤销" };
     }
 
+    if (a.mode === "update_stock") {
+      /* 库存 sheet 全量刷新：rows = [[货品, 当前库存, 最后变动, 标记], ...]
+         数据由 Python 侧算好（采信系统 stock 快照 + 盘点差额），这里只负责落表。 */
+      var shS = Application.Sheets(a.sheet_name);
+      if (!shS) throw new Error("找不到子表: " + a.sheet_name);
+      var rows = a.rows || [];
+      var LAST_COL = 4;
+
+      // 先删掉旧数据行（连合并/底色一起清），表头保留
+      var oldLast = findLastDataRow(shS);
+      if (oldLast >= 2) {
+        try { shS.Range("A2:" + colLetter(LAST_COL) + (oldLast + 200)).Delete(); }
+        catch (eD) { console.log("清空库存行失败（忽略）: " + eD.message); }
+      }
+
+      // 表头
+      var SH = ["货品", "当前库存", "最后变动", "标记"];
+      for (var i = 0; i < SH.length; i++) setCellValue(shS, i + 1, 1, SH[i]);
+
+      // 数据
+      for (var r = 0; r < rows.length; r++) {
+        for (var c = 0; c < LAST_COL; c++) {
+          setCellValue(shS, c + 1, r + 2, rows[r][c] === null || rows[r][c] === undefined ? "" : rows[r][c]);
+        }
+      }
+
+      // 列宽
+      try {
+        shS.Range("A:A").ColumnWidth = 26;
+        shS.Range("B:B").ColumnWidth = 12;
+        shS.Range("C:C").ColumnWidth = 18;
+        shS.Range("D:D").ColumnWidth = 16;
+      } catch (eW) {}
+
+      // 表头样式
+      try {
+        var hd = shS.Range("A1:" + colLetter(LAST_COL) + "1");
+        hd.Font.Name = LEDGER_FONT;
+        hd.Font.Size = FONT_HEAD;
+        hd.Font.Bold = true;
+        hd.Font.Color = FG_HEAD;
+        hd.Interior.Color = BG_HEAD;
+        hd.HorizontalAlignment = -4108;
+      } catch (eH) { console.log("库存表头样式失败: " + eH.message); }
+
+      // 数据区样式 + 标记着色
+      if (rows.length) {
+        try {
+          var body = shS.Range("A2:" + colLetter(LAST_COL) + (rows.length + 1));
+          body.Font.Name = LEDGER_FONT;
+          body.Font.Size = FONT_BODY;
+          body.Font.Bold = false;
+          body.Font.Color = FG_BODY;
+          body.Interior.Color = rgb(0xFF, 0xFF, 0xFF);
+          body.HorizontalAlignment = -4108;
+          body.VerticalAlignment = -4108;
+          shS.Range("A2:A" + (rows.length + 1)).HorizontalAlignment = -4131;
+        } catch (eB) { console.log("库存数据样式失败: " + eB.message); }
+
+        for (var q = 0; q < rows.length; q++) {
+          var flag = String(rows[q][3] || "");
+          if (flag.indexOf("负库存") >= 0) {
+            try { shS.Range("A" + (q + 2) + ":" + colLetter(LAST_COL) + (q + 2)).Interior.Color = BG_IN; } catch (e1) {}
+          } else if (flag.indexOf("低库存") >= 0) {
+            try { shS.Range("A" + (q + 2) + ":" + colLetter(LAST_COL) + (q + 2)).Interior.Color = rgb(0xFD, 0xF6, 0xDC); } catch (e2) {}
+          } else if (flag.indexOf("已用完") >= 0) {
+            try { shS.Range("A" + (q + 2) + ":" + colLetter(LAST_COL) + (q + 2)).Interior.Color = BG_GRAY; } catch (e3) {}
+          }
+        }
+      }
+
+      console.log("===== 库存表刷新成功: " + a.sheet_name + " " + rows.length + " 行");
+      return { ok: true, sheet: a.sheet_name, rows: rows.length };
+    }
+
     throw new Error("未知 mode: " + a.mode);
   } catch (err) {
     console.log("===== 流水台账脚本失败: " + (err && err.message ? err.message : err));

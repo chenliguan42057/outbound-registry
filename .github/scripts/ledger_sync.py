@@ -300,6 +300,25 @@ def process_tombstone(path, marker):
     return "ok", "已标记撤销（行 %s）" % res.get("row")
 
 
+def push_stock():
+    """刷新库存 sheet（深圳细胞-库存 / 赛迪斯-库存）。
+    数据由 ledger_stock.build_rows 算好（采信系统 stock 快照 + 盘点差额）。"""
+    try:
+        from ledger_stock import build_rows
+    except Exception as e:
+        log("  ⚠️ 库存模块不可用，跳过库存刷新: %s" % e)
+        return
+    try:
+        rows = build_rows(os.getcwd(), DATA_ROOT)
+        res = post_to_airscript({"mode": "update_stock", "sheet_name": SHEET + "-库存", "rows": rows})
+        if res.get("ok", True) is False:
+            log("  ⚠️ 库存表刷新被拒: %s" % res.get("error"))
+        else:
+            log("  库存表 %s：%d 个货品已刷新" % (SHEET + "-库存", len(rows)))
+    except Exception as e:
+        log("  ⚠️ 库存表刷新失败（不影响流水）: %s" % e)
+
+
 def main():
     log("=== 流水台账同步 === 仓=%s 子表=%s" % (DATA_ROOT, SHEET))
     if not WEBHOOK or not TOKEN:
@@ -346,6 +365,8 @@ def main():
 
     save_marker(marker)
     log("=== 完成：成功 %d / 失败 %d / 跳过 %d ===" % (ok_n, fail_n, skip_n))
+    # 流水处理完，顺手把库存 sheet 刷到最新（新增/删除/编辑/审核都会改变库存）
+    push_stock()
     if fail_n:
         sys.exit(1)
 
