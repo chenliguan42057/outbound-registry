@@ -207,6 +207,24 @@ def sort_key(nm, qty):
     return (cat, -spec_of(nm), 0, nm)     # 规格降序
 
 
+CAT_NAMES = ["精华液", "面膜", "洁面慕斯", "精粹水", "精粹乳", "精粹霜",
+             "礼盒拎袋", "化妆包", "抽绳袋", "牛皮纸袋"]
+# 品类底色（低饱和淡色，一品类一块，视觉上分组）
+CAT_BG = ["#EAF2FA", "#EAF7EE", "#FDF7E4", "#E6F4F4", "#F1ECFA",
+          "#FBEDF0", "#FAF6EE", "#F2F0E9", "#EFF4F0", "#F3F3F3"]
+BG_OTHER = "#FFFFFF"
+
+
+def cat_name(nm):
+    c = category_of(nm)
+    return "其他" if c == 99 else CAT_NAMES[c]
+
+
+def cat_bg(nm):
+    c = category_of(nm)
+    return BG_OTHER if c == 99 else CAT_BG[c]
+
+
 def build_rows(base, data_root):
     """生成库存 sheet 的行：[货品, 当前库存, 最后变动, 标记]"""
     stock, last, warn_at = calc_stock(base, data_root)
@@ -222,9 +240,9 @@ def build_rows(base, data_root):
             flag = "低库存"
         else:
             flag = ""
-        rows.append([nm, qty, (last.get(nm) or "").replace("T", " "), flag])
+        rows.append([cat_name(nm), nm, qty, (last.get(nm) or "").replace("T", " "), flag])
     # 按品类 → 规格降序 → 未提及按数量降序
-    rows.sort(key=lambda r: sort_key(r[0], r[1]))
+    rows.sort(key=lambda r: sort_key(r[1], r[2]))
     return rows
 
 

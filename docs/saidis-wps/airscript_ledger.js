@@ -33,7 +33,7 @@ var LEDGER_FONT = "微软雅黑";
 var FONT_HEAD = 12;
 var FONT_BODY = 11;
 
-var BG_HEAD = rgb(0x8F, 0xBF, 0xA8);   // 表头：稍深薄荷（白字才看得清）
+var BG_HEAD = rgb(0x6E, 0x9C, 0x87);   // 表头：深薄荷（白字醒目，与库存表统一）
 var FG_HEAD = rgb(0xFF, 0xFF, 0xFF);   // 表头白字
 var FG_BODY = rgb(0x3C, 0x48, 0x45);   // 正文深灰
 
@@ -267,6 +267,27 @@ function writeOrderBlock(sh, startRow, arg) {
   return { row: startRow, rows: blockRows, total: total };
 }
 
+// ===== 库存表品类配色（与 Python ledger_stock.CAT_BG 保持一致）=====
+var STOCK_CATS = ["精华液", "面膜", "洁面慕斯", "精粹水", "精粹乳", "精粹霜",
+                  "礼盒拎袋", "化妆包", "抽绳袋", "牛皮纸袋"];
+var STOCK_BG = [
+  rgb(0xEA, 0xF2, 0xFA),   // 精华液 淡蓝
+  rgb(0xEA, 0xF7, 0xEE),   // 面膜 淡绿
+  rgb(0xFD, 0xF7, 0xE4),   // 洁面慕斯 淡黄
+  rgb(0xE6, 0xF4, 0xF4),   // 精粹水 淡青
+  rgb(0xF1, 0xEC, 0xFA),   // 精粹乳 淡紫
+  rgb(0xFB, 0xED, 0xF0),   // 精粹霜 淡粉
+  rgb(0xFA, 0xF6, 0xEE),   // 礼盒拎袋 米白
+  rgb(0xF2, 0xF0, 0xE9),   // 化妆包 米灰
+  rgb(0xEF, 0xF4, 0xF0),   // 抽绳袋 灰绿
+  rgb(0xF3, 0xF3, 0xF3)    // 牛皮纸袋 浅灰
+];
+
+function stockBg(cat) {
+  var i = STOCK_CATS.indexOf(String(cat || ""));
+  return i >= 0 ? STOCK_BG[i] : rgb(0xFF, 0xFF, 0xFF);
+}
+
 function ledgerSheet(a) {
   var name = a.sheet_name;
   if (!name) throw new Error("缺少 sheet_name");
@@ -358,78 +379,101 @@ function main() {
     }
 
     if (a.mode === "update_stock") {
-      /* 库存 sheet 全量刷新：rows = [[货品, 当前库存, 最后变动, 标记], ...]
-         数据由 Python 侧算好（采信系统 stock 快照 + 盘点差额），这里只负责落表。 */
+      /* 库存表刷新：rows = [[分类, 货品, 当前库存, 最后变动, 标记], ...]
+         5 列 + 分类列纵向合并 + 品类分色块。数据由 Python 侧算好，这里只落表。 */
       var shS = Application.Sheets(a.sheet_name);
       if (!shS) throw new Error("找不到子表: " + a.sheet_name);
       var rows = a.rows || [];
-      var LAST_COL = 4;
+      var LAST = 5;
 
-      // 先删掉旧数据行（连合并/底色一起清），表头保留
+      // 删旧行（连合并/底色一起清），表头保留
       var oldLast = findLastDataRow(shS);
       if (oldLast >= 2) {
-        try { shS.Range("A2:" + colLetter(LAST_COL) + (oldLast + 200)).Delete(); }
+        try { shS.Range("A2:" + colLetter(LAST) + (oldLast + 200)).Delete(); }
         catch (eD) { console.log("清空库存行失败（忽略）: " + eD.message); }
       }
 
-      // 表头
-      var SH = ["货品", "当前库存", "最后变动", "标记"];
+      // 表头 + 数据
+      var SH = ["分类", "货品", "当前库存", "最后变动", "标记"];
       for (var i = 0; i < SH.length; i++) setCellValue(shS, i + 1, 1, SH[i]);
-
-      // 数据
       for (var r = 0; r < rows.length; r++) {
-        for (var c = 0; c < LAST_COL; c++) {
-          setCellValue(shS, c + 1, r + 2, rows[r][c] === null || rows[r][c] === undefined ? "" : rows[r][c]);
+        for (var c = 0; c < LAST; c++) {
+          var v = rows[r][c];
+          setCellValue(shS, c + 1, r + 2, (v === null || v === undefined) ? "" : v);
+        }
+      }
+
+      // 分类列合并（同品类跨行合一格）
+      var groups = [];
+      for (var g = 0; g < rows.length; g++) {
+        var cat = String(rows[g][0] || "");
+        if (!groups.length || groups[groups.length - 1][0] !== cat) {
+          groups.push([cat, g + 2, g + 2]);
+        } else {
+          groups[groups.length - 1][2] = g + 2;
+        }
+      }
+      for (var m = 0; m < groups.length; m++) {
+        if (groups[m][2] > groups[m][1]) {
+          try { shS.Range("A" + groups[m][1] + ":A" + groups[m][2]).Merge(); }
+          catch (eM) { console.log("分类列合并失败（忽略）: " + eM.message); }
         }
       }
 
       // 列宽
       try {
-        shS.Range("A:A").ColumnWidth = 26;
-        shS.Range("B:B").ColumnWidth = 12;
-        shS.Range("C:C").ColumnWidth = 18;
-        shS.Range("D:D").ColumnWidth = 16;
+        shS.Range("A:A").ColumnWidth = 12;
+        shS.Range("B:B").ColumnWidth = 26;
+        shS.Range("C:C").ColumnWidth = 12;
+        shS.Range("D:D").ColumnWidth = 18;
+        shS.Range("E:E").ColumnWidth = 14;
       } catch (eW) {}
 
       // 表头样式
       try {
-        var hd = shS.Range("A1:" + colLetter(LAST_COL) + "1");
+        var hd = shS.Range("A1:" + colLetter(LAST) + "1");
         hd.Font.Name = LEDGER_FONT;
         hd.Font.Size = FONT_HEAD;
         hd.Font.Bold = true;
         hd.Font.Color = FG_HEAD;
         hd.Interior.Color = BG_HEAD;
         hd.HorizontalAlignment = -4108;
+        hd.VerticalAlignment = -4108;
       } catch (eH) { console.log("库存表头样式失败: " + eH.message); }
 
-      // 数据区样式 + 标记着色
-      if (rows.length) {
+      // 数据区字体 + 品类底色 + 库存右对齐
+      for (var q = 0; q < groups.length; q++) {
+        var gc = groups[q][0], gr1 = groups[q][1], gr2 = groups[q][2];
+        var bg = stockBg(gc);
         try {
-          var body = shS.Range("A2:" + colLetter(LAST_COL) + (rows.length + 1));
-          body.Font.Name = LEDGER_FONT;
-          body.Font.Size = FONT_BODY;
-          body.Font.Bold = false;
-          body.Font.Color = FG_BODY;
-          body.Interior.Color = rgb(0xFF, 0xFF, 0xFF);
-          body.HorizontalAlignment = -4108;
-          body.VerticalAlignment = -4108;
-          shS.Range("A2:A" + (rows.length + 1)).HorizontalAlignment = -4131;
-        } catch (eB) { console.log("库存数据样式失败: " + eB.message); }
+          var rg = shS.Range("A" + gr1 + ":" + colLetter(LAST) + gr2);
+          rg.Font.Name = LEDGER_FONT;
+          rg.Font.Size = FONT_BODY;
+          rg.Font.Bold = false;
+          rg.Font.Color = FG_BODY;
+          rg.Interior.Color = bg;
+          rg.HorizontalAlignment = -4108;
+          rg.VerticalAlignment = -4108;
+          rg.WrapText = true;
+          shS.Range("A" + gr1 + ":A" + gr2).Font.Bold = true;
+          shS.Range("A" + gr1 + ":A" + gr2).Font.Color = rgb(0x4E, 0x6B, 0x5E);
+          shS.Range("C" + gr1 + ":C" + gr2).HorizontalAlignment = -4152;   // xlRight
+        } catch (eQ) { console.log("库存行样式失败: " + eQ.message); }
+      }
 
-        for (var q = 0; q < rows.length; q++) {
-          var flag = String(rows[q][3] || "");
-          if (flag.indexOf("负库存") >= 0) {
-            try { shS.Range("A" + (q + 2) + ":" + colLetter(LAST_COL) + (q + 2)).Interior.Color = BG_IN; } catch (e1) {}
-          } else if (flag.indexOf("低库存") >= 0) {
-            try { shS.Range("A" + (q + 2) + ":" + colLetter(LAST_COL) + (q + 2)).Interior.Color = rgb(0xFD, 0xF6, 0xDC); } catch (e2) {}
-          } else if (flag.indexOf("已用完") >= 0) {
-            try { shS.Range("A" + (q + 2) + ":" + colLetter(LAST_COL) + (q + 2)).Interior.Color = BG_GRAY; } catch (e3) {}
-          }
+      // 低库存/负库存行单独上色（盖在品类底色上）
+      for (var z = 0; z < rows.length; z++) {
+        var flag = String(rows[z][4] || "");
+        var rowBg = null;
+        if (flag.indexOf("负库存") >= 0) rowBg = BG_IN;
+        else if (flag.indexOf("低库存") >= 0) rowBg = rgb(0xFF, 0xF4, 0xD6);
+        if (rowBg) {
+          try { shS.Range("B" + (z + 2) + ":" + colLetter(LAST) + (z + 2)).Interior.Color = rowBg; } catch (eZ) {}
         }
       }
 
-      console.log("===== 库存表刷新成功: " + a.sheet_name + " " + rows.length + " 行");
-      return { ok: true, sheet: a.sheet_name, rows: rows.length };
+      console.log("===== 库存表刷新成功: " + a.sheet_name + " " + rows.length + " 行 / " + groups.length + " 品类");
+      return { ok: true, sheet: a.sheet_name, rows: rows.length, groups: groups.length };
     }
 
     throw new Error("未知 mode: " + a.mode);
