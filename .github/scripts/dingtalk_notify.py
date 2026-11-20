@@ -168,6 +168,27 @@ def _layout_record(title, fields, data, status_label=None, tail_fields=None):
     status_label: 标题里附加的状态角标（"未提单"/"已提单" 等），可空。
     tail_fields: [(k, v), ...] 追加到字段区末尾（时间/状态等），不再置于货品明细之后。
     """
+    # 2026-11-20 主理人要求：自动识别单（fromRecognize）推送只保留关键 4 项 ——
+    # 时间 → 结算法人单位 → 订单号 → 客户账号（状态若有则留最后）。
+    # 原因：自动识别单的 picker 存的就是订单号（JY…）、dept 存的就是客户账号，
+    # 原「申请人/领取人/部门客户/用途」四行在这里重复且看不懂，全部去掉。
+    # 只影响钉钉文案，不动记录字段与其它通知。
+    if (data or {}).get("fromRecognize"):
+        status_value = ""
+        for k, v in list(fields) + list(tail_fields or []):
+            if k == "状态":
+                status_value = v
+        auto_fields = [("时间", data.get("time", "") or "-")]
+        auto_entity = str((data or {}).get("entity") or "").strip()
+        if auto_entity:
+            auto_fields.append(("结算法人单位", auto_entity))
+        auto_fields.append(("订单号", data.get("picker", "") or "-"))
+        auto_fields.append(("客户账号", data.get("dept", "") or "-"))
+        if status_value:
+            auto_fields.append(("状态", status_value))
+        fields = auto_fields
+        tail_fields = None
+
     # 调拨单号（两仓调拨业务单号 transferNo，2026-09-05 增量）：置字段区最前，调拨通知单号最醒目；
     # 普通记录无该字段，自然跳过不影响。
     transfer_no = str((data or {}).get("transferNo") or "").strip()
