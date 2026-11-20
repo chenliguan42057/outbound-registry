@@ -232,12 +232,11 @@ def build_rows(base, data_root):
     for nm in sorted(stock.keys()):
         qty = stock[nm]
         warn = warn_at.get(nm, WARN_AT_DEFAULT)
+        # 2026-11-20 主理人要求：去掉「低库存」标记，只保留数据异常的提示
         if qty < 0:
             flag = "负库存·需核对"
         elif qty == 0:
             flag = "已用完"
-        elif qty < warn:
-            flag = "低库存"
         else:
             flag = ""
         rows.append([cat_name(nm), nm, qty, (last.get(nm) or "").replace("T", " "), flag])

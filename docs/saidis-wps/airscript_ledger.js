@@ -465,8 +465,7 @@ function main() {
       for (var z = 0; z < rows.length; z++) {
         var flag = String(rows[z][4] || "");
         var rowBg = null;
-        if (flag.indexOf("负库存") >= 0) rowBg = BG_IN;
-        else if (flag.indexOf("低库存") >= 0) rowBg = rgb(0xFF, 0xF4, 0xD6);
+        if (flag.indexOf("负库存") >= 0) rowBg = BG_IN;   // 低库存标记已取消（2026-11-20）
         if (rowBg) {
           try { shS.Range("B" + (z + 2) + ":" + colLetter(LAST) + (z + 2)).Interior.Color = rowBg; } catch (eZ) {}
         }
