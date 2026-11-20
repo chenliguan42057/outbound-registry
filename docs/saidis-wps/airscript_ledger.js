@@ -278,9 +278,9 @@ var STOCK_BG = [
   rgb(0xF1, 0xEC, 0xFA),   // 精粹乳 淡紫
   rgb(0xFB, 0xED, 0xF0),   // 精粹霜 淡粉
   rgb(0xFA, 0xF6, 0xEE),   // 礼盒拎袋 米白
-  rgb(0xF2, 0xF0, 0xE9),   // 化妆包 米灰
-  rgb(0xEF, 0xF4, 0xF0),   // 抽绳袋 灰绿
-  rgb(0xF3, 0xF3, 0xF3)    // 牛皮纸袋 浅灰
+  rgb(0xFC, 0xEB, 0xE2),   // 化妆包 淡蜜桃
+  rgb(0xF1, 0xF6, 0xE3),   // 抽绳袋 淡黄绿
+  rgb(0xED, 0xF1, 0xF5)    // 牛皮纸袋 淡冷灰蓝
 ];
 
 function stockBg(cat) {
@@ -384,7 +384,7 @@ function main() {
       var shS = Application.Sheets(a.sheet_name);
       if (!shS) throw new Error("找不到子表: " + a.sheet_name);
       var rows = a.rows || [];
-      var LAST = 5;
+      var LAST = 4;
 
       // 删旧行（连合并/底色一起清），表头保留
       var oldLast = findLastDataRow(shS);
@@ -394,7 +394,7 @@ function main() {
       }
 
       // 表头 + 数据
-      var SH = ["分类", "货品", "当前库存", "最后变动", "标记"];
+      var SH = ["分类", "货品", "当前库存", "最后变动"];
       for (var i = 0; i < SH.length; i++) setCellValue(shS, i + 1, 1, SH[i]);
       for (var r = 0; r < rows.length; r++) {
         for (var c = 0; c < LAST; c++) {
@@ -459,16 +459,6 @@ function main() {
           shS.Range("A" + gr1 + ":A" + gr2).Font.Color = rgb(0x4E, 0x6B, 0x5E);
           shS.Range("C" + gr1 + ":C" + gr2).HorizontalAlignment = -4152;   // xlRight
         } catch (eQ) { console.log("库存行样式失败: " + eQ.message); }
-      }
-
-      // 低库存/负库存行单独上色（盖在品类底色上）
-      for (var z = 0; z < rows.length; z++) {
-        var flag = String(rows[z][4] || "");
-        var rowBg = null;
-        if (flag.indexOf("负库存") >= 0) rowBg = BG_IN;   // 低库存标记已取消（2026-11-20）
-        if (rowBg) {
-          try { shS.Range("B" + (z + 2) + ":" + colLetter(LAST) + (z + 2)).Interior.Color = rowBg; } catch (eZ) {}
-        }
       }
 
       console.log("===== 库存表刷新成功: " + a.sheet_name + " " + rows.length + " 行 / " + groups.length + " 品类");

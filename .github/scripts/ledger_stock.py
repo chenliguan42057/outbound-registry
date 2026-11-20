@@ -211,7 +211,7 @@ CAT_NAMES = ["精华液", "面膜", "洁面慕斯", "精粹水", "精粹乳", "�
              "礼盒拎袋", "化妆包", "抽绳袋", "牛皮纸袋"]
 # 品类底色（低饱和淡色，一品类一块，视觉上分组）
 CAT_BG = ["#EAF2FA", "#EAF7EE", "#FDF7E4", "#E6F4F4", "#F1ECFA",
-          "#FBEDF0", "#FAF6EE", "#F2F0E9", "#EFF4F0", "#F3F3F3"]
+          "#FBEDF0", "#FAF6EE", "#FCEBE2", "#F1F6E3", "#EDF1F5"]
 BG_OTHER = "#FFFFFF"
 
 
@@ -226,20 +226,13 @@ def cat_bg(nm):
 
 
 def build_rows(base, data_root):
-    """生成库存 sheet 的行：[货品, 当前库存, 最后变动, 标记]"""
+    """生成库存 sheet 的行：[分类, 货品, 当前库存, 最后变动]"""
     stock, last, warn_at = calc_stock(base, data_root)
     rows = []
     for nm in sorted(stock.keys()):
         qty = stock[nm]
-        warn = warn_at.get(nm, WARN_AT_DEFAULT)
-        # 2026-11-20 主理人要求：去掉「低库存」标记，只保留数据异常的提示
-        if qty < 0:
-            flag = "负库存·需核对"
-        elif qty == 0:
-            flag = "已用完"
-        else:
-            flag = ""
-        rows.append([cat_name(nm), nm, qty, (last.get(nm) or "").replace("T", " "), flag])
+        # 2026-11-20 主理人定稿：不标低库存、不标负库存、不标用完 —— 纯数字表，只留 4 列
+        rows.append([cat_name(nm), nm, qty, (last.get(nm) or "").replace("T", " ")])
     # 按品类 → 规格降序 → 未提及按数量降序
     rows.sort(key=lambda r: sort_key(r[1], r[2]))
     return rows
