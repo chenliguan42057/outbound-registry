@@ -537,6 +537,43 @@
       Object.assign({ method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) }, to || {}));
   }
 
+  /** 2026-11-22：把前端算好的「当前全量库存」写成只读镜像 data/stock-snapshot.json。
+      ⚠️ 只写不读：前端任何地方都不读它，库存计算逻辑一行不动，不影响任何业务数据。
+      用途：金山台账直接读这份数写库存 sheet，避免后端复刻算法产生偏差。
+      失败静默——快照推不上去绝不影响出入库业务。 */
+  var _snapLastAt = 0;
+  function pushStockSnapshot() {
+    try {
+      var Stock = window.App.Stock, Config = window.App.Config;
+      if (!Stock || !Stock.getStock || !Config || !Config.PRODUCTS) return;
+      var now = Date.now();
+      if (now - _snapLastAt < 4000) return;   // 4 秒节流：连续操作只推最后一次
+      _snapLastAt = now;
+      var items = {};
+      Config.PRODUCTS.forEach(function (nm) { items[nm] = Stock.getStock(nm); });
+      var d = new Date();
+      var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      var payload = {
+        updatedAt: now,
+        time: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+              "T" + pad(d.getHours()) + ":" + pad(d.getMinutes()),
+        warehouse: Config.Sys.current().id,
+        items: items
+      };
+      var path = Config.Sys.dir("stock-snapshot.json");
+      var base = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path;
+      apiJson(base + "?ref=" + Config.GH.branch).then(function (j) {
+        var body = {
+          message: "chore: stock snapshot",
+          content: Util.b64enc(JSON.stringify(payload)),
+          branch: Config.GH.branch
+        };
+        if (j && j.sha) body.sha = j.sha;
+        return apiJson(base, { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+      }).catch(function (e) { console.warn("[cloud] stock snapshot 跳过:", e && e.message); });
+    } catch (e) { console.warn("[cloud] stock snapshot 异常（忽略）:", e && e.message); }
+  }
+
   /** 删除云端单条记录。返回 true=删除成功（或本就不存在，视为已删）；false=删除失败需重试。
       2026-09-13 修复「删除不彻底」：原实现 catch 后静默 return，导致墓碑已写、记录文件却留在云端，
       形成「墓碑 + 记录并存」的矛盾状态（记录会继续参与库存计算）。现改为显式返回结果，供上层补删。 */
@@ -1164,7 +1201,7 @@
       enqueue(rec.id); return false;
     }
     var ok = await pushWithRetry(rec, opts.fast ? 1 : 3, fastOpt);
-    if (ok) { dequeue(rec.id); LAST_CONFLICT = null; return true; }
+    if (ok) { dequeue(rec.id); LAST_CONFLICT = null; pushStockSnapshot(); return true; }
     if (opts.noQueue) return false;                 // 调拨：失败即失败，绝不落本地队列
     var cf = (LAST_CONFLICT && LAST_CONFLICT.id === rec.id) ? LAST_CONFLICT.action : "";
     LAST_CONFLICT = null;
@@ -1945,6 +1982,7 @@
     quotaWarn: quotaWarn,
     pull: pull,
     push: push,
+    pushStockSnapshot: pushStockSnapshot,
     del: del,
     clearAll: clearAll,
     pushAllLocal: pushAllLocal,
