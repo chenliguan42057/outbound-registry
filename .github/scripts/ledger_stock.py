@@ -237,9 +237,32 @@ def cat_bg(nm):
     return BG_OTHER if c == 99 else CAT_BG[c]
 
 
+def load_snapshot(base, data_root):
+    """前端推来的只读库存镜像（data/stock-snapshot.json）。
+    有它就用它 —— 那是系统自己 Stock.getStock() 算的数，零误差；
+    没有就退回下面的算法兜底。"""
+    p = os.path.join(base, data_root, "stock-snapshot.json")
+    try:
+        d = load_json(p)
+        items = {k: int(v) for k, v in (d.get("items") or {}).items()}
+        return items, int(d.get("updatedAt") or 0), str(d.get("time") or "")
+    except Exception:
+        return {}, 0, ""
+
+
 def build_rows(base, data_root):
     """生成库存 sheet 的行：[分类, 货品, 当前库存, 最后变动]"""
-    stock, last, warn_at = calc_stock(base, data_root)
+    snap, snap_at, snap_time = load_snapshot(base, data_root)
+    if snap:
+        # 优先用前端镜像：与系统显示完全一致
+        stock = snap
+        _, last_map, _ = calc_stock(base, data_root)
+        last = last_map
+        print("[stock] 使用前端快照 %s（%d 个货品）" % (snap_time or "-", len(snap)))
+    else:
+        print("[stock] 无前端快照，回退后端算法")
+        stock, last, warn_at = calc_stock(base, data_root)
+
     rows = []
     for nm in sorted(stock.keys()):
         qty = stock[nm]
