@@ -155,6 +155,18 @@
   }
 
   /** Git Trees API：一次拿全量 path→sha（blob）。失败抛错由调用方降级。 */
+  /* ===== 2026-11-22 「云端变了吗」探针（主理人铁律：可以提速，但绝不能碰数据）=====
+     只做一件事：读 main 分支最新 commit sha（约 300 字节），用来判断这次要不要下载全量目录树。
+     不读记录内容、不写任何文件、不参与库存计算、不改任何记录对象。
+     任何异常（无 token / 403 限流 / 网络错误）一律返回空串，调用方按原逻辑全量同步（fail-open）。 */
+  var PROBE_SHA = "";   // 内存变量：本次会话最后一次「已确认云端与本地一致」的 commit；关页面即失效
+  async function probeHeadSha() {
+    try {
+      var j = await apiJson("https://api.github.com/repos/" + Config.GH.repo + "/git/ref/heads/" + Config.GH.branch);
+      return (j && j.object && j.object.sha) ? String(j.object.sha) : "";
+    } catch (e) { return ""; }
+  }
+
   async function fetchTree() {
     var url = "https://api.github.com/repos/" + Config.GH.repo + "/git/trees/" + Config.GH.branch + "?recursive=1";
     var j = await apiJson(url);
@@ -358,7 +370,12 @@
       返回 syncPull 的结果对象。 */
   async function fullResync(opts) {
     try { localStorage.removeItem(TREE_CACHE_KEY); } catch (e) {}
-    return await syncPull(opts || {});
+    // 2026-11-22：全量重建必须真的全量 —— 清掉已记录的 sha 并显式关掉探针，
+    // 否则云端恰好没变时点「全量重建同步」会被跳过，按钮等于失灵。
+    PROBE_SHA = "";
+    var _o = Object.assign({}, opts || {});
+    _o.skipIfUnchanged = false;
+    return await syncPull(_o);
   }
 
   /** 诊断：返回当前系统的同步状态摘要（云端文件数 vs 本地记录数 vs 缓存命中数）。
@@ -1768,6 +1785,18 @@
     onStatus("同步中…", false);
     try {
       // Git Trees 增量拉取：1 次 tree + 仅变更文件，替代 4 目录 N+1 全量
+      // ===== 2026-11-22 增量探针：云端没变就整段跳过（只省下载，不动数据）=====
+      // 满足三个条件才跳：① 本会话已成功同步过（PROBE_SHA 有值）；② 云端 commit 与上次一致；
+      // ③ 调用方没要求强制刷新。跳过时 State 原样保留 —— 列表、库存、待取货全都不会少一条。
+      if (PROBE_SHA && opts.skipIfUnchanged !== false && (window.App.State.list || []).length > 0) {
+        var _probe = await probeHeadSha();
+        // 两仓隔离：比对键带目录前缀（data/records vs data-saidis/records），
+        // 切仓后绝不会拿深圳的 sha 去跳过赛迪斯的同步；本地空列表也一律不跳（防白屏）。
+        if (_probe && PROBE_SHA === Config.Sys.dir("records") + "|" + _probe) {
+          onStatus("云端无变化，已是最新（省流量跳过下载）", false);
+          return { ok: true, skipped: true, list: window.App.State.list };
+        }
+      }
       var tree = null;
       try { tree = await fetchTree(); } catch (e) { tree = null; }
       var r1 = await pullDir(Config.Sys.dir("records"), tree);
@@ -1883,6 +1912,25 @@
       var statusText = "已同步 " + window.App.State.lastSync.toLocaleString();
       if (cfl && cfl.length) statusText += "（" + cfl.length + " 条冲突已按较新版本保留）";
       onStatus(statusText, false);
+      // ===== 2026-11-22 只在「完整成功」时才记下本次校验过的 commit（四类数据全部对得上才记）=====
+      // records / 待取货 / 备忘录 / 删除墓碑 任何一类条数对不上、或有拉取失败 → PROBE_SHA 清空，
+      // 下次照旧全量。宁可多下载，绝不因为提速少一条数据。
+      try {
+        var _pkN = countCloudJson(tree, Config.Sys.dir("pickups"));
+        var _mmN = countCloudJson(tree, Config.Sys.dir("memos"));
+        var _tmN = countCloudJson(tree, Config.Sys.dir("deleted"));
+        var _allOk = ((r1.failCount || 0) === 0)
+          && (!cloudN || (recs || []).length >= cloudN)
+          && (!_pkN || (pks || []).length >= _pkN)
+          && (!_mmN || (mms || []).length >= _mmN)
+          && (!_tmN || (toms || []).length >= _tmN);
+        if (_allOk) {
+          var _shaOk = await probeHeadSha();
+          PROBE_SHA = _shaOk ? (Config.Sys.dir("records") + "|" + _shaOk) : "";
+        } else {
+          PROBE_SHA = "";
+        }
+      } catch (e) { PROBE_SHA = ""; }
       return { ok: true, list: merged, pickups: pks, memos: mms, tombstones: toms, conflicts: cfl };
     } catch (e) {
       onStatus("同步失败：" + e.message + "（显示本地缓存）", true);

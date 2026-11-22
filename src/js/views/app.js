@@ -727,7 +727,12 @@
     var interval = ms || Config.AUTO_SYNC_INTERVAL_MS;
     nextSyncAt = Date.now() + interval;
     if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null; }
-    autoSyncTimer = setInterval(function () { triggerSync("timer"); }, interval);
+    autoSyncTimer = setInterval(function () {
+      // 2026-11-22：页面在后台（切走标签页/锁屏）时不空转，省 API 额度；
+      // 回到前台由 visibilitychange / focus 立即补一次同步，不会漏数据。
+      if (document.visibilityState === "hidden") return;
+      triggerSync("timer");
+    }, interval);
   }
 
   /** 页面重新可见：立即同步（不等定时器） */
