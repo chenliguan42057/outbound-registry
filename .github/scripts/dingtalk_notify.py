@@ -201,6 +201,11 @@ def _layout_record(title, fields, data, status_label=None, tail_fields=None):
     md = title
     if status_label:
         md += "（{}）".format(status_label)
+    # 2026-11-22 主理人要求：商务授权单（bizAuth=true）最前面加一条醒目提示 ——
+    # 用 # 一级标题（钉钉 actionCard 里最大字号）+ 加粗，放在正文最上方，一眼能看到。
+    # 未点亮（bizAuth 为 false / 无该字段）完全不加，推送与普通记录一模一样。
+    if (data or {}).get("bizAuth"):
+        md = "# 🚨 **未提单但商务已授权出库**\n\n---\n\n" + md
     if photos:
         md += "\n" + photos
     if fields:

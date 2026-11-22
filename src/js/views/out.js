@@ -38,6 +38,38 @@
   function DEFAULT_ENTITY() { return Config.Sys.entity(); }
   /** 当前选中的出货仓库单位（chip 单选，互斥高亮；必填，默认当前系统实体） */
   var selectedEntity = DEFAULT_ENTITY();
+  /* 2026-11-22 主理人要求：商务授权开关（「未提单但商务已授权出库」）。
+     默认 false = 暗色未点亮 = 与普通记录完全一致；点亮后提交，钉钉推送首行放大加粗提示。
+     读记录/编辑时随 bizAuth 字段回填。 */
+  var bizAuthOn = false;
+
+  /** 统一切换商务授权开关的视觉与状态（按钮可能还没渲染，DOM 缺失时只记状态） */
+  function setBizAuth(flag) {
+    bizAuthOn = !!flag;
+    var btn = Util.$("outBizAuth");
+    if (!btn) return;
+    btn.classList.toggle("on", bizAuthOn);
+    // 2026-11-22：亮/暗状态全走内联样式（不动 CSS 三件套，少改文件少踩坑）
+    // 暗态 = 灰底灰字（普通状态，不吸引注意）；亮态 = 薄荷绿高亮 + 光晕（一眼看出已授权）
+    var st = btn.style;
+    st.display = "flex";
+    st.alignItems = "center";
+    st.justifyContent = "center";
+    st.gap = "8px";
+    st.width = "100%";
+    st.padding = "12px 14px";
+    st.borderRadius = "12px";
+    st.fontSize = "15px";
+    st.lineHeight = "1.3";
+    st.cursor = "pointer";
+    st.transition = "all .18s ease";
+    st.border = "1px solid " + (bizAuthOn ? "#8FBFA8" : "#D9E1DD");
+    st.background = bizAuthOn ? "#E8F5EE" : "#F3F5F4";
+    st.color = bizAuthOn ? "#2C6B4F" : "#96A39E";
+    st.fontWeight = bizAuthOn ? "700" : "500";
+    st.boxShadow = bizAuthOn ? "0 0 0 3px rgba(143,191,168,.22)" : "none";
+    btn.setAttribute("aria-pressed", bizAuthOn ? "true" : "false");
+  }
   /* ---------- 「我的提交记录」留痕（2026-09-24 新增） ---------- */
   /** 只记「本机本仓」近 2 小时提交过的单据 id + 时间戳，不存照片（防撑爆 localStorage 配额） */
   var RECENT_TTL = 2 * 60 * 60 * 1000;   // 时效 2 小时
@@ -162,6 +194,28 @@
     photos.attach(Util.$("outPhotoUpload"));
     // 2026-09-26 P2：拍照上传引导（挂在上传框下面，纯文案，不影响上传逻辑）
     if (Formkit && Formkit.photoGuide) Formkit.photoGuide(Util.$("outPhotoUpload"));
+
+    // 2026-11-22 商务授权开关：DOM 插入到「备注」字段之前（不改上面的模板字符串——本文件是 CRLF，
+    // 多行锚点容易失配，沿用 2026-09-24 追加侧栏的既有做法）。
+    // 默认暗色未点亮；点一下变亮 = 有一条「未提单但商务已授权出库」的信息随单提交。
+    var bizAuthField = document.createElement("div");
+    bizAuthField.className = "field";
+    bizAuthField.id = "outBizAuthField";
+    bizAuthField.innerHTML =
+      '<label>商务授权<span class="lbl-note">未提单但商务已同意出库时点亮，提交后钉钉群会出醒目提示</span></label>' +
+      '<button type="button" class="biz-auth-btn" id="outBizAuth" aria-pressed="false">' +
+        '<span class="biz-auth-dot"></span>💡 未提单但商务已授权出库' +
+      '</button>';
+    var noteFieldEl = Util.$("outNote") ? Util.$("outNote").closest(".field") : null;
+    if (noteFieldEl && noteFieldEl.parentNode) noteFieldEl.parentNode.insertBefore(bizAuthField, noteFieldEl);
+    else container.appendChild(bizAuthField);
+    setBizAuth(bizAuthOn);   // 沿用模块级状态（编辑带出来的、或上次会话未重置的）
+    if (Util.$("outBizAuth")) {
+      Util.$("outBizAuth").addEventListener("click", function () {
+        setBizAuth(!bizAuthOn);
+        Util.toast(bizAuthOn ? "已点亮：本条将提示「未提单但商务已授权出库」" : "已熄灭：按普通登记提交");
+      });
+    }
 
     Util.$("outFillNow").addEventListener("click", function () { els.time.value = Util.nowLocal(); });
     els.time.value = Util.nowLocal();
@@ -604,6 +658,7 @@
       note: (els.note && els.note.value || "").trim(),  // 备注非必填，纯追加字段
       purpose: purpose,
       entity: entity,                                    // 结算法人单位必填，纯追加字段（与 note 同类，不破坏 schema）
+      bizAuth: !!bizAuthOn,                              // 商务授权标记（2026-11-22）：true 时钉钉推送首行放大提示；false = 普通记录
       items: items,
       photos: photoList
       // 2026-09-29 加固：affectsStock 不再恒写 true。
@@ -798,6 +853,7 @@
     editingId = null;
     editingOriginalPhotos = null;
     els.submit.textContent = "提交登记";
+    setBizAuth(false);   // 2026-11-22：清空/重置时商务授权开关一并熄灭（回到普通登记）
     els.cancelEdit.style.display = "none";
     UI.clearFieldErrors(els.submit.closest(".card") || document);
     clearDraft();
@@ -814,6 +870,7 @@
     els.applicant.value = r.applicant || "";
     els.dept.value = r.dept || "";
     els.note.value = r.note || "";
+    setBizAuth(!!r.bizAuth);   // 2026-11-22：编辑已有记录时，商务授权开关按记录原值回填
     // 编辑初始化选中态：有值则选中，无值（旧记录/导入记录）必须清空，避免先前选中态残留带出
     selectedPurpose = r.purpose || "";
     renderPurposeChips();
@@ -1171,6 +1228,7 @@
       applicant: d.applicant || d.dept || "",
       dept: d.dept || "",
       note: "自动识别",
+      bizAuth: !!d.bizAuth,    // 2026-11-22：自动识别页点亮「商务授权」时一并写入（false = 普通记录）
       purpose: d.purpose || (Config.PURPOSE_PRESETS || [])[0] || "",
       entity: DEFAULT_ENTITY(),
       items: items,

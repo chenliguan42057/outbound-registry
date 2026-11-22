@@ -183,6 +183,7 @@
         c.classList.toggle("selected", c === btn);
       });
       if (els.fill) els.fill.textContent = fillBtnText();   // 文案始终跟随目标页
+      paintBizAuthBtn();                                    // 商务授权开关只在「出库」目标下显示
       if (result) renderResult();
     });
 
@@ -193,6 +194,32 @@
       els.orderText.focus();
     });
     els.clearOut.addEventListener("click", clearResult);
+    /* 2026-11-22 商务授权开关（自动识别页）：放在「核对并出库」按钮上方；
+       默认暗色未点亮 = 普通记录；点亮 = 这单带 bizAuth=true，钉钉首行放大提示。 */
+    var bizAuthBtn = document.createElement("button");
+    bizAuthBtn.type = "button";
+    bizAuthBtn.id = "rcBizAuth";
+    bizAuthBtn.innerHTML = '💡 未提单但商务已授权出库';
+    bizAuthBtn.addEventListener("click", function () {
+      bizAuthOn = !bizAuthOn;
+      paintBizAuthBtn();
+      Util.toast(bizAuthOn ? "已点亮：这单将提示「未提单但商务已授权出库」" : "已熄灭：按普通登记提交");
+    });
+    function paintBizAuthBtn() {
+      var st = bizAuthBtn.style;
+      st.display = (activeTarget === "out") ? "flex" : "none";   // 只有出库目标页才有这个概念
+      st.alignItems = "center"; st.justifyContent = "center"; st.gap = "8px";
+      st.width = "100%"; st.margin = "0 0 8px"; st.padding = "12px 14px"; st.borderRadius = "12px";
+      st.fontSize = "15px"; st.lineHeight = "1.3"; st.cursor = "pointer"; st.transition = "all .18s ease";
+      st.border = "1px solid " + (bizAuthOn ? "#8FBFA8" : "#D9E1DD");
+      st.background = bizAuthOn ? "#E8F5EE" : "#F3F5F4";
+      st.color = bizAuthOn ? "#2C6B4F" : "#96A39E";
+      st.fontWeight = bizAuthOn ? "700" : "500";
+      st.boxShadow = bizAuthOn ? "0 0 0 3px rgba(143,191,168,.22)" : "none";
+      bizAuthBtn.setAttribute("aria-pressed", bizAuthOn ? "true" : "false");
+    }
+    if (els.fill && els.fill.parentNode) els.fill.parentNode.insertBefore(bizAuthBtn, els.fill);
+    paintBizAuthBtn();
     els.fill.addEventListener("click", doFill);
     els.dictBtn.addEventListener("click", openDict);
     els.fill.textContent = fillBtnText();   // 重进页面时按当前目标页纠正文案（默认出库）
@@ -785,6 +812,7 @@
         extras: ['<div class="cf-photo">点「确认出库」后直接记入「出库记录」，不用再填表</div>']
       }).then(function (ok) {
         if (!ok) return;
+        data.bizAuth = (activeTarget === "out") ? !!bizAuthOn : false;   // 2026-11-22：商务授权标记随单提交
         var rec = O.quickCreate(data);
         if (!rec) { Util.toast("没有可出库的货品，请检查数量", true); return; }
         Util.toast("✅ 已出库 " + (rec.orderNo || "") + "（未审核，可在出库记录里点状态完成审核）");
@@ -813,6 +841,10 @@
     }
     return null;
   }
+
+  /* 2026-11-22 商务授权开关（自动识别页）：默认熄灭 = 普通记录；
+     点亮后这一单会带 bizAuth=true，钉钉推送首行放大提示「未提单但商务已授权出库」。 */
+  var bizAuthOn = false;
 
   function refresh() { updateDictCount(); }
 
