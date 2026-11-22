@@ -809,7 +809,10 @@
           ["领取时间", String(Util.nowLocal() || "").replace("T", " ")]
         ],
         items: data.items || [],
-        extras: ['<div class="cf-photo">点「确认出库」后直接记入「出库记录」，不用再填表</div>']
+        extras: [
+          bizAuthOn ? '<div class="cf-photo" style="color:#C0563F;font-weight:700">🚨 商务授权：已点亮（未提单但商务已授权出库）</div>' : '',
+          '<div class="cf-photo">点「确认出库」后直接记入「出库记录」，不用再填表</div>'
+        ]
       }).then(function (ok) {
         if (!ok) return;
         data.bizAuth = (activeTarget === "out") ? !!bizAuthOn : false;   // 2026-11-22：商务授权标记随单提交

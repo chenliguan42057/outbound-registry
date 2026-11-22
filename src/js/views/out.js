@@ -622,6 +622,7 @@
         ],
         items: items,
         extras: [
+          bizAuthOn ? '<div class="cf-photo" style="color:#C0563F;font-weight:700">🚨 商务授权：已点亮（未提单但商务已授权出库）</div>' : "",
           photos.getPhotos().length
             ? '<div class="cf-photo">📷 附带现场照片 ' + photos.getPhotos().length + ' 张</div>'
             : ""
