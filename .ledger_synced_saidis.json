@@ -209,5 +209,26 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-23T08:25:34Z"
+  },
+  "mwt03rqhdhk0o": {
+    "fp": "66d92bbecbb1f49c",
+    "sheet": "赛迪斯",
+    "row": 31,
+    "rows": 2,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 2,
+        "stock": 109
+      },
+      {
+        "name": "小鹿牛皮纸袋 小",
+        "qty": 1,
+        "stock": 240
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-23T08:25:55Z"
   }
 }
