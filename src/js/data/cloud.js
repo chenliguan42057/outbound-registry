@@ -562,15 +562,21 @@
       };
       var path = Config.Sys.dir("stock-snapshot.json");
       var base = "https://api.github.com/repos/" + Config.GH.repo + "/contents/" + path;
-      apiJson(base + "?ref=" + Config.GH.branch).then(function (j) {
+      // 首次创建时 GET 会抛 404 —— 必须降级为「无 sha 新建」，
+      // 不能像原来那样整体进 catch（那样 PUT 永远不会执行，快照永远生成不出来）
+      var doPut = function (sha) {
         var body = {
           message: "chore: stock snapshot",
           content: Util.b64enc(JSON.stringify(payload)),
           branch: Config.GH.branch
         };
-        if (j && j.sha) body.sha = j.sha;
+        if (sha) body.sha = sha;
         return apiJson(base, { method: "PUT", headers: ghHeaders(), body: JSON.stringify(body) });
-      }).catch(function (e) { console.warn("[cloud] stock snapshot 跳过:", e && e.message); });
+      };
+      apiJson(base + "?ref=" + Config.GH.branch)
+        .then(function (j) { return doPut(j && j.sha); })
+        .catch(function () { return doPut(null); })
+        .catch(function (e) { console.warn("[cloud] stock snapshot 跳过:", e && e.message); });
     } catch (e) { console.warn("[cloud] stock snapshot 异常（忽略）:", e && e.message); }
   }
 
