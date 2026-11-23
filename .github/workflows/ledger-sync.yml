@@ -45,13 +45,14 @@ jobs:
         id: changed
         run: |
           # 注意：必须用 bash 数组，写成 `P='a' 'b'` 只有第一个会展开
-          PATHS=('data/records/*.json' 'data/deleted/*.json' 'data-saidis/records/*.json' 'data-saidis/deleted/*.json')
+          # 2026-11-23 修复：pathspec 用目录 + grep 过滤；原 'data/records/*.json' 通配不生效，FILES 恒空导致空跑
+          PATHS=('data/records' 'data/deleted' 'data-saidis/records' 'data-saidis/deleted')
           if [ "${{ github.event_name }}" = "push" ]; then
-            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- "${PATHS[@]}" || true)
+            FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- "${PATHS[@]}" | grep '.json$' || true)
           elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.backfill }}" = "true" ]; then
             FILES=$(git ls-tree -r --name-only HEAD -- "${PATHS[@]}" | sed 's/^/A\t/' || true)
           else
-            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- "${PATHS[@]}" || true)
+            FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- "${PATHS[@]}" | grep '.json$' || true)
           fi
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
