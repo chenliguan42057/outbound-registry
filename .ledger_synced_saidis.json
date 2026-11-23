@@ -142,5 +142,21 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-23T03:16:36Z"
+  },
+  "mwt0041xd6xof": {
+    "fp": "9544e36e92d93c42",
+    "sheet": "赛迪斯",
+    "row": 22,
+    "rows": 1,
+    "items": [
+      {
+        "name": "精华液 30支装",
+        "qty": 5,
+        "stock": 39
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-23T08:23:06Z"
   }
 }
