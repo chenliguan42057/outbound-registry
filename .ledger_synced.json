@@ -138,21 +138,5 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-23T03:16:27Z"
-  },
-  "mwt04urf8v49w": {
-    "fp": "a9a63ee32bc6a399",
-    "sheet": "深圳细胞",
-    "row": 19,
-    "rows": 1,
-    "items": [
-      {
-        "name": "精华液 20支装",
-        "qty": 4,
-        "stock": 255
-      }
-    ],
-    "typeText": "出库(识别)",
-    "colorKey": "cycle",
-    "at": "2026-11-23T08:27:01Z"
   }
 }
