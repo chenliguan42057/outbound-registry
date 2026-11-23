@@ -250,6 +250,71 @@ def load_snapshot(base, data_root):
         return {}, 0, ""
 
 
+def calc_frozen(base, data_root):
+    """冻结占用（与前端 freeze.js map() 一致）：
+       待取货未出库 + 在途出库单（freezeStock===true，排除入库/差额单/历史借出单）
+       借出单要减去已归还量，borrowDone 归零。"""
+    nm_map = load_name_map(base)
+    alias = EXTRA_ALIAS
+
+    def norm(n):
+        return nm_map.get(n) or alias.get(n) or n
+
+    frozen = {}
+
+    # ① 待取货（未出库）
+    for f in glob.glob(os.path.join(base, data_root, "pickups", "*.json")):
+        try:
+            pk = load_json(f)
+        except Exception:
+            continue
+        if pk.get("shipped") is True:
+            continue
+        for it in (pk.get("items") or []):
+            nm = norm(str(it.get("name") or "").strip())
+            try:
+                q = int(it.get("qty") or 0)
+            except Exception:
+                q = 0
+            if nm and q > 0:
+                frozen[nm] = frozen.get(nm, 0) + q
+
+    # ② 在途出库单
+    for f in glob.glob(os.path.join(base, data_root, "records", "*.json")):
+        try:
+            r = load_json(f)
+        except Exception:
+            continue
+        if r.get("freezeStock") is not True:
+            continue
+        if (r.get("type") or "out") == "in":
+            continue
+        if r.get("affectsStock") is not True:
+            continue
+        if r.get("borrowed") is True and r.get("borrowEngine") != "v2":
+            continue
+        if r.get("borrowed") is True and r.get("borrowDone") is True:
+            continue
+        ret_map = {}
+        for x in (r.get("borrowReturned") or []):
+            k = norm(str(x.get("name") or ""))
+            ret_map[k] = ret_map.get(k, 0) + int(x.get("qty") or 0)
+        for it in (r.get("items") or []):
+            nm = norm(str(it.get("name") or "").strip())
+            try:
+                q = int(it.get("qty") or 0)
+            except Exception:
+                q = 0
+            if not nm or q <= 0:
+                continue
+            if r.get("borrowed") is True:
+                q = max(0, q - ret_map.get(nm, 0))
+            if q > 0:
+                frozen[nm] = frozen.get(nm, 0) + q
+
+    return frozen
+
+
 def build_rows(base, data_root):
     """生成库存 sheet 的行：[分类, 货品, 当前库存, 最后变动]"""
     snap, snap_at, snap_time = load_snapshot(base, data_root)
@@ -263,11 +328,13 @@ def build_rows(base, data_root):
         print("[stock] 无前端快照，回退后端算法")
         stock, last, warn_at = calc_stock(base, data_root)
 
+    frozen_map = calc_frozen(base, data_root)
     rows = []
     for nm in sorted(stock.keys()):
         qty = stock[nm]
-        # 2026-11-20 主理人定稿：不标低库存、不标负库存、不标用完 —— 纯数字表，只留 4 列
-        rows.append([cat_name(nm), nm, qty, (last.get(nm) or "").replace("T", " ")])
+        # 2026-11-23 主理人要求：与库存页「可用库存」对齐 —— 输出 实际/冻结/可用 三列
+        fz = frozen_map.get(nm, 0)
+        rows.append([cat_name(nm), nm, qty, fz, qty - fz, (last.get(nm) or "").replace("T", " ")])
     # 按品类 → 规格降序 → 未提及按数量降序
     rows.sort(key=lambda r: sort_key(r[1], r[2]))
     return rows
