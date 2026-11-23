@@ -102,5 +102,41 @@
     "typeText": "出库",
     "colorKey": "cycle",
     "at": "2026-11-23T03:02:11Z"
+  },
+  "mwsokwf7phy4v": {
+    "fp": "1fb107d2d9ef566f",
+    "sheet": "深圳细胞",
+    "row": 14,
+    "rows": 5,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 2,
+        "stock": 257
+      },
+      {
+        "name": "精华液 5支装",
+        "qty": 3,
+        "stock": 398
+      },
+      {
+        "name": "面膜 1片装",
+        "qty": 3,
+        "stock": 882
+      },
+      {
+        "name": "中号拎袋",
+        "qty": 1,
+        "stock": 197
+      },
+      {
+        "name": "中号礼盒",
+        "qty": 1,
+        "stock": 44
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-23T03:03:20Z"
   }
 }
