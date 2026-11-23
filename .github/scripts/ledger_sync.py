@@ -132,7 +132,9 @@ def order_no_of(rec):
     return str(rec.get("id") or "")[:8]
 
 
-def build_argv(rec):
+def build_argv(rec, avail=None):
+    """avail: {货品名: 当前可用库存} —— 传入时 F 列写可用库存（2026-11-23 主理人要求），
+       不传则退回记录里的 stock 快照。"""
     items = []
     for it in (rec.get("items") or []):
         nm = str(it.get("name") or "").strip()
@@ -147,6 +149,8 @@ def build_argv(rec):
             stock = int(stock) if stock is not None and stock != "" else None
         except Exception:
             stock = None
+        if avail is not None:
+            stock = avail.get(nm, stock)   # 优先用当前可用库存，与库存页一致
         items.append({"name": nm, "qty": qty, "stock": stock})
     if not items:
         return None
@@ -209,7 +213,7 @@ def same_items(a, b):
         return False
 
 
-def process_record(path, marker):
+def process_record(path, marker, avail=None):
     try:
         rec = load_json(path)
     except Exception as e:
@@ -224,7 +228,7 @@ def process_record(path, marker):
     if day and day < SINCE:
         return "skip", "早于 %s，不进台账" % SINCE
 
-    argv = build_argv(rec)
+    argv = build_argv(rec, avail)
     if not argv:
         return "skip", "没有有效货品"
 
@@ -329,6 +333,13 @@ def main():
         return
 
     marker = load_marker()
+    avail = None
+    try:
+        from ledger_stock import build_rows
+        avail = {r[1]: r[4] for r in build_rows(os.getcwd(), DATA_ROOT)}
+        log("可用库存已计算: %d 个货品" % len(avail))
+    except Exception as e:
+        log("⚠️ 可用库存计算失败，F 列退回记录快照: %s" % e)
     prefix = DATA_ROOT.rstrip("/") + "/"
     ok_n = fail_n = skip_n = 0
 
@@ -351,7 +362,7 @@ def main():
                 skip_n += 1
                 log("  - %s：记录文件被删但无墓碑，跳过" % path)
                 continue
-            st, msg = process_record(path, marker)
+            st, msg = process_record(path, marker, avail)
         else:
             continue
 
