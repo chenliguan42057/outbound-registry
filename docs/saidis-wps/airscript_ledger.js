@@ -384,7 +384,7 @@ function main() {
       var shS = Application.Sheets(a.sheet_name);
       if (!shS) throw new Error("找不到子表: " + a.sheet_name);
       var rows = a.rows || [];
-      var LAST = 4;
+      var LAST = 6;   // 2026-11-23：分类|货品|实际库存|冻结占用|可用库存|最后变动
 
       // 删旧行（连合并/底色一起清），表头保留
       var oldLast = findLastDataRow(shS);
@@ -394,7 +394,7 @@ function main() {
       }
 
       // 表头 + 数据
-      var SH = ["分类", "货品", "当前库存", "最后变动"];
+      var SH = ["分类", "货品", "实际库存", "冻结占用", "可用库存", "最后变动"];
       for (var i = 0; i < SH.length; i++) setCellValue(shS, i + 1, 1, SH[i]);
       for (var r = 0; r < rows.length; r++) {
         for (var c = 0; c < LAST; c++) {
@@ -425,8 +425,9 @@ function main() {
         shS.Range("A:A").ColumnWidth = 12;
         shS.Range("B:B").ColumnWidth = 26;
         shS.Range("C:C").ColumnWidth = 12;
-        shS.Range("D:D").ColumnWidth = 18;
-        shS.Range("E:E").ColumnWidth = 14;
+        shS.Range("D:D").ColumnWidth = 12;
+        shS.Range("E:E").ColumnWidth = 12;
+        shS.Range("F:F").ColumnWidth = 18;
       } catch (eW) {}
 
       // 表头样式
@@ -457,7 +458,7 @@ function main() {
           rg.WrapText = true;
           shS.Range("A" + gr1 + ":A" + gr2).Font.Bold = true;
           shS.Range("A" + gr1 + ":A" + gr2).Font.Color = rgb(0x4E, 0x6B, 0x5E);
-          shS.Range("C" + gr1 + ":C" + gr2).HorizontalAlignment = -4152;   // xlRight
+          shS.Range("C" + gr1 + ":E" + gr2).HorizontalAlignment = -4152;   // 实际/冻结/可用 右对齐
         } catch (eQ) { console.log("库存行样式失败: " + eQ.message); }
       }
 
