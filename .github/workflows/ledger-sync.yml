@@ -50,7 +50,7 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             FILES=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} -- "${PATHS[@]}" | grep '.json$' || true)
           elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.backfill }}" = "true" ]; then
-            FILES=$(git ls-tree -r --name-only HEAD -- "${PATHS[@]}" | sed 's/^/A\t/' || true)
+            FILES=$(git ls-tree -r --name-only HEAD -- "${PATHS[@]}" | grep '.json$' | sed 's/^/A\t/' || true)
           else
             FILES=$(git diff-tree --no-commit-id --name-status -r HEAD~1 -- "${PATHS[@]}" | grep '.json$' || true)
           fi
