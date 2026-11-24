@@ -201,5 +201,36 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-24T07:46:41Z"
+  },
+  "mwue6ow5j8xl5": {
+    "fp": "484a851468c84b7a",
+    "sheet": "深圳细胞",
+    "row": 25,
+    "rows": 4,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 1,
+        "stock": 238
+      },
+      {
+        "name": "面膜 5片装",
+        "qty": 1,
+        "stock": 324
+      },
+      {
+        "name": "洁面慕斯 150ml",
+        "qty": 1,
+        "stock": 209
+      },
+      {
+        "name": "小鹿牛皮纸袋 大",
+        "qty": 1,
+        "stock": 337
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-24T07:47:49Z"
   }
 }
