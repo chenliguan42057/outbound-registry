@@ -175,5 +175,31 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-24T07:46:10Z"
+  },
+  "mwue592buo2yp": {
+    "fp": "f4915935eb3d72f4",
+    "sheet": "深圳细胞",
+    "row": 22,
+    "rows": 3,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 8,
+        "stock": 239
+      },
+      {
+        "name": "小鹿牛皮纸袋 大",
+        "qty": 2,
+        "stock": 338
+      },
+      {
+        "name": "小鹿牛皮纸袋 小",
+        "qty": 1,
+        "stock": 313
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-24T07:46:41Z"
   }
 }
