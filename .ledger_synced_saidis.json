@@ -341,5 +341,21 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-23T20:33:17Z"
+  },
+  "mwug9pxafwbi0": {
+    "fp": "78476f034bdf8d06",
+    "sheet": "赛迪斯",
+    "row": 53,
+    "rows": 1,
+    "items": [
+      {
+        "name": "面膜 5片装",
+        "qty": 40,
+        "stock": 141
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-24T08:46:15Z"
   }
 }
