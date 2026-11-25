@@ -191,8 +191,8 @@ def category_of(nm):
         return 7
     if "抽绳" in nm:
         return 8
-    if "纸袋" in nm:
-        return 9
+    if "纸袋" in nm or "手提袋" in nm:
+        return 9        # 2026-11-25：光栅手提袋等包装袋类统一归「牛皮纸袋」品类
     return 99
 
 
@@ -328,10 +328,19 @@ def build_rows(base, data_root):
         print("[stock] 无前端快照，回退后端算法")
         stock, last, warn_at = calc_stock(base, data_root)
 
+    # 2026-11-25：补齐「目录里有、快照里没有」的货品 —— 新增产品在系统里还没产生快照，
+    # 但必须出现在库存表上（否则新增产品永远同步不过来）。
+    inv = {}
+    try:
+        cat = load_json(os.path.join(base, data_root, "catalog", "catalog.json"))
+        inv = {k: int(v) for k, v in (cat.get("inventory") or {}).items()}
+    except Exception:
+        pass
+
     frozen_map = calc_frozen(base, data_root)
     rows = []
-    for nm in sorted(stock.keys()):
-        qty = stock[nm]
+    for nm in sorted(set(stock.keys()) | set(inv.keys())):
+        qty = stock.get(nm, inv.get(nm, 0))
         # 2026-11-23 主理人要求：与库存页「可用库存」对齐 —— 输出 实际/冻结/可用 三列
         fz = frozen_map.get(nm, 0)
         rows.append([cat_name(nm), nm, qty, fz, qty - fz, (last.get(nm) or "").replace("T", " ")])
