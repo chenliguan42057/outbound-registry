@@ -357,5 +357,51 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-24T08:46:34Z"
+  },
+  "mwvj8diqlhw7l": {
+    "fp": "16d47b352c79ea46",
+    "sheet": "赛迪斯",
+    "row": 54,
+    "rows": 7,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 120,
+        "stock": 102
+      },
+      {
+        "name": "面膜 5片装",
+        "qty": 120,
+        "stock": 181
+      },
+      {
+        "name": "1盒装光栅手提袋",
+        "qty": 40,
+        "stock": 0
+      },
+      {
+        "name": "2盒装光栅手提袋",
+        "qty": 20,
+        "stock": 0
+      },
+      {
+        "name": "大号蝴蝶结礼盒",
+        "qty": 18,
+        "stock": 19
+      },
+      {
+        "name": "小号拎袋",
+        "qty": 180,
+        "stock": -5
+      },
+      {
+        "name": "大号蝴蝶结拎袋",
+        "qty": 18,
+        "stock": 23
+      }
+    ],
+    "typeText": "⬇ 入库",
+    "colorKey": "in",
+    "at": "2026-11-25T02:56:59Z"
   }
 }
