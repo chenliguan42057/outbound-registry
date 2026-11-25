@@ -232,7 +232,7 @@
     "at": "2026-11-23T20:33:16Z"
   },
   "mwt07fkkoabnk": {
-    "fp": "a6a44a37a72cac09",
+    "fp": "a4cbebb555b55bfa",
     "sheet": "赛迪斯",
     "row": 33,
     "rows": 20,
@@ -240,107 +240,107 @@
       {
         "name": "精华液 5支装",
         "qty": 10,
-        "stock": 1106
+        "stock": 1116
       },
       {
         "name": "面膜 1片装",
         "qty": 70,
-        "stock": 1233
+        "stock": 1303
       },
       {
         "name": "洁面慕斯 50ml",
         "qty": 10,
-        "stock": 227
+        "stock": 237
       },
       {
         "name": "精粹水 30ml",
         "qty": 10,
-        "stock": 290
+        "stock": 300
       },
       {
         "name": "精粹乳 30ml",
         "qty": 10,
-        "stock": 295
+        "stock": 305
       },
       {
         "name": "精粹霜 15g",
         "qty": 10,
-        "stock": 266
+        "stock": 276
       },
       {
         "name": "小号拎袋",
         "qty": 10,
-        "stock": -5
+        "stock": 185
       },
       {
         "name": "小号礼盒",
         "qty": 10,
-        "stock": 152
+        "stock": 162
       },
       {
         "name": "精华液 20支装",
         "qty": 5,
-        "stock": 102
+        "stock": 227
       },
       {
         "name": "面膜 5片装",
         "qty": 5,
-        "stock": 181
+        "stock": 266
       },
       {
         "name": "洁面慕斯 150ml",
         "qty": 5,
-        "stock": 241
+        "stock": 246
       },
       {
         "name": "精粹水 120ml",
         "qty": 5,
-        "stock": 193
+        "stock": 198
       },
       {
         "name": "精粹乳 80ml",
         "qty": 5,
-        "stock": 234
+        "stock": 239
       },
       {
         "name": "精粹霜 50g",
         "qty": 5,
-        "stock": 246
+        "stock": 251
       },
       {
         "name": "大号蝴蝶结拎袋",
         "qty": 5,
-        "stock": 23
+        "stock": 46
       },
       {
         "name": "大号蝴蝶结礼盒",
         "qty": 5,
-        "stock": 19
+        "stock": 42
       },
       {
         "name": "精华液 单支装",
         "qty": 100,
-        "stock": 1508
+        "stock": 1608
       },
       {
         "name": "精粹乳 1ml",
         "qty": 200,
-        "stock": 366
+        "stock": 566
       },
       {
         "name": "精粹霜 1g",
         "qty": 200,
-        "stock": 784
+        "stock": 984
       },
       {
         "name": "小鹿牛皮纸袋 大",
         "qty": 1,
-        "stock": 198
+        "stock": 199
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-23T20:33:17Z"
+    "at": "2026-11-25T02:58:42Z"
   },
   "mwug9pxafwbi0": {
     "fp": "ed714cd60a718755",
