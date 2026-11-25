@@ -232,5 +232,26 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-24T07:54:03Z"
+  },
+  "mwvj4ir02s8b3": {
+    "fp": "bc3a1804262ec2e2",
+    "sheet": "深圳细胞",
+    "row": 29,
+    "rows": 2,
+    "items": [
+      {
+        "name": "1盒装光栅手提袋",
+        "qty": 9,
+        "stock": 0
+      },
+      {
+        "name": "2盒装光栅手提袋",
+        "qty": 10,
+        "stock": 0
+      }
+    ],
+    "typeText": "⬇ 入库",
+    "colorKey": "in",
+    "at": "2026-11-25T02:53:51Z"
   }
 }
