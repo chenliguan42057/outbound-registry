@@ -108,15 +108,15 @@
     "at": "2026-11-25T03:11:39Z"
   },
   "mwrefztnk4kdk": {
-    "fp": "98b1e756c775afda",
+    "fp": "e0981534f69f3665",
     "sheet": "赛迪斯",
-    "row": 16,
+    "row": 17,
     "rows": 5,
     "items": [
       {
         "name": "精华液 30支装",
         "qty": 15,
-        "stock": 24
+        "stock": 19
       },
       {
         "name": "精粹水 120ml",
@@ -141,23 +141,23 @@
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-25T03:11:41Z"
+    "at": "2026-11-25T10:28:21Z"
   },
   "mwt0041xd6xof": {
-    "fp": "79d8575c7430e58f",
+    "fp": "3354238c4c61750e",
     "sheet": "赛迪斯",
-    "row": 21,
+    "row": 22,
     "rows": 1,
     "items": [
       {
         "name": "精华液 30支装",
         "qty": 5,
-        "stock": 24
+        "stock": 19
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-25T03:11:42Z"
+    "at": "2026-11-25T10:28:22Z"
   },
   "mwt021dywiz66": {
     "fp": "d6e0b6d83f8a803d",
