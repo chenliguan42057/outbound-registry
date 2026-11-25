@@ -191,8 +191,8 @@ def category_of(nm):
         return 7
     if "抽绳" in nm:
         return 8
-    if "纸袋" in nm:
-        return 9
+    if "纸袋" in nm or "手提袋" in nm:
+        return 9        # 2026-11-25：光栅手提袋等包装袋类统一归「牛皮纸袋」品类
     return 99
 
 
