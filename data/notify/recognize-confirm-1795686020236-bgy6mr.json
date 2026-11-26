@@ -1,0 +1,1 @@
+{"type":"recognize-confirm","warehouse":"shenzhen","kind":"out","stage":"confirmed","confirmedAt":"","_ts":1795686020236,"order":{"id":"mwx89t8hligp9","type":"out","time":"2026-11-26T15:25","picker":"JY202611260007","applicant":"华松生科","dept":"华松生科","purpose":"客户销售","entity":"深圳细胞法人","note":"自动识别","items":[{"name":"精华液 5支装","qty":50},{"name":"小鹿牛皮纸袋 大","qty":1}]}}
