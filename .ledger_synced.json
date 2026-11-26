@@ -37,9 +37,9 @@
     "at": "2026-11-25T03:11:18Z"
   },
   "mwn8m887rwjjg": {
-    "fp": "48fc9a16205b08bc",
+    "fp": "262e7facf45367ef",
     "sheet": "深圳细胞",
-    "row": 4,
+    "row": 5,
     "rows": 3,
     "items": [
       {
@@ -50,17 +50,17 @@
       {
         "name": "面膜 5片装",
         "qty": 2,
-        "stock": 324
+        "stock": 318
       },
       {
         "name": "小鹿牛皮纸袋 大",
         "qty": 6,
-        "stock": 337
+        "stock": 334
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-25T03:11:20Z"
+    "at": "2026-11-26T13:08:46Z"
   },
   "mwrekem6qad2e": {
     "fp": "03276dc038459012",
@@ -177,9 +177,9 @@
     "at": "2026-11-25T03:11:26Z"
   },
   "mwue592buo2yp": {
-    "fp": "d8e9890b626b8dda",
+    "fp": "5d2149b39fda343b",
     "sheet": "深圳细胞",
-    "row": 21,
+    "row": 22,
     "rows": 3,
     "items": [
       {
@@ -190,7 +190,7 @@
       {
         "name": "小鹿牛皮纸袋 大",
         "qty": 2,
-        "stock": 337
+        "stock": 334
       },
       {
         "name": "小鹿牛皮纸袋 小",
@@ -200,12 +200,12 @@
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-25T03:11:28Z"
+    "at": "2026-11-26T13:08:47Z"
   },
   "mwue6ow5j8xl5": {
-    "fp": "c6eecc4186fa80f7",
+    "fp": "4c3f5a158c0616f1",
     "sheet": "深圳细胞",
-    "row": 24,
+    "row": 25,
     "rows": 4,
     "items": [
       {
@@ -216,27 +216,27 @@
       {
         "name": "面膜 5片装",
         "qty": 1,
-        "stock": 324
+        "stock": 318
       },
       {
         "name": "洁面慕斯 150ml",
         "qty": 1,
-        "stock": 209
+        "stock": 206
       },
       {
         "name": "小鹿牛皮纸袋 大",
         "qty": 1,
-        "stock": 337
+        "stock": 334
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-25T03:11:30Z"
+    "at": "2026-11-26T13:08:48Z"
   },
   "mwvj4ir02s8b3": {
-    "fp": "9d1749c3b2ccc80b",
+    "fp": "822bb4a4d1f22f33",
     "sheet": "深圳细胞",
-    "row": 28,
+    "row": 29,
     "rows": 2,
     "items": [
       {
@@ -247,15 +247,15 @@
       {
         "name": "2盒装光栅手提袋",
         "qty": 10,
-        "stock": 10
+        "stock": 7
       }
     ],
     "typeText": "⬇ 入库",
     "colorKey": "in",
-    "at": "2026-11-25T03:11:32Z"
+    "at": "2026-11-26T13:08:49Z"
   },
   "mwx89t8hligp9": {
-    "fp": "1559b9722c49833f",
+    "fp": "f7b8b7dfe870ad0c",
     "sheet": "深圳细胞",
     "row": 31,
     "rows": 2,
@@ -268,15 +268,15 @@
       {
         "name": "小鹿牛皮纸袋 大",
         "qty": 1,
-        "stock": 337
+        "stock": 334
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-26T09:40:41Z"
+    "at": "2026-11-26T13:08:49Z"
   },
   "mwxd2bti4q6nn": {
-    "fp": "4cd315bf8f49534a",
+    "fp": "053696e2e34c4b3b",
     "sheet": "深圳细胞",
     "row": 33,
     "rows": 8,
@@ -319,11 +319,11 @@
       {
         "name": "小鹿牛皮纸袋 大",
         "qty": 3,
-        "stock": 333
+        "stock": 334
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-26T09:39:43Z"
+    "at": "2026-11-26T13:08:50Z"
   }
 }
