@@ -593,5 +593,21 @@
     "typeText": "出库(识别)",
     "colorKey": "cycle",
     "at": "2026-11-26T07:23:47Z"
+  },
+  "mwx87zmyb6kba": {
+    "fp": "76e61f3a262004b0",
+    "sheet": "赛迪斯",
+    "row": 88,
+    "rows": 1,
+    "items": [
+      {
+        "name": "定制化妆包",
+        "qty": 10,
+        "stock": 633
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-26T07:24:10Z"
   }
 }
