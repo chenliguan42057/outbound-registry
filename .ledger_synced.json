@@ -253,5 +253,26 @@
     "typeText": "⬇ 入库",
     "colorKey": "in",
     "at": "2026-11-25T03:11:32Z"
+  },
+  "mwx89t8hligp9": {
+    "fp": "5093a84f3a2b6cda",
+    "sheet": "深圳细胞",
+    "row": 31,
+    "rows": 2,
+    "items": [
+      {
+        "name": "精华液 5支装",
+        "qty": 50,
+        "stock": 345
+      },
+      {
+        "name": "小鹿牛皮纸袋 大",
+        "qty": 1,
+        "stock": 336
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-26T07:25:34Z"
   }
 }
