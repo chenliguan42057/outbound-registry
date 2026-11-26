@@ -442,7 +442,7 @@
     "at": "2026-11-26T04:12:32Z"
   },
   "mwx1fkqedim20": {
-    "fp": "133444b1d6bdc09c",
+    "fp": "dbaa4334b7769513",
     "sheet": "赛迪斯",
     "row": 64,
     "rows": 8,
@@ -450,46 +450,46 @@
       {
         "name": "精华液 5支装",
         "qty": 3,
-        "stock": 1103
+        "stock": 1106
       },
       {
         "name": "面膜 1片装",
         "qty": 6,
-        "stock": 1227
+        "stock": 1233
       },
       {
         "name": "洁面慕斯 50ml",
         "qty": 3,
-        "stock": 224
+        "stock": 227
       },
       {
         "name": "精粹水 30ml",
         "qty": 3,
-        "stock": 287
+        "stock": 290
       },
       {
         "name": "精粹霜 15g",
         "qty": 3,
-        "stock": 263
+        "stock": 266
       },
       {
         "name": "精粹乳 30ml",
         "qty": 3,
-        "stock": 292
+        "stock": 295
       },
       {
         "name": "小号拎袋",
         "qty": 3,
-        "stock": 171
+        "stock": 174
       },
       {
         "name": "小号礼盒",
         "qty": 3,
-        "stock": 149
+        "stock": 152
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-26T04:14:07Z"
+    "at": "2026-11-26T04:19:47Z"
   }
 }
