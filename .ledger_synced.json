@@ -1,6 +1,6 @@
 {
   "mwlspii6fl7rg": {
-    "fp": "3b8552da1295e66b",
+    "fp": "8c57f95341eac97d",
     "sheet": "深圳细胞",
     "row": 1,
     "rows": 1,
@@ -8,15 +8,15 @@
       {
         "name": "精华液 20支装",
         "qty": 20,
-        "stock": 281
+        "stock": 238
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-23T03:16:19Z"
+    "at": "2026-11-25T03:11:16Z"
   },
   "mwlxde68eydrv": {
-    "fp": "02e6e16784bf4f53",
+    "fp": "222c231cabe18294",
     "sheet": "深圳细胞",
     "row": 2,
     "rows": 2,
@@ -24,46 +24,46 @@
       {
         "name": "精华液 20支装",
         "qty": 2,
-        "stock": 261
+        "stock": 238
       },
       {
         "name": "小鹿牛皮纸袋 小",
         "qty": 1,
-        "stock": 318
+        "stock": 313
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-23T03:16:21Z"
+    "at": "2026-11-25T03:11:18Z"
   },
   "mwn8m887rwjjg": {
-    "fp": "4b57fcc1c07c5c07",
+    "fp": "262e7facf45367ef",
     "sheet": "深圳细胞",
-    "row": 4,
+    "row": 5,
     "rows": 3,
     "items": [
       {
         "name": "精华液 20支装",
         "qty": 2,
-        "stock": 259
+        "stock": 238
       },
       {
         "name": "面膜 5片装",
         "qty": 2,
-        "stock": 327
+        "stock": 318
       },
       {
         "name": "小鹿牛皮纸袋 大",
         "qty": 6,
-        "stock": 346
+        "stock": 334
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-23T03:16:23Z"
+    "at": "2026-11-26T13:08:46Z"
   },
   "mwrekem6qad2e": {
-    "fp": "4bfd8944440fdb66",
+    "fp": "03276dc038459012",
     "sheet": "深圳细胞",
     "row": 7,
     "rows": 6,
@@ -71,40 +71,40 @@
       {
         "name": "精华液 5支装",
         "qty": 1,
-        "stock": 365
+        "stock": 395
       },
       {
         "name": "精粹水 30ml",
         "qty": 1,
-        "stock": 445
+        "stock": 301
       },
       {
         "name": "精粹乳 30ml",
         "qty": 1,
-        "stock": 603
+        "stock": 353
       },
       {
         "name": "精粹霜 15g",
         "qty": 1,
-        "stock": 1012
+        "stock": 964
       },
       {
         "name": "洁面慕斯 50ml",
         "qty": 1,
-        "stock": 243
+        "stock": 200
       },
       {
         "name": "小鹿牛皮纸袋 小",
         "qty": 1,
-        "stock": 524
+        "stock": 313
       }
     ],
     "typeText": "出库",
     "colorKey": "cycle",
-    "at": "2026-11-23T03:16:25Z"
+    "at": "2026-11-25T03:11:22Z"
   },
   "mwsokwf7phy4v": {
-    "fp": "41079f1f223f94fe",
+    "fp": "e82a96c84ebc7326",
     "sheet": "深圳细胞",
     "row": 13,
     "rows": 5,
@@ -112,31 +112,218 @@
       {
         "name": "精华液 20支装",
         "qty": 2,
-        "stock": 257
+        "stock": 238
       },
       {
         "name": "精华液 5支装",
         "qty": 3,
-        "stock": 398
+        "stock": 395
       },
       {
         "name": "面膜 1片装",
         "qty": 3,
-        "stock": 882
+        "stock": 879
       },
       {
         "name": "中号拎袋",
         "qty": 1,
-        "stock": 197
+        "stock": 196
       },
       {
         "name": "中号礼盒",
         "qty": 1,
-        "stock": 44
+        "stock": 43
       }
     ],
     "typeText": "出库(识别)",
     "colorKey": "cycle",
-    "at": "2026-11-23T03:16:27Z"
+    "at": "2026-11-25T03:11:23Z"
+  },
+  "mwt04urf8v49w": {
+    "fp": "701c876eed7ffc98",
+    "sheet": "深圳细胞",
+    "row": 18,
+    "rows": 1,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 4,
+        "stock": 238
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-25T03:11:25Z"
+  },
+  "mwue4ln8sxt9h": {
+    "fp": "56e1c0ef6df31eb0",
+    "sheet": "深圳细胞",
+    "row": 19,
+    "rows": 2,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 4,
+        "stock": 238
+      },
+      {
+        "name": "小鹿牛皮纸袋 小",
+        "qty": 2,
+        "stock": 313
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-25T03:11:26Z"
+  },
+  "mwue592buo2yp": {
+    "fp": "5d2149b39fda343b",
+    "sheet": "深圳细胞",
+    "row": 22,
+    "rows": 3,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 8,
+        "stock": 238
+      },
+      {
+        "name": "小鹿牛皮纸袋 大",
+        "qty": 2,
+        "stock": 334
+      },
+      {
+        "name": "小鹿牛皮纸袋 小",
+        "qty": 1,
+        "stock": 313
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-26T13:08:47Z"
+  },
+  "mwue6ow5j8xl5": {
+    "fp": "4c3f5a158c0616f1",
+    "sheet": "深圳细胞",
+    "row": 25,
+    "rows": 4,
+    "items": [
+      {
+        "name": "精华液 20支装",
+        "qty": 1,
+        "stock": 238
+      },
+      {
+        "name": "面膜 5片装",
+        "qty": 1,
+        "stock": 318
+      },
+      {
+        "name": "洁面慕斯 150ml",
+        "qty": 1,
+        "stock": 206
+      },
+      {
+        "name": "小鹿牛皮纸袋 大",
+        "qty": 1,
+        "stock": 334
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-26T13:08:48Z"
+  },
+  "mwvj4ir02s8b3": {
+    "fp": "822bb4a4d1f22f33",
+    "sheet": "深圳细胞",
+    "row": 29,
+    "rows": 2,
+    "items": [
+      {
+        "name": "1盒装光栅手提袋",
+        "qty": 9,
+        "stock": 9
+      },
+      {
+        "name": "2盒装光栅手提袋",
+        "qty": 10,
+        "stock": 7
+      }
+    ],
+    "typeText": "⬇ 入库",
+    "colorKey": "in",
+    "at": "2026-11-26T13:08:49Z"
+  },
+  "mwx89t8hligp9": {
+    "fp": "f7b8b7dfe870ad0c",
+    "sheet": "深圳细胞",
+    "row": 31,
+    "rows": 2,
+    "items": [
+      {
+        "name": "精华液 5支装",
+        "qty": 50,
+        "stock": 395
+      },
+      {
+        "name": "小鹿牛皮纸袋 大",
+        "qty": 1,
+        "stock": 334
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-26T13:08:49Z"
+  },
+  "mwxd2bti4q6nn": {
+    "fp": "053696e2e34c4b3b",
+    "sheet": "深圳细胞",
+    "row": 33,
+    "rows": 8,
+    "items": [
+      {
+        "name": "精华液 30支装",
+        "qty": 6,
+        "stock": 23
+      },
+      {
+        "name": "面膜 5片装",
+        "qty": 6,
+        "stock": 318
+      },
+      {
+        "name": "精粹水 120ml",
+        "qty": 3,
+        "stock": 173
+      },
+      {
+        "name": "精粹乳 80ml",
+        "qty": 3,
+        "stock": 229
+      },
+      {
+        "name": "精粹霜 50g",
+        "qty": 3,
+        "stock": 194
+      },
+      {
+        "name": "洁面慕斯 150ml",
+        "qty": 3,
+        "stock": 206
+      },
+      {
+        "name": "2盒装光栅手提袋",
+        "qty": 3,
+        "stock": 7
+      },
+      {
+        "name": "小鹿牛皮纸袋 大",
+        "qty": 3,
+        "stock": 334
+      }
+    ],
+    "typeText": "出库(识别)",
+    "colorKey": "cycle",
+    "at": "2026-11-26T13:08:50Z"
   }
 }
