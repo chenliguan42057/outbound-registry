@@ -34,6 +34,8 @@
       只在「仓库锁定」模式下有意义：填了 = 这部分直接从仓库转到现场（立即可出库），
       不填 / 0 = 全部锁在仓库。用途是省掉「先入库、再回仪表盘逐项转入现场」这一步。 */
   var moveMap = {};
+  /* 2026-11-27 批次：{ 货品名: 批号 }。只存启用了批次管理的货品；提交时合并进 item.batch。 */
+  var batchVals = {};
   var editingTransfer = false; // 编辑的是调拨/回滚生成的入库单 → 来源由系统固定，禁止改
 
   function render(container) {
@@ -43,6 +45,12 @@
         '<div class="field">' +
           '<label>货品名称<span class="req">*</span></label>' +
           '<div id="inProductPicker"></div>' +
+        '</div>' +
+        /* 2026-11-27 批次：只对「启用批次管理」且已选中的货品出现，没选到就整块隐藏 */
+        '<div class="field" id="inBatchField" style="display:none">' +
+          '<label>批次号<span class="req">*</span></label>' +
+          '<div class="zm-wrap" id="inBatchBox"></div>' +
+          '<div class="hint" style="margin:6px 0 0">同产品内同批号自动合并为同一批次；没有批号的货品不用开批次管理。</div>' +
         '</div>' +
         '<div class="field">' +
           '<label>入库来源<span class="req">*</span></label>' +
@@ -96,7 +104,9 @@
       srcCustom: Util.$("inSourceCustom"),
       zoneSeg: Util.$("inZoneSeg"),
       zoneHint: Util.$("inZoneHint"),
-      zoneMove: Util.$("inZoneMove")
+      zoneMove: Util.$("inZoneMove"),
+      batchField: Util.$("inBatchField"),
+      batchBox: Util.$("inBatchBox")
     };
 
     // 经办人默认带出上次值
@@ -142,7 +152,16 @@
     Util.$("inSubmit").addEventListener("click", submit);
 
     Util.$("inPurpose").addEventListener("input", saveDraft);
-    picker.onChange = function () { renderZoneMove(); saveDraft(); renderPreview(); };
+    picker.onChange = function () { renderZoneMove(); saveDraft(); renderPreview(); renderBatchBox(); };
+    /* 批号输入：只更新状态不重绘，避免光标跳走（同 onMoveInput 的手法） */
+    if (els.batchBox) {
+      els.batchBox.addEventListener("input", function (e) {
+        var inp = e.target && e.target.closest ? e.target.closest(".in-batch") : null;
+        if (!inp) return;
+        batchVals[inp.getAttribute("data-name")] = inp.value;
+        saveDraft();
+      });
+    }
     photos.onChange = saveDraft;
     // 来源自定义：点按钮或回车即保存入库（自动持久化到本仓自定义来源库）
     Util.$("inSourceAdd").addEventListener("click", addCustomSource);
@@ -405,6 +424,58 @@
     els.preview.style.display = "block";
   }
 
+  /* ================= 批次填写（2026-11-27） =================
+     只有「货品目录里启用了批次管理 + 本单已选中」的货品才出现批号输入框。
+     批号必填（启用批次的意义就在于可追溯，空批号等于没录），但只在提交时校验，不打断下单。
+     同产品内同批号 = 同一批次（合并累加），跨产品批号互不影响。 */
+  function batchManagedItems() {
+    var items = picker ? picker.getItems() : [];
+    return items.filter(function (it) {
+      return window.App.Batches && window.App.Batches.isManaged(it.name);
+    });
+  }
+
+  /** 渲染批号填写块；顺带清掉已不在选择里的货品旧批号（防止下一单带出上一单的批号） */
+  function renderBatchBox() {
+    if (!els || !els.batchBox) return;
+    var list = batchManagedItems();
+    if (!list.length) {
+      if (els.batchField) els.batchField.style.display = "none";
+      els.batchBox.innerHTML = "";
+      batchVals = {};
+      return;
+    }
+    if (els.batchField) els.batchField.style.display = "";
+    els.batchBox.innerHTML = list.map(function (it) {
+      var v = batchVals[it.name] || "";
+      return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--line-soft,#DCE6E0)">' +
+          '<span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + Util.esc(it.name) + '</span>' +
+          '<span class="hint" style="margin:0;font-size:12px;text-align:right">入库 ' + Util.esc(it.qty) + '</span>' +
+          '<input type="text" class="in-batch" data-name="' + Util.esc(it.name) + '" value="' + Util.esc(v) + '" maxlength="40" autocomplete="off" inputmode="text" enterkeyhint="done" placeholder="扫箱唛 / 手输批号，如 20261120" style="grid-column:1/-1;width:100%;padding:9px 12px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA)" />' +
+        '</div>';
+    }).join("");
+    var keep = {};
+    list.forEach(function (it) { keep[it.name] = 1; });
+    Object.keys(batchVals).forEach(function (n) { if (!keep[n]) delete batchVals[n]; });
+  }
+
+  /** 未填批号的货品名列表（提交校验用） */
+  function missingBatch() {
+    return batchManagedItems().filter(function (it) {
+      return !String(batchVals[it.name] || "").trim();
+    }).map(function (it) { return it.name; });
+  }
+
+  /** 把批号合并进 items（没启用批次的货品原样返回，不加任何字段） */
+  function applyBatch(items) {
+    return (items || []).map(function (it) {
+      if (!(window.App.Batches && window.App.Batches.isManaged(it.name))) return it;
+      var no = String(batchVals[it.name] || "").trim();
+      if (!no) return it;
+      return { name: it.name, qty: it.qty, batch: no };
+    });
+  }
+
   function saveDraft() {
     if (editingId) return;
     Store.saveDraft("in", {
@@ -414,6 +485,7 @@
       zone: zoneVal,
       zoneMove: collectMoves(picker.getItems()),
       items: picker.selected,
+      batch: batchVals,   // 2026-11-27：批号进草稿，刷新页面不用重填
       photos: photos.getPhotos()
     });
   }
@@ -431,6 +503,9 @@
     }
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
+    batchVals = (d.batch && typeof d.batch === "object") ? d.batch : {};
+    /* setSelected 不触发 onChange → 批号块必须手动重绘 */
+    renderBatchBox();
     renderPreview();
     renderSourceChips();
     renderZoneSeg();
@@ -495,6 +570,11 @@
     } else if (qtyProblems.length) {
       errs.push({ el: Util.$("inProductPicker"), msg: "以下货品数量无效：" + qtyProblems.join("、") });
     }
+    /* 2026-11-27 批次：启用批次管理的货品必须填批号（没有批号的货品本就不该开批次管理） */
+    var missBatch = missingBatch();
+    if (missBatch.length) {
+      errs.push({ el: els.batchBox, msg: "请填写批次号：" + missBatch.join("、") });
+    }
     if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) return;
 
     /* 2026-10-19：本单里「其中转入现场」的数量（选填）。合计只用于核对清单展示。 */
@@ -536,7 +616,7 @@
       fromRecognize: !!recognizeConfirm,
       time: Util.nowLocal(),
       type: "in",
-      items: items,
+      items: applyBatch(items),   // 启用批次的货品带 item.batch（同产品同批号 = 同一批次）
       purpose: purpose,
       picker: handlerVal,
       photos: photos.getPhotos(),
@@ -705,12 +785,14 @@
     sourceVal = "";
     zoneVal = "wh";            // 复位为默认：进仓库锁定
     moveMap = {};              // 复位「其中转入现场」
+    batchVals = {};            // 复位批号（防跨单泄漏上一单的批号）
     editingTransfer = false;
     picker.setSelected([]);
     photos.setPhotos([]);
     editingId = null;
     els.submit.textContent = "确定入库";
     els.cancelEdit.style.display = "none";
+    renderBatchBox();
     renderPreview();
     renderSourceChips();
     renderZoneSeg();
@@ -737,6 +819,12 @@
     }
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);
+    /* 2026-11-27 批次回显：编辑已有入库单时把原批号带出来，避免「一编辑就丢批号」 */
+    batchVals = {};
+    (r.items || []).forEach(function (it) {
+      if (it && it.name && it.batch) batchVals[it.name] = String(it.batch);
+    });
+    renderBatchBox();
     els.submit.textContent = "保存修改";
     els.cancelEdit.style.display = "inline-flex";
     renderPreview();
@@ -763,6 +851,8 @@
        这里只处理「用途 ← 入库号」（粘贴格式第 1 行的 DB 号）。 */
     if (d.purpose != null && els.purpose) els.purpose.value = d.purpose;
     if (d.items && d.items.length) picker.setSelected(d.items);
+    batchVals = {};                 // 识别结果没有批号 → 由人工在批号块补填
+    renderBatchBox();               // setSelected 不触发 onChange，必须手动刷新
     recognizeConfirm = "in";   // 2026-09-29：标记本单来自自动识别，提交成功后补推钉钉确认
     saveDraft();
     renderPreview();                 // 入库有「库存变化预览」，回填后必须刷新

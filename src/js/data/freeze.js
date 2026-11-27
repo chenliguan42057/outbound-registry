@@ -240,6 +240,8 @@
     detail: detail,
     overview: overview,
     warnAt: warnAt,
-    stats: stats
+    stats: stats,
+    /* 2026-11-27：批次模块要按「单据真实冻结量」沿批次分配顺序预占，对外暴露单一口径 */
+    frozenQtyOf: frozenQtyOf
   };
 })();

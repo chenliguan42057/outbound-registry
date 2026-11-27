@@ -46,6 +46,10 @@
       // 双仓物理隔离（2026-09-06）：每条记录打上归属仓库标记，push/merge/store 均据此拒绝跨仓污染
       warehouse: (window.App.Config && window.App.Config.Sys && window.App.Config.Sys.current().id) || "shenzhen"
     }, payload);
+    /* 2026-11-27 批次：出库类记录在入列前按先进先出补齐 item.batches ——
+       必须先于 unshift，此时可用量还没算上本笔自己的消耗。
+       （调拨走的是下面的 commit()，两边都要挂，否则调拨出库零分配） */
+    if (window.App.Batches) window.App.Batches.applyToRecord(rec);
     State.list.unshift(rec);
     if (window.App.Stock) window.App.Stock.markDirty();
     stampStock(rec);        // 先入列再打快照：getStock 已包含本笔影响
@@ -67,6 +71,9 @@
     if (!rec || !rec.id) return null;
     var exist = State.list.find(function (r) { return r.id === rec.id; });
     if (exist) return exist;                      // 幂等：已存在不重复插入
+    /* 2026-11-27 批次：调拨出库用 commit() 落本地（绕过 create），这里同样要补批次分配。
+       理想路径是 transfer.js 推云端前就分配好；这一道是幂等兜底（已合法分配会短路）。 */
+    if (window.App.Batches) window.App.Batches.applyToRecord(rec);
     State.list.unshift(rec);
     if (window.App.Stock) window.App.Stock.markDirty();
     stampStock(rec);        // 先入列再打快照：getStock 已包含本笔影响
@@ -100,6 +107,10 @@
     State.list[idx] = rec;
     if (patch && Object.prototype.hasOwnProperty.call(patch, "items")) {
       if (window.App.Stock) window.App.Stock.markDirty();
+      /* 2026-11-27 批次：items 被整体替换后补齐批次分配。
+         已合法分配（合计 == qty）会短路 —— 这条是「编辑出库单只改备注/照片也不能重排历史批次」的护栏。
+         用 excludeId 排除本单自身旧消耗，避免新旧分配互相抵消。 */
+      if (window.App.Batches) window.App.Batches.applyToRecord(rec);
       stampStock(rec);
     }
     State.save();

@@ -167,12 +167,28 @@
     return false;
   }
 
+  /* ================= 批次管理开关（2026-11-27） =================
+     来自货品目录 catalog.json 的 product.batch（用户在「批次管理 → 管理启用批次的产品」里点的开关）。
+     只有显式 true 才启用：启用后该货品【入库必须填批号】、【出库按先进先出自动分配或手选批次】；
+     没有这个键 / false = 完全走原来的一维库存逻辑，表单里连批次输入框都不出现。
+     键名与货品名完全一致（catalog 名 == Config.PRODUCTS 名），整表由 catalog.applyToConfig 重建。 */
+  var BATCH_MANAGED = {};
+
+  function isBatchManaged(name) {
+    var n = pickKey(name);
+    if (!n) return false;
+    return BATCH_MANAGED[n] === true;
+  }
+
   var Config = {
     PRODUCTS: PRODUCTS,
     /* 选择页临时隐藏名单（2026-10-18，缺货时用；不影响库存与目录） */
     HIDDEN_PICK: HIDDEN_PICK,
     HIDDEN_PICK_MAP: HIDDEN_PICK_MAP,
     isPickHidden: isPickHidden,
+    /* 批次管理开关（2026-11-27，来自货品目录 product.batch；不影响库存总量口径） */
+    BATCH_MANAGED: BATCH_MANAGED,
+    isBatchManaged: isBatchManaged,
     INVENTORY: INVENTORY,
     NAME_MAP: NAME_MAP,
     GH: GH,

@@ -22,6 +22,10 @@
   var bigQtyAcked = false;     // 2026-09-27 P1：异常大数量已确认过，二次进入时不再重复弹
   var photos = null;
   var editingId = null;
+  /* 2026-11-27 批次：手选批次分配 { 货品名: [{no, qty}] }；空 = 该货品走先进先出自动分配。
+     batchQtySnap 记录「上次手选时的数量」，数量一改就丢掉手选（否则会用旧分配去扣）。 */
+  var batchAlloc = {};
+  var batchQtySnap = {};
   /** 进入编辑时的原始照片（base64 数组）快照：提交时若照片未变则复用已有 photoUrls，避免重复上传 */
   var editingOriginalPhotos = null;
   var els = null;
@@ -190,6 +194,33 @@
     // 2026-09-24 落地页/出库：货品改为「按产品名分类多选 → 最后统一步填数量」（bulkPick）
     picker = new UI.ProductPicker({ showStock: true, bulkPick: true });
     picker.attach(Util.$("outProductPicker"));
+
+    /* 2026-11-27 批次：在货品选择框后面挂「批次」块（默认先进先出，选填手选）。
+       用 picker.container 定位父级 .field，不用 Util.$ 找 id ——
+       落地页与管理页会同时存在一份同名表单 DOM，按 id 找会命中错的那一份。 */
+    var batchField = document.createElement("div");
+    batchField.className = "field";
+    batchField.id = "outBatchField";
+    batchField.style.display = "none";
+    batchField.innerHTML =
+      '<span class="field-label">批次<span class="lbl-note">不选就按先进先出自动扣</span></span>' +
+      '<div id="outBatchBox"></div>';
+    var _pickField = (picker.container && picker.container.closest) ? picker.container.closest(".field") : null;
+    if (_pickField && _pickField.parentNode) _pickField.insertAdjacentElement("afterend", batchField);
+    else container.appendChild(batchField);
+    els.batchField = batchField;
+    els.batchBox = batchField.querySelector("#outBatchBox");
+    els.batchBox.addEventListener("click", function (ev) {
+      var p = ev.target.closest("[data-batch-pick]");
+      if (p) { openBatchPicker(p.getAttribute("data-batch-pick")); return; }
+      var a = ev.target.closest("[data-batch-auto]");
+      if (a) {
+        delete batchAlloc[a.getAttribute("data-batch-auto")];
+        renderBatchBox();
+        saveDraft();
+        Util.toast("已恢复先进先出自动分配");
+      }
+    });
     photos = new UI.PhotoUpload({});
     photos.attach(Util.$("outPhotoUpload"));
     // 2026-09-26 P2：拍照上传引导（挂在上传框下面，纯文案，不影响上传逻辑）
@@ -303,7 +334,18 @@
     ["outDept", "outTime", "outPicker", "outNote"].forEach(function (id) {
       Util.$(id).addEventListener("input", saveDraft);
     });
-    picker.onChange = saveDraft;
+    picker.onChange = function (items, sel) {
+      saveDraft(items, sel);
+      /* 2026-11-27 批次：数量变了就把该货品的手选批次丢掉，回到先进先出，
+         否则会拿上一版数量的分配去扣（合计对不上）。 */
+      (items || []).forEach(function (it) {
+        if (batchAlloc[it.name] && Number(batchQtySnap[it.name]) !== Number(it.qty)) {
+          delete batchAlloc[it.name];
+        }
+      });
+      (items || []).forEach(function (it) { batchQtySnap[it.name] = Number(it.qty) || 0; });
+      renderBatchBox();
+    };
     photos.onChange = saveDraft;
 
     var _d = restoreDraft();
@@ -471,6 +513,177 @@
     });
   }
 
+  /* ================= 批次（2026-11-27） =================
+     只有「货品目录里启用了批次管理 + 本单已选中」的货品才出现批次块。
+     默认不选 = 先进先出自动分配（records.js 的 applyToRecord 兜底）；
+     手选批次只在本次提交生效，数量一改就自动回落到自动，避免用旧数量的分配去扣。 */
+  function batchManagedItems() {
+    var items = picker ? picker.getItems() : [];
+    return items.filter(function (it) {
+      return window.App.Batches && window.App.Batches.isManaged(it.name);
+    });
+  }
+
+  function dayOf(ts) {
+    if (!ts || ts === Infinity) return "—";
+    var d = new Date(Number(ts));
+    if (isNaN(d.getTime())) return "—";
+    return d.getFullYear() + "-" + Util.pad2(d.getMonth() + 1) + "-" + Util.pad2(d.getDate());
+  }
+
+  function renderBatchBox() {
+    if (!els || !els.batchBox) return;
+    var list = batchManagedItems();
+    if (!list.length) {
+      if (els.batchField) els.batchField.style.display = "none";
+      els.batchBox.innerHTML = "";
+      batchAlloc = {};
+      batchQtySnap = {};
+      return;
+    }
+    if (els.batchField) els.batchField.style.display = "";
+    els.batchBox.innerHTML = list.map(function (it) {
+      var alloc = batchAlloc[it.name];
+      var manual = !!(alloc && alloc.length);
+      var txt = manual ? (window.App.Batches.textOf({ batches: alloc }) + "（手动）") : "🔄 先进先出（自动）";
+      return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line-soft,#DCE6E0)">' +
+          '<span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + Util.esc(it.name) + '</span>' +
+          '<span class="hint" style="margin:0;font-size:12px;text-align:right">出 ' + Util.esc(it.qty) + '</span>' +
+          '<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<span class="tag" style="margin:0;font-size:12px">' + Util.esc(txt) + '</span>' +
+            '<button type="button" class="btn ghost sm" data-batch-pick="' + Util.esc(it.name) + '">选择批次</button>' +
+            (manual ? '<button type="button" class="btn ghost sm" data-batch-auto="' + Util.esc(it.name) + '">回自动</button>' : '') +
+          '</div>' +
+        '</div>';
+    }).join("");
+    var keep = {};
+    list.forEach(function (it) { keep[it.name] = 1; });
+    Object.keys(batchAlloc).forEach(function (n) { if (!keep[n]) delete batchAlloc[n]; });
+  }
+
+  /** 手选批次的弹窗：列该货品的全部批次（先进先出顺序）、可用量、逐批填数量 */
+  function openBatchPicker(name) {
+    var B = window.App.Batches;
+    if (!B) return;
+    var cur = null;
+    (picker.getItems() || []).forEach(function (it) { if (it.name === name) cur = it; });
+    if (!cur) return;
+    var need = Number(cur.qty) || 0;
+    var lots = B.lotsOf(name);
+    var preset = {};
+    var base = (batchAlloc[name] && batchAlloc[name].length) ? batchAlloc[name] : B.planFifo(name, need);
+    base.forEach(function (a) { preset[a.no] = Number(a.qty) || 0; });
+
+    var body =
+      '<div class="hint" style="margin:-2px 0 10px">' + Util.esc(name) + ' 需出 <b>' + need + '</b>。留空 / 全 0 = 关掉后按先进先出自动扣。</div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">' +
+        '<button type="button" class="btn ghost sm" data-bp-fifo>🔄 按先进先出填充</button>' +
+      '</div>' +
+      '<div style="max-height:44vh;overflow:auto">' +
+        (lots.length ? lots.map(function (l) {
+          var av = Math.max(0, Number(l.avail) || 0);
+          var v = preset[l.no] === undefined ? "" : String(preset[l.no]);
+          return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto 84px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line-soft,#DCE6E0)">' +
+              '<span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + Util.esc(l.no) + '</span>' +
+              '<span class="hint" style="margin:0;font-size:11px;text-align:right">' + dayOf(l.firstTs) + ' · 可用 ' + av +
+                (l.reserved ? '（冻结 ' + l.reserved + '）' : '') + '</span>' +
+              '<input type="number" class="bp-lot-q" data-no="' + Util.esc(l.no) + '" value="' + Util.esc(v) + '" min="0" max="' + av + '" step="1" inputmode="numeric" placeholder="0" style="width:100%;padding:8px 10px;border:1px solid var(--input-line,#C6DAD1);border-radius:10px;background:var(--input-bg,#FBFCFA);text-align:right" />' +
+            '</div>';
+        }).join("") : '<div class="hint" style="padding:14px">该货品还没有带批号的入库记录，只能按自动分配（会落成未归批）。</div>') +
+        '<div class="hint" id="bpSum" style="margin:12px 0 0"></div>' +
+      '</div>' +
+      '<div class="modal-actions" style="margin-top:12px">' +
+        '<button type="button" class="btn ghost sm" data-bp-auto>全部回自动</button>' +
+        '<button type="button" class="btn ghost sm" data-act="cancel">取消</button>' +
+        '<button type="button" class="btn sm" data-bp-ok>确定</button>' +
+      '</div>';
+
+    UI.Modal.show("选择批次 · " + name, body, { width: "560px" });
+    var mb = UI.Modal.body();
+    var inputs = mb.querySelectorAll(".bp-lot-q");
+
+    function readDraft() {
+      var map = {};
+      Array.prototype.forEach.call(inputs, function (inp) {
+        var v = Math.max(0, Math.round(Number(inp.value) || 0));
+        if (v > 0) map[inp.getAttribute("data-no")] = v;
+      });
+      return map;
+    }
+    function paintSum() {
+      var map = readDraft(), s = 0;
+      Object.keys(map).forEach(function (k) { s += map[k]; });
+      var el = mb.querySelector("#bpSum");
+      if (!el) return;
+      el.innerHTML = "已分配 <b>" + s + "</b> / 需出 <b>" + need + "</b>" +
+        (s === need ? ' <span class="c-ok">✓ 对得上</span>' : ' <span class="c-err">✕ 数量不一致</span>');
+    }
+    function fillFifo() {
+      var d = {}, plan = B.planFifo(name, need);
+      plan.forEach(function (a) { d[a.no] = a.qty; });
+      Array.prototype.forEach.call(inputs, function (inp) {
+        var no = inp.getAttribute("data-no");
+        inp.value = d[no] === undefined ? "" : String(d[no]);
+      });
+      paintSum();
+    }
+
+    mb.addEventListener("input", function (e) {
+      if (e.target && e.target.classList && e.target.classList.contains("bp-lot-q")) paintSum();
+    });
+    mb.addEventListener("click", function (e) {
+      if (e.target.closest('[data-act="cancel"]')) { UI.Modal.hide(); return; }
+      if (e.target.closest("[data-bp-fifo]")) { fillFifo(); return; }
+      if (e.target.closest("[data-bp-auto]")) {
+        delete batchAlloc[name];
+        UI.Modal.hide(); renderBatchBox(); saveDraft();
+        Util.toast("已恢复先进先出自动分配");
+        return;
+      }
+      if (!e.target.closest("[data-bp-ok]")) return;
+      var map = readDraft(), arr = [], s = 0, over = null;
+      Object.keys(map).forEach(function (no) { arr.push({ no: no, qty: map[no] }); s += map[no]; });
+      if (!arr.length) {
+        delete batchAlloc[name];
+        UI.Modal.hide(); renderBatchBox(); saveDraft();
+        Util.toast("未指定批次 → 按先进先出自动分配");
+        return;
+      }
+      if (s !== need) { Util.toast("批次合计 " + s + " ≠ 出库数量 " + need + "，请调整", true); return; }
+      lots.forEach(function (l) {
+        if (map[l.no] !== undefined && map[l.no] > Math.max(0, Number(l.avail) || 0)) over = l.no;
+      });
+      if (over) { Util.toast("批次 " + over + " 超出可用量，请调整", true); return; }
+      batchAlloc[name] = arr;
+      batchQtySnap[name] = need;
+      UI.Modal.hide(); renderBatchBox(); saveDraft();
+      Util.toast("已选批次：" + B.textOf({ batches: arr }));
+    });
+    paintSum();
+  }
+
+  /** 核对清单里的批次摘要（没有手选就返回空串，不打扰） */
+  function batchSummaryHtml(items) {
+    var lines = [];
+    (items || []).forEach(function (it) {
+      var a = batchAlloc[it.name];
+      if (!a || !a.length) return;
+      lines.push("· " + Util.esc(it.name) + "：" + Util.esc(window.App.Batches.textOf({ batches: a })));
+    });
+    return lines.length
+      ? '<div class="cf-photo" style="line-height:1.7">批次分配（手动）<br>' + lines.join("<br>") + '</div>'
+      : "";
+  }
+
+  /** 把批号合并进 items（没手选的货品原样返回，由 applyToRecord 自动先进先出） */
+  function applyBatch(items) {
+    return (items || []).map(function (it) {
+      var a = batchAlloc[it.name];
+      if (!a || !a.length) return it;
+      return { name: it.name, qty: it.qty, batches: a.map(function (x) { return { no: x.no, qty: x.qty }; }) };
+    });
+  }
+
   function saveDraft() {
     if (editingId) return; // 编辑中不覆盖草稿
     Store.saveDraft("out", {
@@ -483,6 +696,7 @@
       purpose: getPurposeSelected(),
       entity: getEntitySelected(),
       items: picker.selected,
+      batch: batchAlloc,   // 2026-11-27：手选批次进草稿，刷新后不用重选
       photos: photos.getPhotos()
     });
   }
@@ -501,6 +715,10 @@
     if (d.entity) { selectedEntity = d.entity; renderEntityChips(); }      // 结算法人单位同款回填
     picker.setSelected(d.items || []);
     photos.setPhotos(d.photos || []);
+    batchAlloc = (d.batch && typeof d.batch === "object") ? d.batch : {};
+    (d.items || []).forEach(function (it) { if (it && it.name) batchQtySnap[it.name] = Number(it.qty) || 0; });
+    /* setSelected 不触发 onChange → 批次块必须手动重建 */
+    renderBatchBox();
     return d;
   }
 
@@ -581,6 +799,19 @@
       errs.push({ el: Util.$("outProductPicker"), msg: "以下货品数量无效：" + qtyProblems.join("、") });
     }
 
+    /* 2026-11-27 批次：手选分配必须与出库数量一致（数量一改会自动清掉手选，这里是双保险） */
+    var badBatch = [];
+    items.forEach(function (it) {
+      var a = batchAlloc[it.name];
+      if (!a || !a.length) return;
+      var s = 0;
+      a.forEach(function (x) { s += Number(x.qty) || 0; });
+      if (s !== Number(it.qty)) badBatch.push(it.name);
+    });
+    if (badBatch.length) {
+      errs.push({ el: els.batchBox, msg: "批次分配与出库数量不一致：" + badBatch.join("、") + "，请重新选批次" });
+    }
+
     if (!UI.reportFieldErrors(errs, els.submit.closest(".card") || document)) {
       return;
     }
@@ -622,6 +853,7 @@
         ],
         items: items,
         extras: [
+          batchSummaryHtml(items),   // 2026-11-27：手选了批次就在核对清单里列清楚扣哪几批
           bizAuthOn ? '<div class="cf-photo" style="color:#C0563F;font-weight:700">🚨 商务授权：已点亮（未提单但商务已授权出库）</div>' : "",
           photos.getPhotos().length
             ? '<div class="cf-photo">📷 附带现场照片 ' + photos.getPhotos().length + ' 张</div>'
@@ -660,7 +892,7 @@
       purpose: purpose,
       entity: entity,                                    // 结算法人单位必填，纯追加字段（与 note 同类，不破坏 schema）
       bizAuth: !!bizAuthOn,                              // 商务授权标记（2026-11-22）：true 时钉钉推送首行放大提示；false = 普通记录
-      items: items,
+      items: applyBatch(items),   // 2026-11-27：手选的批次写进 item.batches；没手选则由 applyToRecord 自动先进先出
       photos: photoList
       // 2026-09-29 加固：affectsStock 不再恒写 true。
       // 新建时在下面 !wasEditing 分支显式给 true；编辑时【不携带】→ records.update 保留原值。
@@ -851,6 +1083,9 @@
     els.note.value = "";
     picker.setSelected([]);
     photos.setPhotos([]);
+    batchAlloc = {};          // 2026-11-27：复位手选批次，防跨单泄漏上一单的分配
+    batchQtySnap = {};
+    renderBatchBox();
     editingId = null;
     editingOriginalPhotos = null;
     els.submit.textContent = "提交登记";
@@ -879,6 +1114,21 @@
     renderEntityChips();
     picker.setSelected(r.items || []);
     photos.setPhotos(r.photos || []);
+    /* 2026-11-27 批次回显：编辑已有出库单时把原批次分配带出来。
+       不带出来的话，提交时 setSelected 已剥掉 batches（picker 只认 name/qty），
+       整单会被重新按当时的库存排一次 —— 历史批次账就被改写了。 */
+    batchAlloc = {};
+    batchQtySnap = {};
+    (r.items || []).forEach(function (it) {
+      if (!it || !it.name) return;
+      if (Array.isArray(it.batches) && it.batches.length) {
+        batchAlloc[it.name] = it.batches.map(function (a) {
+          return { no: String(a.no || ""), qty: Number(a.qty) || 0 };
+        }).filter(function (a) { return a.no && a.qty > 0; });
+      }
+      batchQtySnap[it.name] = Number(it.qty) || 0;
+    });
+    renderBatchBox();
     els.submit.textContent = "保存修改";
     els.cancelEdit.style.display = "inline-flex";
     Util.toast("正在编辑该记录，修改后点「保存修改」");
@@ -1277,6 +1527,10 @@
     if (d.purpose) setPurposeSelected(d.purpose);
     else if (!selectedPurpose) setPurposeSelected((Config.PURPOSE_PRESETS || [])[0] || "");
     if (d.items && d.items.length) picker.setSelected(d.items);
+    batchAlloc = {};       // 识别结果没有批次 → 默认先进先出，需要手选就点「选择批次」
+    batchQtySnap = {};
+    (d.items || []).forEach(function (it) { if (it && it.name) batchQtySnap[it.name] = Number(it.qty) || 0; });
+    renderBatchBox();      // setSelected 不触发 onChange，必须手动刷新
     recognizeConfirm = "out";   // 2026-09-29：标记本单来自自动识别，提交成功后补推钉钉确认
     saveDraft();
     var n = (d.items || []).length;

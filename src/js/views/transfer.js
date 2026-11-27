@@ -370,6 +370,25 @@
           '⏳ 正在为「' + Util.esc(dstName) + '」添加 ' + missingOk.length + ' 项新货品并建金山列…' +
           '</div>';
       }
+      // ①.5 批次（2026-11-27）：调出侧按先进先出分配，调入侧按分配结果拆成带批号的明细，
+      // 保证「跨仓批次不丢」——对方仓落地即带批号，不会在批次页变成未归批。
+      var tfBatch = window.App.Batches;
+      var tfPlans = (items || []).map(function (it) {
+        try {
+          return (tfBatch && tfBatch.isManaged(it.name)) ? tfBatch.planFifo(it.name, it.qty) : [];
+        } catch (e) { return []; }
+      });
+      var tfInItems = [];
+      (items || []).forEach(function (it, i) {
+        var plan = tfPlans[i] || [];
+        if (!plan.length) { tfInItems.push({ name: it.name, qty: it.qty }); return; }
+        var got = 0;
+        plan.forEach(function (a) {
+          got += a.qty;
+          tfInItems.push({ name: it.name, qty: a.qty, batch: a.no });
+        });
+        if (it.qty - got > 0) tfInItems.push({ name: it.name, qty: it.qty - got });   // 可用批次不够的部分不臆造批号
+      });
       // ② 对方仓入库记录 → 云端直写对方 records/
       var INS = (Records && Records.InSource) || {};
       var inRec = {
@@ -378,7 +397,7 @@
         time: now,
         type: "in",
         warehouse: dst.id,   // 跨仓直写守卫：标记归属对方仓，pushRecordTo 据此放行
-        items: items.map(function (it) { return { name: it.name, qty: it.qty }; }),
+        items: tfInItems,    // 已按批次拆好（一货品跨多批 → 多行，各自带 batch）
         purpose: "调拨入库来自" + srcName,
         picker: srcName + "（调拨）",
         dept: srcName,
@@ -404,7 +423,11 @@
       var outParams = {
         time: now,
         type: "out",
-        items: items.map(function (it) { return { name: it.name, qty: it.qty }; }),
+        items: (items || []).map(function (it, i) {
+          var row = { name: it.name, qty: it.qty };
+          if (tfPlans[i] && tfPlans[i].length) row.batches = tfPlans[i];   // 与调入侧同一套分配，两边批次账对得上
+          return row;
+        }),
         purpose: "调拨出库至" + dstName,
         picker: dstName + "（调拨）",
         dept: dstName,

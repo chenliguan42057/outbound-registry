@@ -1398,7 +1398,30 @@
       return r.transferId === transferId && r.transferRole === "out";
     });
     if (!srcRec) return { ok: false, msg: "本地未找到原调拨记录，请切换到「调出方」系统再撤销" };
-    var items = (srcRec.items || []).map(function (it) { return { name: it.name, qty: it.qty }; });
+    /* 2026-11-27 批次：撤销时把原调出的批次分配反向加回，否则回滚后那几批的余额永久偏少。
+       in 侧要按批号拆成多行（带 batch）；out 侧保留 batches 数组（对方仓按同一套批次扣回）。 */
+    var inItems = [];
+    var outItems = [];
+    (srcRec.items || []).forEach(function (it) {
+      var alloc = (it.batches || []).filter(function (a) { return a && a.no && Number(a.qty) > 0; });
+      if (!alloc.length) {
+        inItems.push({ name: it.name, qty: it.qty });
+        outItems.push({ name: it.name, qty: it.qty });
+        return;
+      }
+      var got = 0;
+      alloc.forEach(function (a) {
+        got += Number(a.qty) || 0;
+        inItems.push({ name: it.name, qty: a.qty, batch: a.no });
+      });
+      if ((Number(it.qty) || 0) - got > 0) inItems.push({ name: it.name, qty: it.qty - got });
+      outItems.push({
+        name: it.name,
+        qty: it.qty,
+        batches: alloc.map(function (a) { return { no: a.no, qty: Number(a.qty) || 0 }; })
+      });
+    });
+    var items = inItems;   // 下方文案/统计按入库回滚口径
     var now = (window.App.Util && window.App.Util.nowLocal) ? window.App.Util.nowLocal() : new Date().toISOString();
     var transferNo = srcRec.transferNo || transferId;
     // ① src 侧：写「入库回滚」（库存增回去，本地 State.list 立即可见 + 上云）
@@ -1437,7 +1460,7 @@
       time: now,
       type: "out",
       warehouse: dstDef.id,   // 跨仓直写守卫：标记归属对方仓，pushRecordTo 据此放行
-      items: items,
+      items: outItems,
       purpose: "撤回调拨出库（" + transferNo + "）",
       picker: (srcName || "本系统") + "（撤销）",
       dept: srcName || "",

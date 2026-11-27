@@ -62,6 +62,17 @@
         if (p && typeof p.hiddenPick === "boolean") hm[p.name] = p.hiddenPick;
       });
     } catch (e2) {}
+    /* 2026-11-27：「批次管理」开关（product.batch）→ Config.BATCH_MANAGED。
+       只有显式 true 才算启用；整表重建，目录删货品后不残留旧键。
+       模板参照上面 hiddenPick 那段（同一套 catalog 覆盖机制）。 */
+    try {
+      var bm = Config.BATCH_MANAGED || {};
+      Object.keys(bm).forEach(function (k) { delete bm[k]; });
+      cat.products.forEach(function (p) {
+        if (p && p.batch === true) bm[p.name] = true;
+      });
+      if (window.App.Batches && window.App.Batches.markDirty) window.App.Batches.markDirty();
+    } catch (e3) {}
   }
 
   /** 异步加载完成后，刷新依赖目录的视图（库存/仪表盘/报表），避免首次进入页面时短暂显示统一阈值。
@@ -558,6 +569,24 @@
     save(work, function (ok, msg) { if (cb) cb(ok, msg); });
   }
 
+  /** 2026-11-27：切换某货品是否启用「批次管理」（写 product.batch 并保存目录）。
+      启用后：入库必须填批号、出库按先进先出自动分配或手选批次、批次管理页出现该货品。
+      历史库存不会被伪造 —— 一律计入「未归批」，等下一批入库带批号后才逐步归位。 */
+  function setBatchManaged(name, on, cb) {
+    if (!name) { if (cb) cb(false, "货品名称不能为空"); return; }
+    var work = JSON.parse(JSON.stringify(catalog || defaultCatalog()));
+    var hit = null;
+    for (var i = 0; i < work.products.length; i++) {
+      if (work.products[i].name === name) { hit = work.products[i]; break; }
+    }
+    if (!hit) { if (cb) cb(false, "货品不存在：" + name); return; }
+    hit.batch = !!on;
+    save(work, function (ok, msg) {
+      try { if (window.App.Batches && window.App.Batches.markDirty) window.App.Batches.markDirty(); } catch (e) {}
+      if (cb) cb(ok, msg);
+    });
+  }
+
   window.App = window.App || {};
   window.App.Catalog = {
     load: load,
@@ -572,6 +601,7 @@
     quickAdd: quickAdd,
     removeProduct: removeProduct,
     setHiddenPick: setHiddenPick,
+    setBatchManaged: setBatchManaged,
     setCaseSize: setCaseSize,
     setCaseSizes: setCaseSizes,
     guessWps: guessWps,

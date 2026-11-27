@@ -148,6 +148,24 @@ jobs:
             echo "::error::检测到入库去向选择（仓库锁定/现场）被回滚，已中止部署。"
             exit 1
           fi
+      - name: 批次管理防线（2026-11-27）：批号填写 / 先进先出分配 / 批次页 防回滚
+        run: |
+          set -e
+          # ① 数据层模块必须在
+          if ! [ -f src/js/data/batches.js ] || ! [ -f src/js/views/batch.js ] ; then
+            echo "::error::批次管理模块（batches.js / views/batch.js）缺失，已中止部署。"
+            exit 1
+          fi
+          # ② 三个写库咽喉必须挂着批次分配（create / commit / update + 表单合并）
+          if ! grep -q 'applyToRecord' src/js/data/batches.js || ! grep -q 'applyToRecord' src/js/data/records.js ; then
+            echo "::error::记录写入路径的批次分配被回滚，已中止部署。"
+            exit 1
+          fi
+          # ③ bundle 产物必须已重建 —— 页面只加载 app.bundle.js，只校验源文件抓不到"忘重建"
+          if ! grep -q 'applyToRecord' src/js/app.bundle.js ; then
+            echo "::error::app.bundle.js 未重建（缺 applyToRecord），线上会静默缺少批次功能，已中止部署。"
+            exit 1
+          fi
       - name: 语法防线：全部 JS 跑 node --check（防手滑语法错误 / 脚本整写导致的损坏）
         run: |
           set -e
